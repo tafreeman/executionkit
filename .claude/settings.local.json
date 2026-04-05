@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh repo:*)",
+      "Bash(find D:/source/prompts/_discovery D:/source/prompts/tools D:/source/prompts/examples D:/source/prompts/scripts -name *.py)",
+      "Bash(python3 -c \":*)"
+    ]
+  }
+}
