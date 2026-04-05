@@ -42,7 +42,6 @@ executionkit/
       refine_loop.py
     engine/                     # PUBLIC
       __init__.py
-      context.py
       retry.py
       parallel.py               # gather_resilient + gather_strict
       convergence.py
@@ -398,9 +397,34 @@ class ConvergenceDetector:
         ...
 ```
 
-### engine/context.py — Scoped purpose [R6-arch-7]
+### engine/context.py — CUT from v0.1 [R6-arch-7]
 
-ExecutionContext is used for ONE purpose in v0.1: **shared state in `pipe()` composition**. When `pipe()` chains patterns, the context carries the accumulated cost tracker so budget enforcement spans all steps. Not used by individual patterns (they are stateless). If context has no consumer, it is cut.
+**Decision: CUT.** ExecutionContext is not needed in v0.1. `pipe()` uses a plain `TokenUsage` accumulator for budget tracking — no need for a full context object with locks and child scoping. Individual patterns are stateless. If v0.2 composition requires shared state across patterns, reintroduce a minimal context then. Remove `context.py` from package structure and Phase 1b.
+
+### cost.py — CostTracker [R6-arch-4]
+
+```python
+class CostTracker:
+    """Mutable accumulator for token usage within a single pattern invocation."""
+    def __init__(self) -> None:
+        self._input_tokens: int = 0
+        self._output_tokens: int = 0
+        self._llm_calls: int = 0
+
+    def record(self, response: LLMResponse) -> None:
+        self._input_tokens += response.input_tokens
+        self._output_tokens += response.output_tokens
+        self._llm_calls += 1
+
+    @property
+    def total_tokens(self) -> int:
+        return self._input_tokens + self._output_tokens
+
+    def to_usage(self) -> TokenUsage:
+        return TokenUsage(self._input_tokens, self._output_tokens, self._llm_calls)
+```
+
+**Budget overshoot note:** `checked_complete()` checks the budget BEFORE each LLM call, but the response tokens are counted AFTER. This means actual usage can overshoot the budget by up to `max_tokens` of a single call. This is documented as a **soft cap** — the budget prevents runaway costs but is not a hard byte-level limit.
 
 ---
 
@@ -436,6 +460,84 @@ async def checked_complete(
 ```
 
 Custom pattern authors import these to get the same safety guarantees as built-in patterns.
+
+---
+
+## kit.py — Session class [R6-api-2, R6-os-11]
+
+```python
+@dataclass
+class Kit:
+    """Binds a provider + shared config to eliminate boilerplate on multi-call usage.
+    max_cost is PER-CALL — each kit.consensus() gets its own budget."""
+    provider: LLMProvider
+    retry: RetryConfig | None = None
+    on_progress: ProgressCallback | None = None
+    max_cost: TokenUsage | None = None  # Per-call budget, NOT cumulative
+
+    async def tree_of_thought(self, prompt: str, **kwargs: Any) -> PatternResult[str]:
+        kwargs.setdefault("retry", self.retry)
+        kwargs.setdefault("on_progress", self.on_progress)
+        kwargs.setdefault("max_cost", self.max_cost)
+        return await tree_of_thought(self.provider, prompt, **kwargs)
+
+    async def react_loop(self, prompt: str, tools: Sequence[Tool], **kwargs: Any) -> PatternResult[str]:
+        kwargs.setdefault("retry", self.retry)
+        kwargs.setdefault("on_progress", self.on_progress)
+        kwargs.setdefault("max_cost", self.max_cost)
+        return await react_loop(self.provider, prompt, tools, **kwargs)
+
+    async def consensus(self, prompt: str, **kwargs: Any) -> PatternResult:
+        kwargs.setdefault("retry", self.retry)
+        kwargs.setdefault("on_progress", self.on_progress)
+        return await consensus(self.provider, prompt, **kwargs)
+
+    async def refine_loop(self, prompt: str, **kwargs: Any) -> PatternResult[str]:
+        kwargs.setdefault("retry", self.retry)
+        kwargs.setdefault("on_progress", self.on_progress)
+        kwargs.setdefault("max_cost", self.max_cost)
+        return await refine_loop(self.provider, prompt, **kwargs)
+```
+
+Callers can override Kit defaults per-call: `kit.consensus("prompt", num_samples=10)`.
+
+---
+
+## Sync Wrappers — Jupyter-safe [R6-api-5, R6-os-12]
+
+```python
+# __init__.py
+
+def _run_sync(coro: Coroutine[Any, Any, T]) -> T:
+    """Run async coroutine synchronously. Detects Jupyter and applies nest_asyncio."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop is not None and loop.is_running():
+        try:
+            import nest_asyncio
+            nest_asyncio.apply()
+            return loop.run_until_complete(coro)
+        except ImportError:
+            raise RuntimeError(
+                "Cannot run sync wrapper inside a running event loop (e.g. Jupyter). "
+                "Either use `await` directly, or install nest_asyncio: "
+                "pip install nest_asyncio"
+            ) from None
+    return asyncio.run(coro)
+
+def consensus_sync(provider: LLMProvider, prompt: str, **kwargs: Any) -> PatternResult:
+    return _run_sync(consensus(provider, prompt, **kwargs))
+
+def refine_loop_sync(provider: LLMProvider, prompt: str, **kwargs: Any) -> PatternResult[str]:
+    return _run_sync(refine_loop(provider, prompt, **kwargs))
+
+# ... same for tree_of_thought_sync, react_loop_sync, pipe_sync
+```
+
+`nest_asyncio` is NOT a hard dependency — it is only needed when using sync wrappers inside Jupyter. Clear error message if missing.
 
 ---
 
@@ -544,7 +646,16 @@ async def consensus(
 ) -> PatternResult[T]:
 ```
 
-Uses `gather_strict`. Returns `agreement_ratio` in metadata. Raises `ConsensusFailedError` for `UNANIMOUS` strategy when responses disagree.
+Uses `gather_strict`. Returns `agreement_ratio` and `unique_responses` in metadata. Raises `ConsensusFailedError` for `UNANIMOUS` strategy when responses disagree. On MAJORITY tie, first-encountered response wins (deterministic per-run). `tie_count` included in metadata when ties occur.
+
+**@overload for mypy --strict [R6-T7]:**
+```python
+@overload
+async def consensus(provider: LLMProvider, prompt: str, *, response_format: type[T], **kwargs) -> PatternResult[T]: ...
+@overload
+async def consensus(provider: LLMProvider, prompt: str, **kwargs) -> PatternResult[str]: ...
+```
+Same @overload pattern applies to any pattern accepting `response_format`.
 
 ### refine_loop()
 
@@ -567,6 +678,18 @@ async def refine_loop(
 ```
 
 All evaluator calls go through `validate_score()`. Patience=3 default.
+
+### Truncation handling [R6-T5d]
+
+When any pattern receives a response with `was_truncated == True`:
+- A warning is logged via `warnings.warn()`
+- `PatternResult.metadata["truncated_responses"]` is incremented
+- The pattern does NOT auto-retry (user controls max_tokens explicitly)
+- Auto-retry on truncation deferred to v0.2
+
+### max_trace_entries [R6-EN12]
+
+All patterns accept `max_trace_entries: int | None = 1000`. When exceeded, oldest entries are dropped (FIFO). Set to `None` for unbounded trace (debugging). Default of 1000 prevents memory pressure in long-running compositions.
 
 ---
 
@@ -616,6 +739,17 @@ This is sufficient for post-hoc debugging. OpenTelemetry integration deferred to
 
 ---
 
+## Python 3.11+ Justification [R6-OS10]
+
+Requires Python 3.11+ for:
+- `asyncio.TaskGroup` — used in `gather_strict()` for all-or-nothing parallel execution
+- `ExceptionGroup` / `except*` — used in `gather_strict()` for clean error unwrapping
+- Performance improvements in asyncio and typing
+
+Supporting 3.10 would require the `exceptiongroup` backport package and manual task management replacing TaskGroup (~80 LOC of workaround code). Given that Python 3.11 has been available since October 2022 and 3.10 EOL is October 2026, the tradeoff favors cleaner code over broader compatibility. Revisit if user demand surfaces.
+
+---
+
 ## Phased Build Sequence
 
 ### Phase 1a: Type Foundation (Day 1)
@@ -631,8 +765,7 @@ This is sufficient for post-hoc debugging. OpenTelemetry integration deferred to
 8. `engine/retry.py` — with CancelledError guard
 9. `engine/parallel.py` — gather_resilient + gather_strict with ExceptionGroup unwrap
 10. `engine/convergence.py` — NaN-safe, patience=3
-11. `engine/context.py` — minimal, for pipe() shared state only
-12. `engine/json_extraction.py`
+11. `engine/json_extraction.py`
 
 ### Phase 1c: Providers + Infrastructure (Day 3)
 13. Tests first: `test_providers.py`, `test_conversion.py`
@@ -688,6 +821,109 @@ This is sufficient for post-hoc debugging. OpenTelemetry integration deferred to
 - `engine/` public API stable for 0.x: RetryConfig, gather_resilient, gather_strict, ConvergenceDetector, with_retry.
 - `patterns.base` public API stable for 0.x: checked_complete, validate_score.
 - SemVer: 0.x allows breaking changes between minors. 1.0 locks the public API.
+
+---
+
+## Test Strategy
+
+### Test Categories (per pattern)
+
+1. **Unit tests** — MockProvider with canned responses. Verify message formation, loop termination, cost tracking, trace entries.
+2. **Edge cases** — Budget exhaustion mid-call, all branches scored 0, NaN evaluator, tool timeout, empty responses, finish_reason="length", zero-agreement consensus, tie-breaking.
+3. **Property-based** (hypothesis) — Consensus majority always returns most frequent. Convergence detector always terminates. gather_resilient never raises (returns exceptions as values).
+4. **Message converter round-trip** — OpenAI -> Anthropic -> OpenAI for all tool-call scenarios.
+5. **Concurrency** — Semaphore release on exception, CancelledError propagation, ExceptionGroup unwrapping.
+6. **Integration** — `@pytest.mark.integration` (skipped in CI, require env vars).
+
+### Critical Test Cases Checklist [R6-EN14]
+
+**Concurrency (test_concurrency.py):**
+- [ ] gather_resilient: N coros where N > max_concurrency, some raise → subsequent coros still run (semaphore released)
+- [ ] gather_resilient: parent task cancelled → CancelledError propagates, not in results
+- [ ] gather_strict: single exception → unwrapped from ExceptionGroup
+- [ ] gather_strict: multiple exceptions → ExceptionGroup propagated
+- [ ] with_retry: CancelledError → immediate propagation, zero retries
+
+**Composition (test_compose.py):**
+- [ ] pipe: pattern 1 succeeds, pattern 2 raises → partial cost in PatternResult
+- [ ] pipe: pattern 1 succeeds, pattern 2 cancelled → partial cost preserved
+- [ ] pipe: max_cost shared across steps → remaining budget decreases per step
+
+**Kit (test_kit.py):**
+- [ ] Kit retry config propagates → verified via mock call count on RateLimitError
+- [ ] Kit max_cost is per-call → two consecutive calls each get full budget
+- [ ] Kit kwargs override per-call → kit.consensus(num_samples=10) overrides default
+
+**Message Converter (test_conversion.py):**
+- [ ] Round-trip with 3 tool calls in single assistant message → IDs and order preserved
+- [ ] Interleaved text + tool_use blocks → separated correctly
+- [ ] Consecutive user messages → merged
+- [ ] System message → extracted to separate return
+- [ ] Unknown content type (image) → UnsupportedContentError
+- [ ] Empty tool result → placeholder inserted
+
+**Patterns:**
+- [ ] consensus num_samples=1 → agreement_ratio=1.0
+- [ ] consensus MAJORITY tie → metadata includes tie_count
+- [ ] ToT evaluator exception on some branches → failed evals score 0.0, others survive
+- [ ] react_loop tool raises CancelledError → handled as error, not propagated
+- [ ] refine_loop first eval near-1.0 → converges immediately
+- [ ] checked_complete budget overshoot → actual usage may exceed by up to max_tokens
+
+### Coverage Targets
+
+- **80% overall** (enforced by `--cov-fail-under=80`)
+- **90% for `patterns/`**
+- **100% for `provider.py` and `types.py`**
+
+### CI Pipeline
+
+```yaml
+name: CI
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "${{ matrix.python-version }}" }
+      - run: pip install -e ".[dev,all]"
+      - run: ruff check src/executionkit && ruff format --check src/executionkit
+      - run: mypy --strict src/executionkit
+      - run: pytest tests/ -m "not integration" --cov=executionkit --cov-fail-under=80 -x
+```
+
+---
+
+## CONTRIBUTING.md Outline [R6-OS7/13]
+
+### How to add a provider (5 steps)
+1. Create `providers/_yourprovider.py`
+2. Implement `LLMProvider` Protocol (or `ToolCallingProvider` if tools are supported)
+3. Normalize response to `LLMResponse` with `ToolCall` dataclasses
+4. Map SDK exceptions to ExecutionKit error hierarchy
+5. Add conditional import to `providers/__init__.py`, add tests to `test_providers.py`
+
+Note: OpenAI-compatible providers (Groq, Together, Fireworks) are ~15 LOC — just subclass `OpenAIProvider` with a different `base_url`.
+
+### How to add a pattern (5 steps)
+1. Create `patterns/yourpattern.py`
+2. Import from `patterns.base`: `checked_complete`, `validate_score`
+3. Import from `engine/`: `RetryConfig`, `gather_resilient`/`gather_strict`, `ConvergenceDetector` as needed
+4. Return `PatternResult[T]` with cost, trace, and metadata
+5. Add to `__init__.py` exports, add tests, add example
+
+### Good first issues
+- Add `GroqProvider` (thin OpenAI wrapper, ~15 LOC)
+- Add `GoogleProvider` (google-genai SDK)
+- Add `best_of_n` pattern (simpler than consensus — generate N, score all, return highest)
+- Add `debate_pattern` (two providers argue, third judges)
+- Add more voting strategies to consensus (ranked-choice)
 
 ---
 
