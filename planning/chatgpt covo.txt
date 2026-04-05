@@ -1,0 +1,1012 @@
+Below is a concrete positioning doc shaped around the current market and your build spec.
+
+The core strategic takeaway is this: broad “agent framework” and “unified provider” positioning is already crowded. LangGraph is positioned as low-level infrastructure for long-running, stateful agent workflows; PydanticAI emphasizes a model-agnostic agent framework with broad provider support and tools; LiteLLM emphasizes unified access, gatewaying, and spend tracking; and the OpenAI Agents SDK emphasizes lightweight agent orchestration primitives. That means your strongest lane is not “another general orchestration framework,” but a narrower one: pattern-first, budget-aware execution for OpenAI-compatible endpoints, with minimal dependencies and a small API surface.
+
+Your build plan already supports that narrower lane well: it keeps v0.1 centered on three patterns, one composition primitive, one provider abstraction, and shared cost tracking, while explicitly deferring streaming, observability, OpenTelemetry, Anthropic-native support, and docs-site/platform concerns. That is a good boundary and should become part of the product story, not just an internal implementation detail.
+
+Positioning Doc
+1. Positioning statement
+
+ExecutionKit is a minimal Python library for composable LLM reasoning patterns.
+It gives developers a small set of reusable execution primitives — consensus, refine loops, ReAct tool loops, and pattern composition with shared budget tracking — that work across any OpenAI-compatible endpoint using one simple provider class and no SDK dependencies beyond stdlib HTTP/JSON plus the package’s tiny type/runtime footprint.
+
+2. Market position
+What ExecutionKit is
+A pattern library, not a full agent platform.
+An execution layer, not a gateway or proxy.
+A small orchestration helper, not a stateful graph runtime.
+A budget-aware composition toolkit, not an observability suite.
+A portable OpenAI-compatible client abstraction, not a native adapter matrix for every provider.
+What ExecutionKit is not
+Not a LangGraph-style framework for durable, long-running, stateful workflows. LangGraph explicitly targets those use cases.
+Not a PydanticAI-style full agent framework with broad provider-native support and tool ecosystems. PydanticAI explicitly positions itself as model-agnostic with built-in support for many providers and tool modes.
+Not a LiteLLM-style gateway or unified LLM control plane with spend dashboards, budgets, routing, and logging. LiteLLM explicitly positions around unified access, proxying, and spend tracking.
+Not an OpenAI Agents SDK-style multi-agent orchestration package. The Agents SDK explicitly centers agents, tools, and orchestration flows.
+3. Differentiators
+Primary differentiators
+
+Pattern-first API
+The user-facing abstraction is a reasoning pattern, not an agent, graph, router, or workflow engine. That is the cleanest conceptual separation from adjacent tools.
+
+Shared budget tracking across composition
+Budget tracking is part of execution semantics, not just reporting. In your plan, pipe() shares remaining budget across steps and costs merge through PatternResult, which is more specific than generic usage logging.
+
+OpenAI-compatible by design
+The product boundary is deliberate: support any endpoint that speaks OpenAI-style chat completions, rather than taking on every native provider SDK. That makes the abstraction easier to explain and lighter to maintain.
+
+Zero-SDK philosophy
+This is emotionally and practically valuable. In a market full of frameworks, wrappers, SDK layers, gateways, and adapters, “URL + API key + JSON” is a real positioning asset.
+
+Secondary differentiators
+
+Portable across cloud and local serving stacks
+Because the boundary is OpenAI-compatible HTTP, the same library can target OpenAI, Azure-style endpoints, Ollama, LM Studio, vLLM, and similar servers without changing the core pattern API. That is narrower than “all providers,” but sharper and more honest. LM Studio, Ollama, and vLLM all document OpenAI-compatible serving paths.
+
+4. Ideal user
+
+ExecutionKit is for developers who:
+
+already know how to make a basic LLM call,
+do not want a full agent framework,
+want a few reusable higher-level reasoning patterns,
+care about portability across endpoints,
+want to keep cost/budget visible during chained execution,
+prefer small abstractions over large ecosystems.
+5. Ideal use cases
+
+Strongest use cases for the homepage and README:
+
+run multiple samples or models and vote on the best answer,
+iteratively refine an answer until it stabilizes,
+use tools in a bounded ReAct loop for task completion,
+chain these patterns while keeping a shared token/call budget,
+swap between hosted and local OpenAI-compatible endpoints with no pattern-level rewrite.
+6. Messaging hierarchy
+Lead with
+composable reasoning patterns
+budget-aware execution
+OpenAI-compatible portability
+minimal dependencies
+De-emphasize
+“universal provider”
+“supports many endpoints”
+“agent orchestration”
+“framework”
+“gateway”
+“cost tracking” as a standalone headline
+
+Those secondary ideas are either crowded or easy to misread as LiteLLM/LangGraph/PydanticAI territory.
+
+Homepage Draft
+Hero
+
+Composable LLM reasoning patterns.
+Consensus, refine loops, and ReAct tool loops with shared budget tracking.
+
+ExecutionKit is a minimal Python library for running higher-level reasoning patterns over any OpenAI-compatible endpoint. Use one simple provider class, compose patterns with pipe(), and keep token spend visible as execution unfolds. No provider SDK maze. No heavyweight framework.
+
+Hero subtext
+
+Works with OpenAI-compatible cloud or local endpoints, including OpenAI, Azure-style endpoints, Ollama, LM Studio, vLLM, and similar servers. Keep the same pattern API while switching endpoints. The library stays small by treating OpenAI-compatible HTTP as the core boundary.
+
+Hero CTA ideas
+Read the quickstart
+See the three core patterns
+Why not a full agent framework?
+Problem section
+Most LLM tooling makes one of two tradeoffs
+
+Either it stays too low-level — simple chat calls with no reusable reasoning patterns — or it becomes a full orchestration framework with graph runtimes, provider adapters, observability layers, and infrastructure concerns.
+
+ExecutionKit sits in the middle: a small execution layer for a few high-value reasoning patterns. It is not trying to be your gateway, your graph runtime, or your agent platform.
+
+Value props section
+Pattern-first
+
+Use consensus, refine_loop, and react_loop as first-class execution primitives instead of rebuilding them ad hoc in app code.
+
+Budget-aware
+
+Track usage through each pattern and across pipe() composition with a shared budget model.
+
+Portable
+
+Run the same code against any OpenAI-compatible endpoint through a single provider abstraction.
+
+Minimal
+
+Stdlib HTTP + JSON, a small dependency footprint, and a compact surface area.
+
+Comparison strip
+
+Use ExecutionKit when
+
+a raw chat client is too primitive,
+a full agent framework is too much,
+portability matters,
+budget-aware composition matters,
+the team wants a small, understandable abstraction.
+Quick example
+from executionkit import Provider, consensus
+
+provider = Provider("http://localhost:11434/v1", model="llama3.2")
+
+result = await consensus(
+    provider,
+    "Classify this support ticket into billing, bug, or access."
+)
+
+print(result.value)
+print(result.cost)
+print(result.metadata["agreement_ratio"])
+
+This example works because the library is built around the OpenAI-compatible chat-completions shape, not a provider SDK-specific abstraction.
+
+Pattern cards
+Consensus
+
+Sample multiple responses and vote on the strongest answer.
+
+Refine loop
+
+Iteratively improve an answer until it converges or hits a stopping condition.
+
+ReAct loop
+
+Give the model tools and let it reason step by step within bounded rounds and timeouts.
+
+Pipe
+
+Chain patterns together with merged usage and a shared budget boundary.
+
+Why this exists
+
+Modern frameworks already cover stateful graphs, agents, tools, and full orchestration. ExecutionKit exists for the narrower case: reusable reasoning patterns without the rest of the framework stack. LangGraph emphasizes stateful orchestration, PydanticAI emphasizes broad agent/provider support, LiteLLM emphasizes gatewaying and spend management, and the OpenAI Agents SDK emphasizes agent orchestration primitives. ExecutionKit is intentionally smaller than all of those.
+
+Homepage tagline options
+Composable reasoning patterns for OpenAI-compatible LLMs
+Budget-aware LLM execution without the framework weight
+Consensus, refinement, and tool loops — one small library
+Pattern-first LLM execution
+
+Best homepage tagline:
+Composable reasoning patterns for OpenAI-compatible LLMs
+
+README Draft Structure
+Top section
+
+ExecutionKit
+Composable LLM reasoning patterns for OpenAI-compatible endpoints.
+
+ExecutionKit is a minimal Python library for running reusable reasoning patterns — consensus, refine loops, ReAct tool loops, and pattern composition with shared budget tracking — over any OpenAI-compatible endpoint through one simple provider class. It is designed for developers who want more than single-prompt calls, but less than a full agent framework.
+
+Why ExecutionKit?
+
+Most libraries in this space optimize for one of three things:
+
+provider breadth and gatewaying,
+agent orchestration and stateful workflows,
+observability and platform controls.
+
+ExecutionKit optimizes for something narrower:
+
+small reusable reasoning patterns,
+budget-aware execution,
+portability across OpenAI-compatible endpoints,
+minimal abstraction and dependency weight.
+What it includes in v0.1
+Provider
+consensus()
+refine_loop()
+react_loop()
+pipe()
+CostTracker
+PatternResult
+retry, parallelism, convergence detection, JSON extraction fallback
+CLI, examples, README, contribution docs
+What it does not try to be
+not a gateway or proxy,
+not a long-running graph runtime,
+not a full agent platform,
+not a tracing/telemetry suite,
+not a provider-SDK abstraction for every native API.
+Installation
+
+Keep this crisp and honest:
+
+pip install executionkit
+Quickstart
+
+Lead with consensus, not react_loop, because consensus better communicates the product’s differentiated lane.
+
+from executionkit import Provider, consensus
+
+provider = Provider("https://api.openai.com/v1", api_key="sk-...", model="gpt-4o-mini")
+
+result = await consensus(
+    provider,
+    "Classify this support ticket into billing, bug, or access.",
+    num_samples=5,
+)
+
+print(result.value)
+print(result.cost)
+print(result.metadata["agreement_ratio"])
+
+Then show portability:
+
+ollama = Provider("http://localhost:11434/v1", model="llama3.2")
+lmstudio = Provider("http://localhost:1234/v1", model="local-model")
+vllm = Provider("http://localhost:8000/v1", model="meta-llama/Llama-3-8B-Instruct")
+
+That keeps the portability promise concrete without turning the README into a provider matrix. The OpenAI-compatible server model is the key point.
+
+Core concepts
+Provider
+
+One simple OpenAI-compatible endpoint abstraction: base URL, model, API key, and JSON payloads.
+
+PatternResult
+
+Every pattern returns a value plus usage and metadata.
+
+TokenUsage / CostTracker
+
+Budget and usage are part of execution.
+
+pipe()
+
+Chain patterns and carry budget forward.
+
+Patterns
+consensus()
+
+Use when one answer is not enough and agreement matters.
+
+refine_loop()
+
+Use when quality improves through iterative critique and revision.
+
+react_loop()
+
+Use when the task needs tools and bounded multi-step reasoning.
+
+When to use ExecutionKit
+
+Use it when:
+
+you want reusable reasoning patterns,
+you want to switch endpoints without rewriting pattern code,
+you need cost/budget visibility across composed calls,
+you do not want a full workflow or agent framework.
+When not to use ExecutionKit
+
+Use another tool when:
+
+you need long-running, durable stateful workflows,
+you need a full gateway, spend dashboard, or routing layer,
+you need provider-native support for many incompatible APIs,
+you need extensive observability and tracing out of the box. LangGraph, LiteLLM, PydanticAI, and the OpenAI Agents SDK already focus more directly on those spaces.
+Roadmap
+
+Keep it tight and explicit. See v0.1/v0.2 boundary below.
+
+Sharper v0.1 / v0.2 Boundary
+
+Your current build spec is good, but the boundary can be stated more strategically.
+
+v0.1 theme
+
+A tiny, credible core for pattern-first execution
+
+v0.1 should prove four things:
+
+pattern-first abstractions are useful,
+the OpenAI-compatible provider boundary is practical,
+budget-aware composition is valuable,
+the library can stay small and understandable.
+v0.1 must ship
+
+These are product-defining and should stay:
+
+Core patterns
+consensus
+refine_loop
+react_loop
+Core composition
+pipe() with shared budget semantics
+Core transport
+single Provider for OpenAI-compatible endpoints
+LLMProvider protocol for extension, but not marketed as full provider breadth yet
+Core execution semantics
+PatternResult
+TokenUsage
+CostTracker
+retry
+parallel execution
+convergence detection
+JSON extraction fallback
+clear error hierarchy
+Core trust assets
+5 examples
+tight README
+tests and smoke paths
+CLI only if it helps onboarding; otherwise it should remain secondary in messaging
+v0.1 should not expand into
+
+These are the distraction zones:
+
+No platform creep
+dashboards
+routing/fallback matrices beyond what the provider already enables
+tenancy, keys, quotas, governance
+observability platform positioning
+
+That space is already occupied heavily by gateway/platform tools like LiteLLM.
+
+No framework creep
+stateful graphs
+memory runtimes
+durable execution
+resumability
+complex multi-agent orchestration
+
+That space is already occupied by tools like LangGraph and agent-focused SDKs.
+
+No provider-matrix creep
+native Anthropic in core
+adapter sprawl
+“supports everything” messaging
+
+PydanticAI and LiteLLM already play harder in broad provider coverage.
+
+v0.2 theme
+
+Selective expansion that strengthens the core story
+
+v0.2 should only add things that reinforce pattern-first execution, not broaden the product into a new category.
+
+v0.2 candidates to keep
+
+These fit the story:
+
+1. Better composition and control
+richer pipe() ergonomics
+shared policy objects for retries/budgets/stopping
+better evaluator hooks
+optional pattern presets
+2. Better developer trust
+lightweight trace objects
+progress callbacks
+richer metadata per pattern run
+
+These help developers understand pattern behavior without turning the product into a platform. Your spec already lists TraceEntry and ProgressCallback as deferred items, which fits well here.
+
+3. Optional transport extensions
+StreamingProvider
+optional non-core providers via protocol implementations
+possibly an OnnxProvider or companion local-runtime adapter later, but not in core
+4. One additional pattern, only if it proves the model
+add another pattern only if it clearly fits the existing mental model
+do not add a grab bag of agent features
+v0.2 items to keep deferred unless demand is obvious
+OpenTelemetry
+docs-site complexity
+enterprise observability integrations
+broad native provider matrix
+graph/state runtime features
+multi-agent handoff systems
+Recommended one-paragraph product summary
+
+ExecutionKit is a minimal Python library for composable LLM reasoning patterns. It lets developers run consensus, refine loops, and ReAct tool loops, then chain them with shared budget tracking through a small, predictable API. Instead of becoming a full agent framework or gateway, ExecutionKit stays focused on pattern-first execution over OpenAI-compatible endpoints with a lightweight provider abstraction and minimal dependencies. That makes it a strong fit for teams who want more than raw chat calls, but less than a full orchestration stack.
+
+Recommended homepage headline and subheadline
+
+Composable LLM reasoning patterns
+Consensus, refinement, and tool loops with shared budget tracking for any OpenAI-compatible endpoint.
+
+Recommended README opener
+
+ExecutionKit is a minimal Python library for pattern-first LLM execution. Use consensus(), refine_loop(), react_loop(), and pipe() to run reusable reasoning patterns over any OpenAI-compatible endpoint while keeping token and call usage visible across the whole run. It is designed for developers who want a small execution layer, not a full agent platform.
+
+The strongest strategic move is to keep the repo and homepage relentlessly centered on patterns + budget-aware composition + OpenAI-compatible portability, because the adjacent lanes for gateways, agent frameworks, and full orchestration are already well occupied.
+
+If you want, I can turn this into a polished paste-ready README.md and landing-page copy block by block.
+
+go ahead
+Thought for 26s
+
+Below is a paste-ready package built around the sharper lane that fits both the market and your build spec: pattern-first execution, shared budget tracking, OpenAI-compatible portability, and minimal framework weight. That lane is more defensible because adjacent tools already lean hard into long-running stateful workflows, broad provider-native support, gatewaying, spend controls, and multi-agent orchestration.
+
+Homepage copy
+Composable LLM reasoning patterns
+
+Consensus, refinement, and tool loops with shared budget tracking for any OpenAI-compatible endpoint.
+
+ExecutionKit is a minimal Python library for running higher-level reasoning patterns over OpenAI-compatible LLM APIs. Use consensus(), refine_loop(), react_loop(), and pipe() to build reusable execution flows without adopting a heavyweight agent framework. Track token usage and call counts across the full run, not just one request. Works across cloud and local OpenAI-compatible endpoints through one small provider abstraction.
+
+Why ExecutionKit
+
+Most LLM tooling goes in one of two directions: either it stays close to raw chat calls, or it expands into a full orchestration stack with state, graphs, routing, tracing, and platform concerns. ExecutionKit takes a narrower path: a small library for reusable reasoning patterns with budget-aware execution. That makes it easier to understand, easier to adopt, and easier to swap across compatible endpoints.
+
+What you can do
+Consensus
+
+Run multiple samples or models and vote on the strongest answer.
+
+Refine loop
+
+Iteratively improve a response until it converges on a quality threshold or hits a stopping condition.
+
+ReAct loop
+
+Give the model tools and let it reason step by step within bounded rounds and timeouts.
+
+Pipe
+
+Chain patterns together and keep one shared budget across the whole run.
+
+Why teams use it
+Pattern-first
+
+The core abstraction is a reasoning pattern, not an agent runtime, graph engine, or gateway.
+
+Budget-aware
+
+Usage is part of execution semantics. Costs accumulate through each pattern and across composition.
+
+Portable
+
+Run the same pattern code against any OpenAI-compatible endpoint through one provider class. That includes hosted APIs and local servers that expose the same interface.
+
+Minimal
+
+No provider SDK sprawl. No framework maze. Just stdlib HTTP, JSON, and a compact API surface.
+
+Quick example
+from executionkit import Provider, consensus
+
+provider = Provider(
+    "http://localhost:11434/v1",
+    model="llama3.2",
+)
+
+result = await consensus(
+    provider,
+    "Classify this support ticket into billing, bug, or access.",
+    num_samples=5,
+)
+
+print(result.value)
+print(result.cost)
+print(result.metadata["agreement_ratio"])
+Works where OpenAI-compatible APIs work
+
+Use the same pattern API across OpenAI-compatible cloud or local endpoints. The core boundary is simple: if it speaks OpenAI-style chat completions, it fits the default provider model.
+
+Not another full agent framework
+
+ExecutionKit is for developers who want more than single-prompt calls but less than a full workflow framework, gateway, or multi-agent platform. It stays focused on a few high-value reasoning patterns and a small execution model. That makes the project intentionally smaller than frameworks built for long-running stateful workflows, broad provider-native support, spend-control gateways, or multi-agent orchestration.
+
+CTA strip
+
+Small API. Portable execution. Visible budgets.
+
+Build with reusable reasoning patterns instead of ad hoc prompt loops.
+
+README.md draft
+ExecutionKit
+
+Composable LLM reasoning patterns for OpenAI-compatible endpoints.
+
+ExecutionKit is a minimal Python library for running reusable reasoning patterns over OpenAI-compatible LLM APIs. It gives you a small set of execution primitives:
+
+consensus()
+refine_loop()
+react_loop()
+pipe()
+
+Each pattern returns structured output, usage data, and metadata so budget and execution remain visible from the first call to the last. The goal is simple: more power than one-off prompt calls, less weight than a full agent framework.
+
+Why ExecutionKit
+
+A lot of LLM tooling is optimized for one of these jobs:
+
+long-running stateful workflows
+broad provider-native support
+gateways, spend controls, and observability
+multi-agent orchestration
+
+ExecutionKit is optimized for a narrower job:
+
+reusable reasoning patterns
+shared budget tracking across composition
+portability across OpenAI-compatible endpoints
+a small, understandable API surface
+
+That narrower scope is deliberate. It keeps the library useful without turning it into a workflow engine, proxy, or platform.
+
+Installation
+pip install executionkit
+Quickstart
+from executionkit import Provider, consensus
+
+provider = Provider(
+    "https://api.openai.com/v1",
+    api_key="sk-...",
+    model="gpt-4o-mini",
+)
+
+result = await consensus(
+    provider,
+    "Classify this support ticket into billing, bug, or access.",
+    num_samples=5,
+)
+
+print(result.value)
+print(result.cost)
+print(result.metadata["agreement_ratio"])
+Portability
+
+The same provider shape works across OpenAI-compatible endpoints.
+
+from executionkit import Provider
+
+openai = Provider(
+    "https://api.openai.com/v1",
+    api_key="sk-...",
+    model="gpt-4o-mini",
+)
+
+ollama = Provider(
+    "http://localhost:11434/v1",
+    model="llama3.2",
+)
+
+lmstudio = Provider(
+    "http://localhost:1234/v1",
+    model="local-model",
+)
+
+vllm = Provider(
+    "http://localhost:8000/v1",
+    model="meta-llama/Llama-3-8B-Instruct",
+)
+
+ExecutionKit does not try to be a native adapter layer for every model API. Its default path is narrower and simpler: one provider abstraction for OpenAI-compatible chat-completions endpoints.
+
+Core ideas
+Provider
+
+A small OpenAI-compatible endpoint wrapper built around URL, API key, model, and JSON requests.
+
+PatternResult
+
+Each pattern returns:
+
+value
+score
+cost
+metadata
+
+This keeps result data and execution data together.
+
+TokenUsage and CostTracker
+
+Usage tracking is built into execution, not bolted on afterward. You can track input tokens, output tokens, and LLM call counts across a full run.
+
+pipe()
+
+Compose patterns together and carry forward a shared budget boundary.
+
+Patterns
+consensus()
+
+Use when a single generation is not enough and agreement matters.
+
+result = await consensus(
+    provider,
+    "Summarize the issue and assign a severity.",
+    num_samples=5,
+)
+
+Returns a PatternResult[str] with metadata such as agreement ratio, unique responses, and tie count.
+
+refine_loop()
+
+Use when quality improves through repeated critique and revision.
+
+result = await refine_loop(
+    provider,
+    "Draft a short customer-facing explanation of this outage.",
+    target_score=0.9,
+    max_iterations=5,
+)
+
+Uses convergence detection, evaluator scoring, and stopping rules to decide when to stop refining.
+
+react_loop()
+
+Use when the task needs tools and bounded step-by-step reasoning.
+
+result = await react_loop(
+    provider,
+    "Find the latest failed deployment and summarize root cause.",
+    tools=my_tools,
+    max_rounds=8,
+)
+
+Supports tool schemas, bounded rounds, tool timeouts, and usage tracking throughout the loop.
+
+pipe()
+
+Use when you want to chain reasoning patterns into one execution flow.
+
+result = await pipe(
+    provider,
+    "Analyze this incident and prepare a final response.",
+    consensus,
+    refine_loop,
+    max_budget=TokenUsage(input_tokens=20000, output_tokens=8000, llm_calls=20),
+)
+
+pipe() merges usage and passes the remaining budget forward through each step.
+
+What ships in v0.1
+Patterns
+consensus
+refine_loop
+react_loop
+Composition
+pipe()
+Session
+Kit
+Provider
+one concrete Provider for OpenAI-compatible endpoints
+LLMProvider protocol for extension
+Engine
+retry
+parallel execution
+convergence detection
+JSON extraction fallback
+Types
+PatternResult[T]
+TokenUsage
+Tool
+ToolCall
+VotingStrategy
+Evaluator
+LLMResponse
+Errors
+execution, provider, retry, budget, consensus, and iteration failure classes
+Infrastructure
+CLI
+examples
+README
+contributing docs
+tests and verification gates
+What does not ship in v0.1
+
+These are intentionally deferred:
+
+tree-of-thought / beam search
+native Anthropic provider in core
+streaming provider
+trace objects and progress callbacks
+OpenTelemetry
+docs site
+platform-style observability or governance features
+When to use ExecutionKit
+
+Use it when:
+
+raw chat calls are too primitive
+you want reusable reasoning patterns
+you want to keep budget visible across a run
+you want to swap OpenAI-compatible endpoints without rewriting pattern code
+you do not want a full graph runtime, gateway, or agent platform
+When not to use ExecutionKit
+
+Reach for another tool when you need:
+
+long-running durable workflows
+memory and resumability
+multi-agent handoff systems
+spend dashboards, routing, tenancy, or gateway controls
+extensive provider-native API coverage out of the box
+
+Those are important needs, but they belong to broader orchestration frameworks, provider-agnostic agent toolkits, gateways, and agent SDKs that are explicitly designed for them.
+
+Design principles
+Pattern-first
+
+The product unit is a reasoning pattern, not a framework runtime.
+
+Budget-aware
+
+Usage and stopping constraints are first-class.
+
+OpenAI-compatible
+
+Portable by design across compatible cloud and local servers.
+
+Minimal
+
+Prefer small abstractions and stdlib-friendly implementation choices.
+
+v0.1 boundary
+
+v0.1 proves four things:
+
+pattern-first abstractions are useful
+shared budget tracking improves execution discipline
+OpenAI-compatible portability is enough for many real workflows
+the library can stay small and understandable
+v0.2 direction
+
+v0.2 should deepen the same story rather than expand into a new category.
+
+Good v0.2 additions:
+
+richer composition ergonomics
+better evaluator hooks
+progress callbacks
+lightweight trace objects
+optional streaming support
+optional non-core provider implementations via protocol extension
+
+Bad v0.2 additions:
+
+graph runtime complexity
+platform observability scope
+large provider adapter matrix
+governance and gateway positioning
+multi-agent system sprawl
+Example philosophy
+
+ExecutionKit is intentionally not trying to replace agent frameworks, gateways, or stateful workflow systems. It fills the space between raw prompt calls and full orchestration stacks. That is the point.
+
+Contributing
+
+Keep the scope sharp. Favor features that strengthen:
+
+composable reasoning patterns
+budget-aware execution
+OpenAI-compatible portability
+small API design
+
+Be cautious about features that push the project toward:
+
+workflow engines
+control planes
+observability platforms
+adapter sprawl
+full agent ecosystems
+License
+
+MIT
+
+Sharper v0.1 / v0.2 boundary doc
+Product boundary
+
+ExecutionKit is a minimal execution library for composable LLM reasoning patterns.
+
+It is not a gateway.
+It is not a graph runtime.
+It is not a full agent platform.
+It is not an observability suite.
+It is not a provider SDK umbrella.
+
+v0.1
+Theme
+
+A tiny, credible core for pattern-first execution.
+
+Must ship
+consensus
+refine_loop
+react_loop
+pipe()
+Provider
+LLMProvider
+PatternResult
+TokenUsage
+CostTracker
+retry
+parallel execution
+convergence detection
+JSON extraction fallback
+tests
+examples
+README
+contribution docs
+Product promise
+
+Developers can run reusable reasoning patterns over any OpenAI-compatible endpoint, compose those patterns together, and keep one shared budget visible across the full run.
+
+What stays out
+native provider sprawl
+dashboards
+tracing platform features
+stateful workflow runtime
+multi-agent orchestration
+enterprise gateway controls
+v0.2
+Theme
+
+Selective expansion that reinforces the core story.
+
+Good additions
+policy objects for retries and budgets
+richer composition helpers
+better evaluator plug points
+progress callbacks
+lightweight trace entries
+optional streaming
+optional non-core providers via protocol
+Avoid
+graph-first orchestration
+native-everything provider support
+control-plane features
+governance and dashboard scope
+agent ecosystem creep
+Recommended one-line tagline options
+Composable LLM reasoning patterns for OpenAI-compatible endpoints
+Budget-aware LLM execution without framework weight
+Consensus, refinement, and tool loops in one small library
+Pattern-first LLM execution
+Best tagline
+
+Composable LLM reasoning patterns for OpenAI-compatible endpoints
+
+Recommended homepage hero
+
+Composable LLM reasoning patterns
+Consensus, refinement, and tool loops with shared budget tracking for any OpenAI-compatible endpoint.
+
+Recommended README opener
+
+ExecutionKit is a minimal Python library for pattern-first LLM execution. Use consensus(), refine_loop(), react_loop(), and pipe() to run reusable reasoning patterns over any OpenAI-compatible endpoint while keeping usage visible across the whole run. It is designed for developers who want more than raw chat calls, but less than a full agent framework.
+
+I can also turn this into a single polished README.md file with badges, section ordering, and tighter examples.
+
+can you use notion to make a high quality det of initial documentation with an updated spec plan too
+there is nothing made in notion yet
+any similar alternatives or steps i should take to prep
+
+I didn’t find any existing Notion pages for this project, so there was nothing for me to update. Instead, I prepared a comprehensive initial documentation and specification plan for ExecutionKit and saved it as a Markdown file. You can download and import it into your Notion workspace:
+ExecutionKit v0.1 – Initial Documentation and Updated Specification Plan
+
+ExecutionKit is a minimal Python library designed for pattern‑first execution over any endpoint that implements the OpenAI‑compatible /chat/completions API. It provides a small set of reusable reasoning patterns with built‑in budget awareness and a lightweight provider abstraction. This document summarises the core concepts of the library, outlines the features that ship in v0.1, notes what is deferred to v0.2, and lays out an updated specification plan to keep the scope tightly focused.
+
+Key Concepts
+Pattern‑First Execution: ExecutionKit packages three high‑level reasoning workflows—consensus, refine_loop, and react_loop—as first‑class functions. Instead of building agents or workflows from scratch, developers can call these patterns to sample from multiple models, iteratively refine answers, or drive a bounded ReAct‑style tool loop.
+Budget‑Aware Composition: The library tracks token usage and call counts for each pattern. Using pipe() you can chain patterns together while sharing a TokenUsage budget, so you always know how much input, output, and call quota remains.
+OpenAI‑Compatible Transport: A single Provider class wraps HTTP interactions with /chat/completions endpoints. The provider takes a base URL, model name, and optional API key, then sends JSON payloads over the standard interface. This design works seamlessly with OpenAI, Azure, Groq, Together, Ollama, LM Studio and any local or cloud server that advertises OpenAI compatibility.
+Minimal Dependencies: ExecutionKit uses only the Python standard library for HTTP and JSON plus Pydantic for type validation. There are no heavy provider SDK dependencies.
+What Ships in v0.1
+Patterns: consensus, refine_loop, react_loop
+Composition: pipe() helper to chain patterns with a shared budget
+Session: Kit for managing pattern execution
+Provider: a single universal Provider class (URL + model + API key)
+Engine: retry logic, parallel execution helpers, convergence detection, and a JSON extraction fallback for models that return ill‑formed JSON
+Types: PatternResult[T], TokenUsage, Tool, ToolCall, VotingStrategy (majority and unanimous), Evaluator, and LLMResponse
+Errors: ExecutionKitError hierarchy covering rate limits, provider failures, budget exhaustion, consensus failures and max‑iteration conditions
+Features: CostTracker, checked_complete, validate_score, agreement_ratio, was_truncated, and a ConvergenceDetector
+Infrastructure: CLI, pyproject.toml, examples, a README and CONTRIBUTING guide
+Deferred to v0.2
+Tree‑of‑thought / beam search
+Native Anthropic provider and message conversion
+TraceEntry and ProgressCallback (observability hooks)
+StreamingProvider for real‑time output
+OpenTelemetry integration
+Dedicated documentation site (mkdocs)
+Updated Specification Plan
+
+The crowded LLM tooling space already includes full agent frameworks, gateways, and orchestration runtimes. ExecutionKit differentiates itself by staying small and opinionated. To preserve that identity:
+
+v0.1 remains tightly scoped. Only the core patterns (consensus, refine_loop, react_loop), the pipe() composition helper, the Provider abstraction and essential engine utilities ship. There is no graph runtime, multi‑agent handoff, or provider‑specific adapter matrix. Observability and native Anthropic support are explicitly deferred.
+v0.2 enhancements focus on composition, not scope creep. The next release should add richer composition ergonomics (policy objects for retries and budgets), optional progress callbacks, lightweight trace objects, streaming support, and optionally separate provider implementations via the LLMProvider protocol. Graph runtimes, dashboards, governance features, and broad provider sprawl remain out of scope.
+
+By following this plan, ExecutionKit stays a focused execution library rather than an orchestration framework. Its pattern‑first design and budget‑aware composition complement rather than compete with more complex agent platforms.
+
+Hero Example
+
+Here is a concise example using consensus with a local model served by Ollama:
+
+from executionkit import Provider, consensus
+
+# Connect to a local Ollama server that exposes an OpenAI‑compatible API
+provider = Provider("http://localhost:11434/v1", model="llama3.2")
+
+result = await consensus(
+    provider,
+    "Classify this support ticket into billing, bug, or access.",
+    num_samples=5,
+)
+
+print(result.value)  # The chosen classification
+print(result.cost)   # TokenUsage(input_tokens=250, output_tokens=45, llm_calls=5)
+print(result.metadata["agreement_ratio"])  # e.g., 0.8 (4 out of 5 agreed)
+
+The same code can run against any OpenAI‑compatible endpoint—cloud or local—by changing the provider’s base URL and model name.
+
+Alternatives to consider
+
+ExecutionKit focuses on pattern‑first execution with minimal dependencies. If you later decide you need more orchestration features or different abstractions, there are several open‑source frameworks worth evaluating:
+
+LangGraph extends LangChain into a directed acyclic graph (DAG) architecture. Each node is a step and edges control data flow, making it suitable for stateful workflows where you need precise branching and error handling.
+OpenAI Agents SDK packages OpenAI’s capabilities into a structured runtime for multi‑step and multi‑agent tasks. It provides a familiar prompt interface and is deeply integrated with OpenAI models.
+Google Agent Development Kit (ADK) offers built‑in multi‑agent orchestration and session management; it’s a good fit if you’re invested in Gemini models or Google’s AI ecosystem.
+Smolagents takes a radically simple, code‑centric approach: agents generate and execute Python code in a minimal loop. This is ideal when you want fast setup and lightweight ReAct‑style prompting without complex graphs.
+CrewAI focuses on role‑based collaboration. It organizes agents into a “crew,” each with a specialized role, and coordinates their workflow for multi‑agent tasks.
+AutoGen (Microsoft Research) frames workflows as asynchronous conversations among agents, which is useful for long-running tasks and dynamic dialogues.
+Semantic Kernel is a .NET‑first library designed to orchestrate AI “skills” and traditional code, with an emphasis on enterprise integration and security.
+How to prepare
+Install ExecutionKit and dependencies: Ensure you have Python 3.10+, install the library via pip install executionkit, and verify Pydantic is installed.
+Set up local or cloud models: For local models, run an OpenAI‑compatible server (e.g. Ollama, LM Studio, or vLLM). For cloud, have API keys ready for OpenAI, Groq, Together, or Azure endpoints. The Provider class in ExecutionKit only needs a base URL, model name, and API key.
+Define your budget policies: Decide on token budgets and cost limits for your patterns. ExecutionKit lets you enforce budgets via TokenUsage and pipe() so costs don’t exceed your constraints.
+Organize documentation: Import the provided Markdown file into Notion or another documentation system. Use it as your “single source of truth,” updating it as the spec evolves.
+Evaluate the alternatives: If your needs go beyond pattern‑first execution—such as full graph-based orchestration, multi-agent collaboration, or enterprise integration—compare the frameworks above. LangGraph suits DAG workflows; the OpenAI Agents SDK and Google ADK provide structured runtimes; smolagents and CrewAI offer lightweight approaches.
+
+Feel free to explore the documentation file and let me know if you need further refinements or additional materials.
+
+Sources
+where is the file
+
+The documentation is available as a Markdown file created during our previous step. You can download it directly from this link:
+ExecutionKit v0.1 – Initial Documentation and Updated Specification Plan
+
+ExecutionKit is a minimal Python library designed for pattern‑first execution over any endpoint that implements the OpenAI‑compatible /chat/completions API. It provides a small set of reusable reasoning patterns with built‑in budget awareness and a lightweight provider abstraction. This document summarises the core concepts of the library, outlines the features that ship in v0.1, notes what is deferred to v0.2, and lays out an updated specification plan to keep the scope tightly focused.
+
+Key Concepts
+Pattern‑First Execution: ExecutionKit packages three high‑level reasoning workflows—consensus, refine_loop, and react_loop—as first‑class functions. Instead of building agents or workflows from scratch, developers can call these patterns to sample from multiple models, iteratively refine answers, or drive a bounded ReAct‑style tool loop.
+Budget‑Aware Composition: The library tracks token usage and call counts for each pattern. Using pipe() you can chain patterns together while sharing a TokenUsage budget, so you always know how much input, output, and call quota remains.
+OpenAI‑Compatible Transport: A single Provider class wraps HTTP interactions with /chat/completions endpoints. The provider takes a base URL, model name, and optional API key, then sends JSON payloads over the standard interface. This design works seamlessly with OpenAI, Azure, Groq, Together, Ollama, LM Studio and any local or cloud server that advertises OpenAI compatibility.
+Minimal Dependencies: ExecutionKit uses only the Python standard library for HTTP and JSON plus Pydantic for type validation. There are no heavy provider SDK dependencies.
+What Ships in v0.1
+Patterns: consensus, refine_loop, react_loop
+Composition: pipe() helper to chain patterns with a shared budget
+Session: Kit for managing pattern execution
+Provider: a single universal Provider class (URL + model + API key)
+Engine: retry logic, parallel execution helpers, convergence detection, and a JSON extraction fallback for models that return ill‑formed JSON
+Types: PatternResult[T], TokenUsage, Tool, ToolCall, VotingStrategy (majority and unanimous), Evaluator, and LLMResponse
+Errors: ExecutionKitError hierarchy covering rate limits, provider failures, budget exhaustion, consensus failures and max‑iteration conditions
+Features: CostTracker, checked_complete, validate_score, agreement_ratio, was_truncated, and a ConvergenceDetector
+Infrastructure: CLI, pyproject.toml, examples, a README and CONTRIBUTING guide
+Deferred to v0.2
+Tree‑of‑thought / beam search
+Native Anthropic provider and message conversion
+TraceEntry and ProgressCallback (observability hooks)
+StreamingProvider for real‑time output
+OpenTelemetry integration
+Dedicated documentation site (mkdocs)
+Updated Specification Plan
+
+The crowded LLM tooling space already includes full agent frameworks, gateways, and orchestration runtimes. ExecutionKit differentiates itself by staying small and opinionated. To preserve that identity:
+
+v0.1 remains tightly scoped. Only the core patterns (consensus, refine_loop, react_loop), the pipe() composition helper, the Provider abstraction and essential engine utilities ship. There is no graph runtime, multi‑agent handoff, or provider‑specific adapter matrix. Observability and native Anthropic support are explicitly deferred.
+v0.2 enhancements focus on composition, not scope creep. The next release should add richer composition ergonomics (policy objects for retries and budgets), optional progress callbacks, lightweight trace objects, streaming support, and optionally separate provider implementations via the LLMProvider protocol. Graph runtimes, dashboards, governance features, and broad provider sprawl remain out of scope.
+
+By following this plan, ExecutionKit stays a focused execution library rather than an orchestration framework. Its pattern‑first design and budget‑aware composition complement rather than compete with more complex agent platforms.
+
+Hero Example
+
+Here is a concise example using consensus with a local model served by Ollama:
+
+from executionkit import Provider, consensus
+
+# Connect to a local Ollama server that exposes an OpenAI‑compatible API
+provider = Provider("http://localhost:11434/v1", model="llama3.2")
+
+result = await consensus(
+    provider,
+    "Classify this support ticket into billing, bug, or access.",
+    num_samples=5,
+)
+
+print(result.value)  # The chosen classification
+print(result.cost)   # TokenUsage(input_tokens=250, output_tokens=45, llm_calls=5)
+print(result.metadata["agreement_ratio"])  # e.g., 0.8 (4 out of 5 agreed)
+
+The same code can run against any OpenAI‑compatible endpoint—cloud or local—by changing the provider’s base URL and model name.

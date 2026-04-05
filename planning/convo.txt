@@ -1,0 +1,1038 @@
+Explore(Explore existing execution patterns in codebase)
+  ⎿  Backgrounded agent (↓ to manage · ctrl+o to expand)
+
+● Explore(Market analysis for LLM execution patterns)
+  ⎿  Backgrounded agent (↓ to manage · ctrl+o to expand)
+
+● 3 exploration agents deployed in parallel:
+
+  ┌───────────────────┬────────────────────────────┬─────────────────────────────────────────────────────────────────────────────┐
+  │       Agent       │           Focus            │                                Investigating                                │
+  ├───────────────────┼────────────────────────────┼─────────────────────────────────────────────────────────────────────────────┤
+  │ StructureKit      │ Product design +           │ What would ToT/ReAct/loop primitives look like? What's already built vs     │
+  │ Evaluator         │ competitive positioning    │ new? Feature matrix vs LangGraph/DSPy/AutoGen                               │
+  ├───────────────────┼────────────────────────────┼─────────────────────────────────────────────────────────────────────────────┤
+  │ Pattern Explorer  │ Codebase archaeology       │ Complete inventory of every execution pattern in the monorepo — DAG, loops, │
+  │                   │                            │  branching, orchestration, tool calling, scoring                            │
+  ├───────────────────┼────────────────────────────┼─────────────────────────────────────────────────────────────────────────────┤
+  │ Market Analyst    │ Demand signals + gap       │ WebSearch for developer demand, competitor gaps, market size for composable │
+  │                   │ analysis                   │  LLM reasoning patterns                                                     │
+  └───────────────────┴────────────────────────────┴─────────────────────────────────────────────────────────────────────────────┘
+
+  Waiting for all 3 to report back before moving to the Design phase. This will tell us whether the pivot to an "LLM execution
+  patterns" library has legs, or if it falls into the same traps the antagonistic reviewers identified for Lithom.
+
+✻ Crunched for 1m 14s · 3 local agents still running
+
+● Agent "Market analysis for LLM execution patterns" completed
+
+● Market Analyst is back with strong findings. Key signal: the gap is real — developers
+   are explicitly requesting ToT/ReAct as first-class primitives in LangChain issues
+  (#11546, #23181), and 50%+ report LangGraph complexity friction. Agentic AI market
+  growing 43.8% CAGR. Recommendation: ENTER with "itertools for LLM reasoning"
+  positioning.
+
+● Agent "Evaluate StructureKit + execution patterns" completedExplorer.
+
+● StructureKit Evaluator is back. Strong alignment with Market Analyst — both say
+  BUILD, both identify the same gap (no library offers ToT + ReAct + loops as
+  first-class primitives). Key insight: your existing DAG executor is 60% of the way to
+   ToT — missing pieces are branch generation, scoring, and pruning.
+
+  1 agent remaining — Pattern Explorer (complete codebase inventory of execution
+  patterns). Once it's back I'll move to the Design phase and write the plan.
+● Agent "Explore existing execution patterns in codebase" completed
+
+● All 3 exploration agents are back. Here's the convergent picture:
+
+  Convergence across all 3 agents:
+  - The gap is REAL — no library offers ToT + ReAct + loops as composable primitives
+  - Your codebase already has 23 production-ready execution patterns (60% of the
+  foundation)
+  - The missing pieces are specific: branch scoring/pruning (ToT), consensus voting,
+  fluent API wrapper
+  - Market is growing 43.8% CAGR with explicit developer demand signals
+
+● Plan(Design ExecutionKit implementation plan)nt to synthesize everything into the
+  ⎿  Backgrounded agent (↓ to manage · ctrl+o to expand)
+
+● Plan agent launched to design the ExecutionKit implementation. It has:
+  - All market evidence (demand signals, competitive gaps)
+  - Complete codebase inventory (23 extractable patterns with file paths and line
+  numbers)
+  - Clear scope boundaries (4 core patterns for v0.1, what to defer)
+  - Competitive positioning against LangGraph, DSPy, AutoGen
+
+  Once it returns, I'll write the final plan to the plan file and present it for
+✻ Baked for 1m 2s · 1 local agent still running
+
+❯ Unknown skill: sidequestion                                                          
+
+● Args from unknown skill: where did you get market developer demand growth from
+
+❯ Unknown skill: sidetrack                                                             
+
+● Args from unknown skill: where did you get market developer demand growth from
+
+❯ where did you get market developer demand growth from                                                                              
+
+● From the Market Analyst agent's WebSearch results. Here are the specific sources it cited:
+
+  Market size / growth:
+  - Precedence Research — "Agentic AI Market" report: $5.25B (2024) → $199B (2034), 43.8% CAGR
+    - Source: precedenceresearch.com/agentic-ai-market
+  - Markets & Markets — "Agentic AI Market" report: 45% of Fortune 500 actively piloting
+    - Source: marketsandmarkets.com/Market-Reports/agentic-ai-market-208190735.html
+
+  Developer demand signals (direct GitHub evidence):
+  - LangChain Issue #11546 — "Add Examples of implementing Tree of Thoughts using Langchain" (open since Oct 2023)
+  - LangChain Discussion #23181 — "Why langgraph ReAct agent does not have a 'Thought' step?"
+  - LangChain Issue #34450 — "There is no output of thought content"
+  - GitHub Community Discussion #182015 — "Is LangChain becoming too complex/bloated?" (50%+ report steep learning curve)
+
+  Framework comparison sources:
+  - LangWatch blog: "Best AI Agent Frameworks in 2025"
+  - Akka: "25 LangChain Alternatives"
+  - IBM Think: "LangChain Alternatives"
+  - Langfuse: "Comparing Open-Source AI Agent Frameworks"
+
+  Pattern-specific demand:
+  - Simon Willison's ReAct pattern post (HN discussion)
+  - Mozilla AI "Star Chamber" (multi-LLM consensus for code quality)
+  - Self-Refine paper/GitHub (iterative refinement)
+
+  The 43.8% CAGR figure comes from a third-party market research firm (Precedence Research), not from internal data. The developer
+  demand signals are grounded in real GitHub issues with links. The "50% complexity friction" is from community survey discussions,
+  not a formal study — so treat that number with some skepticism.
+
+❯ is it done plannign                                                                                                                
+
+● Not yet — the Plan agent is still running. Let me check its progress.
+
+● Read(C:\Users\tandf\AppData\Local\Temp\claude\D--source-prompts\2143b6ca-0390-4472-b072-75aa063fcaad\tasks\ac8b0af006c485780.output
+  ⎿  Read 5 lines
+
+
+● It's still actively exploring the codebase (reading files, running commands). These Plan agents are thorough — it's tracing through
+   the actual source to validate the design. I'll notify you as soon as it completes.
+
+● Agent "Design ExecutionKit implementation plan" completed
+
+● Plan agent is back with the full ExecutionKit design. Let me write the final plan file now.
+
+● Updated plan
+  ⎿  Wrote 248 lines to C:\Users\tandf\.claude\plans\linked-twirling-crystal.md
+        1 # ExecutionKit: Composable LLM Reasoning Patterns
+        2
+        3 ## Context
+        4
+        5 The monorepo at `D:/source/prompts` was analyzed by 13+ specialized agents across 4 rounds to identify extractable
+        6 1. Native structured outputs from OpenAI/Anthropic/Google make JSON extraction obsolete3 antagonistic reviewers
+        7 2. No competitive moat vs LiteLLM + Instructor (11K stars, 3M downloads)
+        8 3. 9-provider maintenance is unsustainable (~108 hrs/year)
+        9
+       10 The pivot: **ExecutionKit** — "itertools for LLM reasoning." Composable execution patterns (Tree of Thought, ReAct,
+       11 nsus, refinement loops) where Python orchestrates real LLM calls.
+       12 **Why this wins:** No library owns this space. LangGraph requires graph wiring. DSPy focuses on optimization. Explicit
+       13 ub demand signals (LangChain issues #11546, #23181, #34450). Agentic AI market growing 43.8% CAGR.
+       14 **Existing codebase provides 60% of the foundation** — 23 production-ready execution patterns already built in
+       15 tic-workflows-v2/`.
+       16 ---
+       17
+       18 ## Package Structure
+       19
+       20 ```
+       21 executionkit/
+       22   pyproject.toml
+       23   src/executionkit/
+       24     __init__.py                 # Public: tree_of_thought, react_loop, consensus, refine_loop
+       25     provider.py                 # LLMProvider Protocol + LLMResponse dataclass
+       26     types.py                    # PatternResult[T], Branch, CostMetrics, Tool
+       27     cost.py                     # CostTracker with per-pattern token/cost tracking
+       28     patterns/
+       29       __init__.py
+       30       tree_of_thought.py        # branch -> evaluate -> prune -> recurse
+       31       react_loop.py             # think -> act -> observe -> loop
+       32       consensus.py              # call N times -> vote -> return best
+       33       refine_loop.py            # generate -> evaluate -> improve -> converge
+       34     _engine/
+       35       __init__.py
+       36       context.py                # Simplified ExecutionContext (from engine/context.py)
+       37       retry.py                  # RetryConfig + backoff (from engine/step.py:18-68)
+       38       parallel.py               # gather_bounded, race_first (from dag_executor.py)
+       39       convergence.py            # NEW: delta threshold + plateau detection
+       40   tests/
+       41     conftest.py                 # MockProvider fixture, shared helpers
+       42     test_tree_of_thought.py
+       43     test_react_loop.py
+       44     test_consensus.py
+       45     test_refine_loop.py
+       46     test_engine.py              # context, retry, parallel, convergence
+       47   examples/
+       48     basic_tot.py
+       49     basic_react.py
+       50     basic_consensus.py
+       51     basic_refine.py
+       52 ```
+       53
+       54 **Dependencies:** Only `pydantic>=2.0`. Users bring their own LLM client.
+       55
+       56 ---
+       57
+       58 ## Public API (4 Core Patterns)
+       59
+       60 ### Provider Protocol — users implement this once
+       61
+       62 ```python
+       63 # provider.py
+       64 @runtime_checkable
+       65 class LLMProvider(Protocol):
+       66     async def complete(
+       67         self,
+       68         messages: Sequence[dict[str, Any]],
+       69         *,
+       70         temperature: float = 0.7,
+       71         max_tokens: int = 4096,
+       72         tools: Sequence[dict[str, Any]] | None = None,
+       73         response_format: type | None = None,
+       74         **kwargs: Any,
+       75     ) -> LLMResponse: ...
+       76 ```
+       77
+       78 ### Pattern 1: `tree_of_thought()`
+       79
+       80 ```python
+       81 result = await tree_of_thought(
+       82     provider,
+       83     prompt="Solve: what's 24 using 1,3,4,6?",
+       84     num_branches=3,        # Generate 3 candidates per level
+       85     beam_width=2,          # Keep top 2
+       86     max_depth=3,           # 3 levels of reasoning
+       87     evaluator=my_scorer,   # Custom scoring function
+       88 )
+       89 # result.value = best answer, result.cost = token/cost metrics
+       90 ```
+       91
+       92 ### Pattern 2: `react_loop()`
+       93
+       94 ```python
+       95 result = await react_loop(
+       96     provider,
+       97     prompt="Find the CEO of the company that acquired Twitter",
+       98     tools=[web_search, wikipedia_lookup],
+       99     max_rounds=8,
+      100 )
+      101 ```
+      102
+      103 ### Pattern 3: `consensus()`
+      104
+      105 ```python
+      106 result = await consensus(
+      107     provider,
+      108     prompt="Classify this text: ...",
+      109     response_schema=Classification,
+      110     num_samples=5,
+      111     strategy="majority",
+      112 )
+      113 ```
+      114
+      115 ### Pattern 4: `refine_loop()`
+      116
+      117 ```python
+      118 result = await refine_loop(
+      119     provider,
+      120     prompt="Write a haiku about recursion",
+      121     evaluator=quality_scorer,
+      122     target_score=0.9,
+      123     max_iterations=5,
+      124     patience=2,
+      125 )
+      126 ```
+      127
+      128 All return `PatternResult[T]` with `.value`, `.score`, `.cost`, `.iterations`, `.trace`.
+      129
+      130 ---
+      131
+      132 ## What to Extract vs Write New
+      133
+      134 ### EXTRACT from `agentic-workflows-v2/agentic_v2/`
+      135
+      136 | Target | Source File | Lines | What | Adaptation |
+      137 |--------|------------|-------|------|------------|
+      138 | `_engine/context.py` | `engine/context.py` | all | Variable store + child scoping + event hooks | Strip workflow_id,
+      139 | `_engine/retry.py` | `engine/step.py` | 18-68 | RetryConfig + backoff strategies | Extract verbatim. Self-contained
+      140 | `_engine/parallel.py` | `engine/dag_executor.py` | 194+ | FIRST_COMPLETED parallel scheduling | Generalize into
+      141 | `patterns/react_loop.py` | `engine/tool_execution.py` | 220-440 | Tool normalization, serialization, execution loop
+      142 | (fallback parser) | `agents/json_extraction.py` | all | Balanced-brace JSON extraction | Use as fallback when
+      143 der lacks structured output. 156 lines as-is |
+      144 ### WRITE NEW
+      145
+      146 | File | Est. LOC | Complexity | Why New |
+      147 |------|----------|------------|---------|
+      148 | `provider.py` | 60 | Low | No equivalent — current code uses tied ABC |
+      149 | `types.py` | 100 | Low | PatternResult, Branch, CostMetrics, Tool |
+      150 | `cost.py` | 120 | Medium | Structured cost-per-pattern tracking |
+      151 | `patterns/tree_of_thought.py` | 250 | **High** | Core new value — branch + evaluate + prune + recurse |
+      152 | `patterns/consensus.py` | 150 | Medium | Parallel sampling + voting aggregation |
+      153 | `patterns/refine_loop.py` | 180 | Medium | Loop + convergence detection |
+      154 | `_engine/convergence.py` | 80 | Medium | Delta threshold + plateau detection |
+      155
+      156 **Total new code: ~940 LOC. Total extracted+adapted: ~560 LOC. Grand total: ~1,500 LOC.**
+      157
+      158 ---
+      159
+      160 ## Phase Plan
+      161
+      162 ### Phase 1: Foundation (Days 1-3)
+      163 - Scaffold package + pyproject.toml
+      164 - `provider.py` — LLMProvider Protocol + LLMResponse
+      165 - `types.py` — PatternResult, Branch, CostMetrics, Tool
+      166 - `cost.py` — CostTracker
+      167 - `_engine/context.py` — simplified ExecutionContext (extract from `engine/context.py`)
+      168 - `_engine/retry.py` — extract RetryConfig from `engine/step.py:18-68`
+      169 - `_engine/parallel.py` — extract gather_bounded from `dag_executor.py`
+      170 - `_engine/convergence.py` — write convergence detector
+      171 - Tests: provider protocol, types, cost, convergence, parallel
+      172
+      173 ### Phase 2: Core Patterns (Days 4-8)
+      174 Build order by complexity (simpler first):
+      175 1. **`consensus.py`** (Day 4) — simplest; tests provider + parallel infra
+      176 2. **`refine_loop.py`** (Day 5) — sequential loop; tests cost + convergence
+      177 3. **`react_loop.py`** (Days 6-7) — tool loop; extracts from `tool_execution.py`
+      178 4. **`tree_of_thought.py`** (Days 7-8) — most complex; depends on parallel + convergence
+      179 - Tests: 3 categories per pattern (unit with mocks, edge cases, integration markers)
+      180
+      181 ### Phase 3: Polish + Release (Days 9-10)
+      182 - `__init__.py` — public exports
+      183 - Sync wrappers (`tree_of_thought_sync()`, etc.)
+      184 - JSON extraction fallback for non-structured providers
+      185 - Docstrings + README with 4 working examples
+      186 - CI: ruff + mypy --strict + pytest --cov-fail-under=80
+      187
+      188 ### Phase 4: v0.2 Composition (Days 11-14, DEFER)
+      189 - `compose()` — chain patterns together
+      190 - OpenTelemetry integration (optional)
+      191 - LangGraph node adapter (optional)
+      192 - Streaming intermediate results
+      193
+      194 ---
+      195
+      196 ## Critical Source Files
+      197
+      198 - `D:/source/prompts/agentic-workflows-v2/agentic_v2/engine/context.py` — hierarchical context to simplify
+      199 - `D:/source/prompts/agentic-workflows-v2/agentic_v2/engine/dag_executor.py` — FIRST_COMPLETED parallel pattern
+      200 - `D:/source/prompts/agentic-workflows-v2/agentic_v2/engine/step.py` — RetryConfig (lines 18-68), loop_until (lines
+      201 - `D:/source/prompts/agentic-workflows-v2/agentic_v2/engine/tool_execution.py` — ReAct tool loop (lines 373-440)
+      202 - `D:/source/prompts/agentic-workflows-v2/agentic_v2/agents/json_extraction.py` — balanced-brace extraction (fallback)
+      203
+      204 ---
+      205
+      206 ## Risk Mitigation
+      207
+      208 | Risk | Mitigation |
+      209 |------|-----------|
+      210 | **Cost explosion** (ToT branches × depth = 100s of LLM calls) | `max_tokens` and `max_cost` params on every pattern.
+      211 | **Paradigm lock-in** (models add native reasoning) | Patterns are stateless functions, not framework classes. If
+      212 | **Model churn** (prompts break across models) | All prompts overridable via params. `response_schema` forces
+      213 tured output. JSON extraction fallback for messy responses |
+      214 ---
+      215
+      216 ## Test Strategy
+      217
+      218 Each pattern gets 3 test categories:
+      219 1. **Unit tests** — MockProvider returns canned responses. Verify message formation, loop termination, cost tracking
+      220 2. **Edge cases** — budget exhaustion, all branches pruned, max iterations, empty tool results, convergence on round 1
+      221 3. **Integration markers** — `@pytest.mark.integration` for real LLM calls (skipped in CI)
+      222
+      223 Coverage target: 80% overall, 90% for pattern modules.
+      224
+      225 ---
+      226
+      227 ## Agent Team Build Assignments
+      228
+      229 | Agent | Phase | Files |
+      230 |-------|-------|-------|
+      231 | **tdd-guide** | 1-3 | Write tests FIRST for each module |
+      232 | **build-agent-1** | 1 | Package scaffold, provider.py, types.py, cost.py, _engine/* |
+      233 | **build-agent-2** | 2 | consensus.py, refine_loop.py |
+      234 | **build-agent-3** | 2 | react_loop.py (extract from tool_execution.py), tree_of_thought.py |
+      235 | **code-reviewer** | 3 | Final review of all modules |
+      236 | **security-reviewer** | 2 | Audit expression eval if included, JSON extraction DoS limits |
+      237
+      238 ---
+      239
+      240 ## Verification
+      241
+      242 1. `ruff check src/executionkit` — lint passes
+      243 2. `mypy --strict src/executionkit` — type check passes
+      244 3. `pytest tests/ --cov=executionkit --cov-fail-under=80` — all tests pass, 80%+ coverage
+      245 4. Run `examples/basic_tot.py` with a real provider — produces valid tree with scores
+      246 5. Run `examples/basic_react.py` with mock tools — completes think/act/observe loop
+      247 6. Run `examples/basic_consensus.py` — returns majority vote from 5 samples
+      248 7. Run `examples/basic_refine.py` — converges within max_iterations
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  ⎿  Tool use rejected
+
+● Great question. Let me explain how ExecutionKit plugs into LLM calls.
+
+  How the Provider Protocol Works
+
+  ExecutionKit does NOT ship with any LLM provider. Instead, the user wraps their existing client in a 10-line adapter:
+
+  Example: Wrapping OpenAI
+
+  from openai import AsyncOpenAI
+  from executionkit import LLMProvider, LLMResponse
+
+  class OpenAIProvider:
+      def __init__(self, model: str = "gpt-4o"):
+          self.client = AsyncOpenAI()
+          self.model = model
+
+      async def complete(self, messages, *, temperature=0.7, max_tokens=4096,
+                         tools=None, response_format=None, **kwargs) -> LLMResponse:
+          params = {"model": self.model, "messages": messages,
+                    "temperature": temperature, "max_tokens": max_tokens}
+          if tools:
+              params["tools"] = tools
+          if response_format:
+              params["response_format"] = {"type": "json_schema",
+                                            "json_schema": response_format.model_json_schema()}
+
+          resp = await self.client.chat.completions.create(**params)
+          choice = resp.choices[0]
+          return LLMResponse(
+              content=choice.message.content or "",
+              tool_calls=[tc.model_dump() for tc in (choice.message.tool_calls or [])],
+              input_tokens=resp.usage.prompt_tokens,
+              output_tokens=resp.usage.completion_tokens,
+              model=self.model,
+          )
+
+  Then use any pattern:
+
+  provider = OpenAIProvider("gpt-4o-mini")
+
+  # Tree of Thought
+  result = await tree_of_thought(provider, "Solve: make 24 from 1,3,4,6")
+
+  # ReAct with tools
+  result = await react_loop(provider, "Research topic X", tools=[web_search])
+
+  # Consensus voting
+  result = await consensus(provider, "Classify: ...", num_samples=5)
+
+  How it flows inside a pattern:
+
+  tree_of_thought(provider, prompt)
+    │
+    ├── Branch generation:
+    │     provider.complete([{"role": "user", "content": "Generate 3 approaches to: {prompt}"}])
+    │     → LLMResponse(content="Approach 1: ...\nApproach 2: ...\nApproach 3: ...")
+    │     → Parse into 3 Branch objects
+    │
+    ├── Branch evaluation (parallel via gather_bounded):
+    │     provider.complete([{"role": "user", "content": "Score this approach 0-1: {branch.content}"}])
+    │     → LLMResponse(content="0.85")  → branch.score = 0.85
+    │     (repeated for each branch, concurrently)
+    │
+    ├── Prune: keep top beam_width branches (e.g., 2 of 3)
+    │
+    ├── Recurse: for each surviving branch, generate sub-branches at next depth
+    │
+    └── Return: PatternResult(value=best_leaf.content, score=0.92, cost=CostMetrics(...))
+
+  Key design: Provider is a Protocol, not a base class
+
+  @runtime_checkable
+  class LLMProvider(Protocol):
+      async def complete(self, messages, **kwargs) -> LLMResponse: ...
+
+  This means any object with a complete() method works — no inheritance required. Users can wrap:
+  - openai.AsyncOpenAI
+  - anthropic.AsyncAnthropic
+  - litellm.acompletion
+  - ollama REST calls
+  - A mock for testing
+
+  The pattern functions call provider.complete() with standard chat messages. They never touch HTTP, API keys, or provider-specific
+  logic. That's entirely the user's responsibility.
+
+  What about structured output?
+
+  When a pattern needs structured data (e.g., ToT branch scores, ReAct tool calls), it passes response_format=SomeModel to
+  provider.complete(). If the user's provider supports native structured output (OpenAI, Anthropic), their adapter uses it. If not,
+  ExecutionKit falls back to the existing extract_json() balanced-brace parser from the codebase.
+
+  Want me to update the plan with more detail on the provider integration, or are you ready to approve?
+
+✻ Crunched for 1m 47s
+
+❯  i would like to have some minimal side module for the actal provider so could spin up with just an api enpoint and key sayd for   
+github copilot or ollama local models                                                                                                
+
+● That makes total sense — "bring your own provider" is the wrong v0.1 DX. Developers want pip install executionkit[github] and go.
+  Let me update the plan.
+
+● Reading Plan(C:\Users\tandf\.claude\plans\linked-twirling-crystal.md · lines 0-49)
+  ⎿  Read 50 lines
+
+● Reading Plan(C:\Users\tandf\.claude\plans\linked-twirling-crystal.md · lines 50-99)
+  ⎿  Read 50 lines
+
+● Now let me update the plan to add the built-in providers module.
+
+● Updated plan
+  ⎿  Added 10 lines, removed 1 line
+      37        retry.py                  # RetryConfig + backoff (from engine/step.py:18-68)
+      38        parallel.py               # gather_bounded, race_first (from dag_executor.py)
+      39        convergence.py            # NEW: delta threshold + plateau detection
+      40 +    providers/                  # Minimal built-in providers (optional extras)                                      
+      41 +      __init__.py               # convenience: from executionkit.providers import OpenAIProvider                    
+      42 +      _openai.py                # OpenAI + Azure + GitHub Models (all use openai SDK)                               
+      43 +      _ollama.py                # Local Ollama via stdlib urllib (zero deps)                                        
+      44 +      _anthropic.py             # Claude (optional)                                                                 
+      45 +      _mock.py                  # MockProvider for testing (no deps)                                                
+      46    tests/
+      47      conftest.py                 # MockProvider fixture, shared helpers
+      48      test_tree_of_thought.py
+     ...
+      50      test_consensus.py
+      51      test_refine_loop.py
+      52      test_engine.py              # context, retry, parallel, convergence
+      53 +    test_providers.py           # Built-in provider tests                                                           
+      54    examples/
+      55      basic_tot.py
+      56      basic_react.py
+      57      basic_consensus.py
+      58      basic_refine.py
+      59 +    quickstart_github.py        # 5-line example with GitHub Models                                                 
+      60 +    quickstart_ollama.py        # 5-line example with local Ollama                                                  
+      61  ```
+      62  
+      54 -**Dependencies:** Only `pydantic>=2.0`. Users bring their own LLM client.                                           
+      63 +**Dependencies:** Core requires only `pydantic>=2.0`. Built-in providers are optional extras.                       
+      64  
+      65  ---
+      66  
+
+
+
+
+
+
+
+
+● Now add the providers section after the Provider Protocol section:
+
+● Updated plan
+  ⎿  Added 62 lines
+       84      ) -> LLMResponse: ...
+       85  ```
+       86  
+       87 +### Built-in Providers (optional extras)                                                                           
+       88 +                                                                                                                   
+       89 +3 minimal providers ship with ExecutionKit so devs can start with just an API key:                                 
+       90 +                                                                                                                   
+       91 +**1. OpenAI-compatible** (`pip install executionkit[openai]`) — covers OpenAI, Azure, AND GitHub Models/Copilot sin
+          +ce they all use the OpenAI SDK with different `base_url`:                                                          
+       92 +                                                                                                                   
+       93 +```python                                                                                                          
+       94 +from executionkit.providers import OpenAIProvider                                                                  
+       95 +                                                                                                                   
+       96 +# GitHub Models — just an endpoint + token                                                                         
+       97 +provider = OpenAIProvider(                                                                                         
+       98 +    model="gpt-4o-mini",                                                                                           
+       99 +    base_url="https://models.inference.ai.azure.com",                                                              
+      100 +    api_key=os.environ["GITHUB_TOKEN"],                                                                            
+      101 +)                                                                                                                  
+      102 +                                                                                                                   
+      103 +# OpenAI — just a key                                                                                              
+      104 +provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-...")                                                   
+      105 +                                                                                                                   
+      106 +# Azure OpenAI — endpoint + key + deployment                                                                       
+      107 +provider = OpenAIProvider(                                                                                         
+      108 +    model="my-deployment",                                                                                         
+      109 +    base_url="https://myorg.openai.azure.com/",                                                                    
+      110 +    api_key=os.environ["AZURE_OPENAI_API_KEY"],                                                                    
+      111 +    api_version="2024-10-21",                                                                                      
+      112 +)                                                                                                                  
+      113 +                                                                                                                   
+      114 +# Then use any pattern immediately                                                                                 
+      115 +result = await tree_of_thought(provider, "Solve this problem...")                                                  
+      116 +```                                                                                                                
+      117 +                                                                                                                   
+      118 +**2. Ollama** (`pip install executionkit` — zero extra deps, uses stdlib urllib):                                  
+      119 +                                                                                                                   
+      120 +```python                                                                                                          
+      121 +from executionkit.providers import OllamaProvider                                                                  
+      122 +                                                                                                                   
+      123 +# Local model — just a host (default localhost:11434)                                                              
+      124 +provider = OllamaProvider(model="llama3.2")                                                                        
+      125 +                                                                                                                   
+      126 +# Remote Ollama                                                                                                    
+      127 +provider = OllamaProvider(model="mistral", host="http://gpu-server:11434")                                         
+      128 +                                                                                                                   
+      129 +result = await consensus(provider, "Classify this text...", num_samples=5)                                         
+      130 +```                                                                                                                
+      131 +                                                                                                                   
+      132 +**3. Anthropic** (`pip install executionkit[anthropic]`):                                                          
+      133 +                                                                                                                   
+      134 +```python                                                                                                          
+      135 +from executionkit.providers import AnthropicProvider                                                               
+      136 +                                                                                                                   
+      137 +provider = AnthropicProvider(model="claude-sonnet-4-20250514", api_key="sk-ant-...")                               
+      138 +result = await react_loop(provider, "Research topic X", tools=[...])                                               
+      139 +```                                                                                                                
+      140 +                                                                                                                   
+      141 +**Key design decisions:**                                                                                          
+      142 +- Each provider is ~50-80 lines — thin wrapper, not a framework                                                    
+      143 +- `OpenAIProvider` covers 3 services via `base_url` param (OpenAI, Azure, GitHub Models)                           
+      144 +- `OllamaProvider` uses stdlib `urllib` — zero pip dependencies for local-only use                                 
+      145 +- `MockProvider` always ships (in `_mock.py`) for testing — no deps                                                
+      146 +- All implement the same `LLMProvider` Protocol                                                                    
+      147 +- Source: adapted from `tools/llm/provider_adapters.py` (existing call_openai, call_ollama, call_claude functions) 
+      148 +                                                                                                                   
+      149  ### Pattern 1: `tree_of_thought()`
+      150  
+      151  ```python
+
+● Now update the dependencies section and the extraction table:
+
+● Updated plan
+  ⎿  Added 12 lines, removed 1 line
+      60      quickstart_ollama.py        # 5-line example with local Ollama
+      61  ```
+      62  
+      63 -**Dependencies:** Core requires only `pydantic>=2.0`. Built-in providers are optional extras.                       
+      63 +**Dependencies:**                                                                                                   
+      64 +```toml                                                                                                             
+      65 +[project]                                                                                                           
+      66 +dependencies = ["pydantic>=2.0,<3"]                                                                                 
+      67  
+      68 +[project.optional-dependencies]                                                                                     
+      69 +openai = ["openai>=1.0"]           # OpenAI + Azure + GitHub Models                                                 
+      70 +anthropic = ["anthropic>=0.40"]     # Claude                                                                        
+      71 +all = ["executionkit[openai,anthropic]"]                                                                            
+      72 +dev = ["pytest>=7.0", "pytest-asyncio>=0.21", "pytest-cov>=4.0", "ruff>=0.4", "mypy>=1.10"]                         
+      73 +```                                                                                                                 
+      74 +Note: Ollama provider has zero extra deps (stdlib urllib). MockProvider has zero deps.                              
+      75 +                                                                                                                    
+      76  ---
+      77  
+      78  ## Public API (4 Core Patterns)
+
+
+
+
+● Now update the "What to Extract" table to include the providers:
+
+● Updated plan
+  ⎿  Added 10 lines, removed 1 line
+      223  | `patterns/react_loop.py` | `engine/tool_execution.py` | 220-440 | Tool normalization, serialization, execution lo
+           op | Adapt from registry-based tools to `Tool` dataclass + `LLMProvider` |
+      224  | (fallback parser) | `agents/json_extraction.py` | all | Balanced-brace JSON extraction | Use as fallback when pro
+           vider lacks structured output. 156 lines as-is |
+      225  
+      226 +### EXTRACT: Built-in Providers                                                                                    
+      227 +                                                                                                                   
+      228 +| Target | Source File | Lines | Adaptation |                                                                      
+      229 +|--------|------------|-------|------------|                                                                       
+      230 +| `providers/_openai.py` | `tools/llm/provider_adapters.py` | 472-500 (call_openai) + 55-121 (call_azure_openai) | 
+          +Merge into single class with `base_url` param. Add GitHub Models via base_url. ~70 LOC |                           
+      231 +| `providers/_ollama.py` | `tools/llm/provider_adapters.py` | 16-52 (call_ollama) | Wrap in class implementing LLMP
+          +rovider Protocol. Keep stdlib urllib. ~50 LOC |                                                                    
+      232 +| `providers/_anthropic.py` | `tools/llm/provider_adapters.py` | 446-469 (call_claude) | Wrap in class. ~50 LOC |  
+      233 +| `providers/_mock.py` | NEW | — | Canned responses for testing. ~30 LOC |                                         
+      234 +                                                                                                                   
+      235  ### WRITE NEW
+      236  
+      237  | File | Est. LOC | Complexity | Why New |
+      238  |------|----------|------------|---------|
+      230 -| `provider.py` | 60 | Low | No equivalent — current code uses tied ABC |                                          
+      239 +| `provider.py` | 60 | Low | LLMProvider Protocol + LLMResponse dataclass |                                        
+      240  | `types.py` | 100 | Low | PatternResult, Branch, CostMetrics, Tool |
+      241  | `cost.py` | 120 | Medium | Structured cost-per-pattern tracking |
+      242  | `patterns/tree_of_thought.py` | 250 | **High** | Core new value — branch + evaluate + prune + recurse |
+
+
+
+
+
+
+
+
+
+
+● Now update the Phase 1 to include providers and update the examples:
+
+● Updated plan
+  ⎿  Added 6 lines, removed 2 lines
+      250  
+      251  ## Phase Plan
+      252  
+      253 -### Phase 1: Foundation (Days 1-3)                                                                                 
+      253 +### Phase 1: Foundation + Providers (Days 1-3)                                                                     
+      254  - Scaffold package + pyproject.toml
+      255  - `provider.py` — LLMProvider Protocol + LLMResponse
+      256  - `types.py` — PatternResult, Branch, CostMetrics, Tool
+      257  - `cost.py` — CostTracker
+      258 +- `providers/_openai.py` — extract from `provider_adapters.py:472-500`, add base_url for GitHub Models             
+      259 +- `providers/_ollama.py` — extract from `provider_adapters.py:16-52`, stdlib urllib                                
+      260 +- `providers/_anthropic.py` — extract from `provider_adapters.py:446-469`                                          
+      261 +- `providers/_mock.py` — canned responses for testing                                                              
+      262  - `_engine/context.py` — simplified ExecutionContext (extract from `engine/context.py`)
+      263  - `_engine/retry.py` — extract RetryConfig from `engine/step.py:18-68`
+      264  - `_engine/parallel.py` — extract gather_bounded from `dag_executor.py`
+      265  - `_engine/convergence.py` — write convergence detector
+      262 -- Tests: provider protocol, types, cost, convergence, parallel                                                     
+      266 +- Tests: provider protocol, built-in providers, types, cost, convergence, parallel                                 
+      267  
+      268  ### Phase 2: Core Patterns (Days 4-8)
+      269  Build order by complexity (simpler first):
+
+
+
+
+
+
+
+
+● Now update the verification section:
+
+● Updated plan
+  ⎿  Added 24 lines, removed 4 lines
+      337  1. `ruff check src/executionkit` — lint passes
+      338  2. `mypy --strict src/executionkit` — type check passes
+      339  3. `pytest tests/ --cov=executionkit --cov-fail-under=80` — all tests pass, 80%+ coverage
+      340 -4. Run `examples/basic_tot.py` with a real provider — produces valid tree with scores                              
+      341 -5. Run `examples/basic_react.py` with mock tools — completes think/act/observe loop                                
+      342 -6. Run `examples/basic_consensus.py` — returns majority vote from 5 samples                                        
+      343 -7. Run `examples/basic_refine.py` — converges within max_iterations                                                
+      340 +4. Run `examples/quickstart_github.py` with `GITHUB_TOKEN` — 5-line hello world works end-to-end                   
+      341 +5. Run `examples/quickstart_ollama.py` with local Ollama — works with zero cloud deps                              
+      342 +6. Run `examples/basic_tot.py` with a real provider — produces valid tree with scores                              
+      343 +7. Run `examples/basic_react.py` with mock tools — completes think/act/observe loop                                
+      344 +8. Run `examples/basic_consensus.py` — returns majority vote from 5 samples                                        
+      345 +9. Run `examples/basic_refine.py` — converges within max_iterations                                                
+      346 +                                                                                                                   
+      347 +### Quickstart Smoke Test (the "30-second experience")                                                             
+      348 +                                                                                                                   
+      349 +```python                                                                                                          
+      350 +# examples/quickstart_github.py                                                                                    
+      351 +from executionkit import consensus                                                                                 
+      352 +from executionkit.providers import OpenAIProvider                                                                  
+      353 +                                                                                                                   
+      354 +provider = OpenAIProvider(                                                                                         
+      355 +    model="gpt-4o-mini",                                                                                           
+      356 +    base_url="https://models.inference.ai.azure.com",                                                              
+      357 +    api_key=os.environ["GITHUB_TOKEN"],                                                                            
+      358 +)                                                                                                                  
+      359 +                                                                                                                   
+      360 +result = await consensus(provider, "What is 2+2?", num_samples=3)                                                  
+      361 +print(result.value)  # "4"                                                                                         
+      362 +print(result.cost)   # CostMetrics(input_tokens=45, output_tokens=9, llm_calls=3)                                  
+      363 +```                                                                                                                
+
+
+
+
+
+
+
+
+● Plan updated. Here's what changed:
+
+  Added providers/ subpackage with 3 built-in providers + mock:
+
+  ┌───────────────────┬─────────────────────────────────────────────┬───────────────────┬───────────────────────────────────────┐
+  │     Provider      │                   Covers                    │    Extra deps     │                Source                 │
+  ├───────────────────┼─────────────────────────────────────────────┼───────────────────┼───────────────────────────────────────┤
+  │ OpenAIProvider    │ OpenAI + Azure + GitHub Models/Copilot (via │ openai            │ Extract from                          │
+  │                   │  base_url)                                  │                   │ provider_adapters.py:472-500          │
+  ├───────────────────┼─────────────────────────────────────────────┼───────────────────┼───────────────────────────────────────┤
+  │ OllamaProvider    │ Local models                                │ None (stdlib      │ Extract from                          │
+  │                   │                                             │ urllib)           │ provider_adapters.py:16-52            │
+  ├───────────────────┼─────────────────────────────────────────────┼───────────────────┼───────────────────────────────────────┤
+  │ AnthropicProvider │ Claude                                      │ anthropic         │ Extract from                          │
+  │                   │                                             │                   │ provider_adapters.py:446-469          │
+  ├───────────────────┼─────────────────────────────────────────────┼───────────────────┼───────────────────────────────────────┤
+  │ MockProvider      │ Testing                                     │ None              │ New, ~30 LOC                          │
+  └───────────────────┴─────────────────────────────────────────────┴───────────────────┴───────────────────────────────────────┘
+
+  The key insight: OpenAIProvider with a base_url param covers 3 services in one class. GitHub Models is just
+  base_url="https://models.inference.ai.azure.com" + api_key=GITHUB_TOKEN. No separate provider needed.
+
+  The "30-second experience" is now 5 lines:
+  from executionkit import consensus
+  from executionkit.providers import OpenAIProvider
+
+  provider = OpenAIProvider("gpt-4o-mini", base_url="https://models.inference.ai.azure.com", api_key=token)
+  result = await consensus(provider, "What is 2+2?", num_samples=3)
+
+  Each provider is ~50-80 lines — thin wrappers extracted from existing provider_adapters.py, not the full 9-provider monster. Total
+  maintenance: ~3 providers, not 9.
+  ⎿  Tool use rejected
+
+● Got it — standing by for the Ultraplan result.
+
+✻ Crunched for 2m 3s
+
+❯ ◇ ultraplan                                                                                                                        
+Starting Claude Code on the web…                                                                                                     
+
+❯ ultraplan: cannot launch remote session —                                                                                          
+Background tasks require a git repository. Initialize git or run from a git repository.                                              
+
+● Looks like Ultraplan needs a git repo to launch a remote session. Your D:\source\prompts directory isn't a git repository.
+
+  Two options:
+
+  1. Init git in the prompts directory (if you want to):
+  ! cd D:/source/prompts && git init
+  2. Run from a different working directory that already has git — like c:\Users\tandf\source\repos\midnight-automation-voyage
+
+  Which would you prefer? Or if you want to refine the plan manually, just tell me what to change.
+
+❯ /ultraplan provider sh1 
+◇ ultraplan
+  ⎿  Starting Claude Code on the web…
+
+❯ ultraplan: cannot launch remote session —                                                                                          
+Background tasks require a git repository. Initialize git or run from a git repository.                                              
+
+● Ultraplan can't launch because D:\source\prompts isn't a git repo. Let me ask how you'd like to proceed.
+
+● User answered Claude's questions:
+  ⎿  · Ultraplan needs a git repo to launch remote sessions. How would you like to proceed with the ExecutionKit plan? → init a git
+     in a subfolder on the c dtive and do it from there
+
+
+● I can't run commands in plan mode. Run these yourself using the ! prefix:
+
+  ! mkdir -p /c/Users/tandf/source/executionkit && cd /c/Users/tandf/source/executionkit && git init && cp
+  "C:/Users/tandf/.claude/plans/linked-twirling-crystal.md" ./PLAN.md
+
+  Then from that directory you can retry /ultraplan. Or if you'd like me to exit plan mode first so I can set it up for you, just say
+   the word.
+
+● User answered Claude's questions:
+  ⎿  · Should I exit plan mode so I can create the git repo and set things up for you? → I'll do it manually
+
+
+● Run these commands:
+
+  ! mkdir -p /c/Users/tandf/source/executionkit
+  ! cd /c/Users/tandf/source/executionkit && git init
+  ! cp "C:/Users/tandf/.claude/plans/linked-twirling-crystal.md" /c/Users/tandf/source/executionkit/PLAN.md
+
+  Then navigate there and retry ultraplan:
+  ! cd /c/Users/tandf/source/executionkit
+
+  The plan file will be available at /c/Users/tandf/source/executionkit/PLAN.md for the remote session to read. Standing by while you
+   set it up.
+
+✻ Baked for 33s
+
+❯ i am not avble to move you but the file is there can you move yourself now                                                         
+
+● Bash(mkdir -p /c/Users/tandf/source/executionkit && cd /c/Users/tandf/source/executionkit && git init && cp
+      "C:/Users/tandf/.claude/plans/linked-twirling-crystal.md" ./PLAN.md && ls -la)
+  ⎿  Initialized empty Git repository in C:/Users/tandf/source/executionkit/.git/
+     total 24
+     drwxr-xr-x 1 tandf 197609     0 Apr  4 17:20 ./
+     drwxr-xr-x 1 tandf 197609     0 Apr  4 17:20 ../
+     drwxr-xr-x 1 tandf 197609     0 Apr  4 17:20 .git/
+     -rw-r--r-- 1 tandf 197609 15312 Apr  4 17:20 PLAN.md
+  ⎿  Shell cwd was reset to D:\source\prompts
+
+● Done. Git repo created at C:\Users\tandf\source\executionkit\ with PLAN.md inside. You can now run /ultraplan from that directory.
+
+  Note: my working directory is still D:\source\prompts — I can't change my own CWD to the new repo. You'd need to either:
+  1. Open a new Claude Code session in C:\Users\tandf\source\executionkit\
+  2. Or run /ultraplan pointing to that path
+
+❯ /ultraplan add any context to help the plan 
+◇ ultraplan
+  ⎿  Starting Claude Code on the web…
+
+❯ ultraplan: cannot launch remote session —                                                                                          
+Background tasks require a git repository. Initialize git or run from a git repository.                                              
+
+● The issue is that ultraplan runs from my current working directory (D:\source\prompts) which isn't a git repo. I can't change my
+  own CWD mid-session.
+
+  Your options:
+
+  1. Init git right here (simplest):
+  ! cd D:/source/prompts && git init
+  This makes the current directory a git repo so ultraplan can launch.
+
+  2. Start a new Claude Code session from the executionkit directory:
+  claude --cwd C:\Users\tandf\source\executionkit
+
+  Want me to init git in D:\source\prompts? It's safe — just creates a .git folder, doesn't affect any files.
+
+❯ 1                                                                                                                                  
+
+● Bash(cd D:/source/prompts && git init)
+  ⎿  Initialized empty Git repository in D:/source/prompts/.git/
+
+● Done. D:\source\prompts is now a git repo. Try /ultraplan again.
+
+❯ /ultraplan plan this out and add improvements where found 
+◇ ultraplan
+  ⎿  Starting Claude Code on the web…
+
+❯ ultraplan: cannot launch remote session —                                                                                          
+Background tasks require a git repository. Initialize git or run from a git repository.                                              
+
+● Might need at least one commit. Let me add one.
+
+● Bash(cd D:/source/prompts && git add PLAN.md 2>/dev/null; git add derived-tools.md 2>/dev/null; git status)
+  ⎿  On branch master
+
+     No commits yet
+
+     Changes to be committed:
+       (use "git rm --cached <file>..." to unstage)
+        new file:   derived-tools.md
+
+     Untracked files:
+       (use "git add <file>..." to include in what will be committed)
+        .serena/
+        .venv-wsl/
+        .vs/
+        .vscode/
+        __pycache__/
+        agentic-v2-eval/
+        agentic-workflows-v2/
+        artifacts/
+        decks-generated/
+        docs/
+        examples/
+        node_modules/
+        output/
+        presentation/
+        prompts_tools.egg-info/
+        reports/
+        research/
+        runs/
+        scripts/
+        tests/
+        tools/
+
+● Bash(cd D:/source/prompts && git commit -m "$(cat <<'EOF'
+      chore: init repo for ultraplan
+
+      Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
+      EOF
+      )")
+  ⎿  [master (root-commit) 31a8507] chore: init repo for ultraplan
+      1 file changed, 1327 insertions(+)
+      create mode 100644 derived-tools.md
+
+● Git repo now has a commit. Try /ultraplan again.
+
+✻ Crunched for 42s
+
+❯ /ultraplan 
+  ⎿  Usage: /ultraplan <prompt>, or include "ultraplan" anywhere
+     in your prompt
+
+     Remote plan mode with rich web editing experience.
+     Runs in Claude Code on the web. When the plan is ready,
+     you can execute it in the web session or send it back here.
+     You can continue to work while the plan is generated remotely.
+
+     Terms: https://code.claude.com/docs/en/claude-code-on-the-web
+
+❯ can i see it running on web                                                                                                        
+
+● It looks like /ultraplan printed the usage help but didn't actually launch. You need to include a prompt with it. Try:
+
+  /ultraplan Refine and improve the ExecutionKit plan at C:\Users\tandf\.claude\plans\linked-twirling-crystal.md — a Python library
+  for composable LLM reasoning patterns (Tree of Thought, ReAct, consensus, refinement loops). Add improvements where found.
+
+  Or just type your prompt after the command on the same line. The help text says "Usage: /ultraplan <prompt>".
+
+❯  /ultraplan Refine and improve the ExecutionKit plan at                              
+C:\Users\tandf\.claude\plans\linked-twirling-crystal.md — a Python library for         
+composable LLM reasoning patterns (Tree of Thought, ReAct, consensus, refinement       
+●oSkill(ultraplan)ements where found.                                                  
+  ⎿  Initializing…
+  ⎿  Error: Skill ultraplan is not a prompt-based skill
+
+● Ultraplan isn't invokable through the Skill tool — it's a CLI-native command that
+  launches a remote web session. You need to type it directly in the prompt input, not
+  as part of a message to me.
+
+  Try typing this directly into your Claude Code prompt (not as a message to me):
+
+  /ultraplan Refine and improve the ExecutionKit plan — a Python library for composable
+   LLM reasoning patterns (Tree of Thought, ReAct, consensus, refinement loops). Add
+  improvements where found.
+
+  Make sure the /ultraplan is at the very start of your input line. It should open a
+  web browser session where you can edit the plan with a rich UI.
+
+  If it still doesn't work, the plan is ready as-is at
+❯  /ultraplan Refine and improve the ExecutionKit plan — a Python library for          
+composable LLM reasoning patterns (Tree of Thought, ReAct, consensus, refinement       
+loops). Add improvements where found.                                                  
+● That came through as a message to me rather than a CLI command. The /ultraplan
+  command needs to be entered at the Claude Code prompt bar itself (where you type),
+  not sent as a message in the conversation.
+
+  If it's not working in your environment, we have two paths:
+
+  1. I refine the plan here — tell me what improvements you want and I'll update the
+  plan file
+  2. Start building — the plan is solid enough to begin Phase 1 (foundation +
+  providers)
+❯ provide me with full prompt to provide in claude code aspp insteads of here in       
+github window so it can execute                                                        
+● Here's the full prompt to paste into the Claude Code app (not this GitHub window):
+
+  Read the plan at C:\Users\tandf\.claude\plans\linked-twirling-crystal.md and refine it. This is a plan for ExecutionKit — a Python
+  library offering composable LLM reasoning patterns (Tree of Thought, ReAct, consensus, refinement loops) as first-class primitives.
+   Positioned as "itertools for LLM reasoning."
+
+  The plan was developed through 4 rounds of agent analysis (13+ agents) including:
+  - Codebase exploration of D:\source\prompts (23 extractable execution patterns found)
+  - Market analysis (agentic AI 43.8% CAGR, explicit GitHub demand signals)
+  - Antagonistic review (3 reviewers killed original "Lithom" concept, pivoted to ExecutionKit)
+  - Competitive analysis (gap vs LangGraph, DSPy, AutoGen)
+
+  Key existing assets in D:\source\prompts\agentic-workflows-v2\agentic_v2\:
+  - engine/dag_executor.py — Kahn's DAG with FIRST_COMPLETED async parallelism
+  - engine/context.py — Hierarchical execution context
+  - engine/tool_execution.py — ReAct-like tool loop
+  - engine/step.py — Retry + loop-until patterns
+  - agents/json_extraction.py — Balanced-brace JSON extraction
+
+  Improve the plan where you find gaps. Focus on: API design, provider integration (built-in OpenAI/Ollama/Anthropic providers), test
+   strategy, and phased build sequence. The library should let developers spin up true ToT, ReAct, and looping structures with real
+  LLM calls where Python executes the patterns.
+
+  Copy-paste that entire block into the Claude Code app prompt and hit enter.
+                                                                                                                             /^\     
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────    .[||].
+❯ Please commit all of my changes so we can make a PR.                                                                     [ ✦  ✦ ]
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────   [ ==== ]
+  Opus 4.6 (1M context)  [###---------] 27%  in:87.5K  out:359.4K  $18.19  7h 19mnew task? /clear to save 265.9k tokens    `------´
+  ⏵⏵ accept edits on (shift+tab to cycle)                                                                265418 tokens       Kiln    
+                                                                                                                                     
