@@ -1,22 +1,17 @@
-# ExecutionKit: Composable LLM Reasoning Patterns
+# ExecutionKit: Reliable LLM Calls Through Voting, Refinement, and Search
 
 ## Context
 
-The monorepo at `D:/source/prompts` was analyzed by 13+ specialized agents across 4 rounds, plus 3 antagonistic reviewers in round 5. The original concept ("Lithom") was killed. The pivot: **ExecutionKit** — composable execution patterns where Python orchestrates real LLM calls.
+The monorepo at `D:/source/prompts` was analyzed by 13+ specialized agents across 4 rounds, 3 antagonistic reviewers in round 5, then 3 constructive expert reviewers in round 6. The original concept ("Lithom") was killed. The pivot: **ExecutionKit** — composable execution patterns where Python orchestrates real LLM calls.
 
 **Existing codebase provides 60% of the foundation** — 28 production-ready execution patterns cataloged in `agentic-workflows-v2/` (see Appendix A).
 
-### Antagonistic Review Verdict (Round 5)
+### Review History
 
-Three hostile reviewers scored the v1 plan. Key findings incorporated below:
-
-| Reviewer | Verdict | Score | Critical Fixes Required |
-|----------|---------|-------|------------------------|
-| **Market** | KILL (78%) | 7.6/10 | Quickstart must beat raw SDK. Drop "itertools" tagline unless compose() ships v0.1. |
-| **Technical** | BLOCK | 7.5/10 | TaskGroup kills partial ToT results. No default cost budget. Tool timeouts missing. NaN scores unhandled. Anthropic message conversion is 150+ LOC, not a "thin wrapper." |
-| **API Design** | REJECT | 7.1/10 | No session/client pattern. Composition broken. Jupyter sync wrappers broken. `_engine/` private but needed by custom patterns. |
-
-**All MUST-FIX items are resolved in this plan revision.**
+| Round | Reviewers | Verdict | Key Outcome |
+|-------|-----------|---------|-------------|
+| 5 — Antagonistic | Market (KILL 78%), Technical (BLOCK), API (REJECT) | 12 MUST-FIX items | Added gather_resilient, default budgets, tool timeouts, Kit session, pipe(), NaN guards, Jupyter-safe sync, public engine/ |
+| 6 — Constructive | Sr. Architect (NEEDS WORK), Sr. Engineer (NEEDS REFINEMENT), OSS Expert (NEEDS POLISH) | 8 architectural fixes + launch readiness gaps | Added extension Protocols, ToolCall dataclass, error hierarchy restructure, CancelledError guards, observability fields, PyPI metadata, hero examples, CONTRIBUTING.md |
 
 ---
 
@@ -27,33 +22,37 @@ executionkit/
   pyproject.toml
   .gitignore
   .github/workflows/ci.yml
+  CHANGELOG.md
+  CONTRIBUTING.md
+  LICENSE                       # MIT
   src/executionkit/
-    __init__.py                 # Public: tree_of_thought, react_loop, consensus, refine_loop, Kit
-    py.typed                    # PEP 561 marker
-    provider.py                 # LLMProvider Protocol + LLMResponse + error hierarchy
-    types.py                    # PatternResult[T], TraceEntry, TokenUsage, Tool, Evaluator
-    kit.py                      # NEW: Kit session class (binds provider + config) [FIX: api-2]
-    compose.py                  # NEW: pipe() + merge_results() [FIX: api-4]
+    __init__.py                 # Public exports + Jupyter-safe sync wrappers
+    __main__.py                 # CLI: executionkit check/demo/version [R6-oss-2]
+    py.typed                    # PEP 561
+    provider.py                 # LLMProvider Protocol + extension Protocols + LLMResponse + ToolCall + errors
+    types.py                    # PatternResult[T], TraceEntry, TokenUsage, Tool, Evaluator, PatternStep
+    kit.py                      # Kit session class (binds provider + config)
+    compose.py                  # pipe() with budget-aware accumulation [R6-arch-4]
     patterns/
       __init__.py
-      _base.py                  # NEW: _checked_complete() — score validation, finish_reason, budget [FIX: tech-5]
-      tree_of_thought.py        # beam search with partial-result resilience [FIX: tech-2]
-      react_loop.py             # tool loop with per-tool timeout [FIX: tech-3]
-      consensus.py              # parallel voting with agreement_ratio [FIX: tech-5c]
-      refine_loop.py            # iterative improvement with NaN guards [FIX: tech-5a]
-    engine/                     # PUBLIC (was _engine/) [FIX: api-6]
-      __init__.py               # Public: RetryConfig, gather_resilient, ConvergenceDetector
+      base.py                   # PUBLIC: checked_complete, validate_score [R6-arch-2]
+      tree_of_thought.py
+      react_loop.py
+      consensus.py
+      refine_loop.py
+    engine/                     # PUBLIC
+      __init__.py
       context.py
       retry.py
-      parallel.py               # gather_resilient (return_exceptions) + gather_strict (TaskGroup)
-      convergence.py            # NaN-safe ConvergenceDetector [FIX: tech-5a]
+      parallel.py               # gather_resilient + gather_strict
+      convergence.py
       json_extraction.py
-      message_converter.py      # NEW: OpenAI <-> Anthropic message history conversion [FIX: tech-4]
     providers/
       __init__.py
       _openai.py
       _ollama.py
-      _anthropic.py             # Full message history conversion, not just schema [FIX: tech-4]
+      _anthropic.py
+      _conversion.py            # OpenAI <-> Anthropic message conversion [R6-arch-3]
       _mock.py
   tests/
     conftest.py
@@ -63,28 +62,58 @@ executionkit/
     test_refine_loop.py
     test_engine.py
     test_providers.py
-    test_message_converter.py   # NEW: OpenAI <-> Anthropic round-trip tests [FIX: tech-4]
-    test_kit.py                 # NEW: session tests [FIX: api-2]
-    test_compose.py             # NEW: pipe/compose tests [FIX: api-4]
+    test_conversion.py          # Round-trip + edge case tests
+    test_kit.py
+    test_compose.py
     test_cost.py
+    test_concurrency.py         # Semaphore release, CancelledError, ExceptionGroup [R6-eng-1]
   examples/
-    basic_tot.py
-    basic_react.py
-    basic_consensus.py
-    basic_refine.py
-    basic_compose.py            # NEW: pipe(refine_loop, consensus) example
-    quickstart_github.py
+    quickstart_openai.py        # Zero-config beyond API key [R6-oss-4]
     quickstart_ollama.py
-    quickstart_notebook.ipynb   # NEW: Jupyter-safe example [FIX: api-5]
+    quickstart_notebook.ipynb
+    classification.py           # Consensus for reliable classification [R6-oss-4]
+    structured_extraction.py    # refine_loop + Pydantic [R6-oss-4]
+    compose_pipeline.py         # pipe(refine_loop, consensus) [R6-oss-1]
+    custom_provider.py          # 20-line LLMProvider implementation [R6-oss-4]
+    custom_evaluator.py         # Custom scoring function [R6-oss-4]
+    error_handling.py           # BudgetExhaustedError, timeouts, retries [R6-oss-4]
+    progress_tracking.py        # on_progress with rich/tqdm [R6-oss-4]
+  docs/                         # mkdocs-material, auto-generated from docstrings [R6-oss-3]
+    mkdocs.yml
+    index.md
+    patterns/
+    providers/
+    engine/
 ```
 
-**Dependencies:**
+---
+
+## pyproject.toml
+
 ```toml
 [project]
 name = "executionkit"
 version = "0.1.0"
-description = "Composable LLM reasoning patterns"
+description = "Reliable LLM calls through voting, refinement, and search"
 requires-python = ">=3.11"
+license = "MIT"
+readme = "README.md"
+authors = [{name = "TBD"}]
+keywords = [
+    "llm", "reasoning", "consensus", "tree-of-thought", "react",
+    "agent", "openai", "anthropic", "refinement", "voting",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+    "Framework :: AsyncIO",
+]
 dependencies = ["pydantic>=2.0,<3"]
 
 [project.optional-dependencies]
@@ -95,34 +124,98 @@ dev = [
     "pytest>=7.0", "pytest-asyncio>=0.21", "pytest-cov>=4.0",
     "hypothesis>=6.0", "ruff>=0.4", "mypy>=1.10",
 ]
-```
+docs = ["mkdocs-material", "mkdocstrings[python]"]
 
-Note: Tagline changed from "itertools for LLM reasoning" to just "Composable LLM reasoning patterns" — the itertools comparison was a liability per market review. Earned back only if compose() proves elegant.
+[project.urls]
+Homepage = "https://github.com/OWNER/executionkit"
+Documentation = "https://OWNER.github.io/executionkit"
+Repository = "https://github.com/OWNER/executionkit"
+Issues = "https://github.com/OWNER/executionkit/issues"
+Changelog = "https://github.com/OWNER/executionkit/blob/main/CHANGELOG.md"
+
+[project.scripts]
+executionkit = "executionkit.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/executionkit"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = ["integration: requires real LLM API (deselect with -m 'not integration')"]
+filterwarnings = ["ignore::DeprecationWarning:asyncio"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+select = ["E", "F", "W", "I", "N", "UP", "S", "B", "A", "C4", "SIM", "TCH", "RUF", "D"]
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.mypy]
+strict = true
+python_version = "3.11"
+```
 
 ---
 
 ## Core Type Definitions
 
-### provider.py — Protocol + Response + Errors
+### provider.py — Protocol + Extension Protocols + Response + Errors
 
 ```python
+from __future__ import annotations
+
+# === Core Protocol (frozen for 0.x) ===
 @runtime_checkable
 class LLMProvider(Protocol):
+    """Minimal LLM interface. All patterns accept this."""
     async def complete(
         self,
         messages: Sequence[dict[str, Any]],
         *,
         temperature: float = 0.7,
         max_tokens: int = 4096,
-        tools: Sequence[dict[str, Any]] | None = None,
-        response_format: type | None = None,
         **kwargs: Any,
     ) -> LLMResponse: ...
+
+# === Extension Protocols (defined now, used later) [R6-arch-1] ===
+@runtime_checkable
+class ToolCallingProvider(LLMProvider, Protocol):
+    """Provider that supports tool/function calling."""
+    async def complete(
+        self,
+        messages: Sequence[dict[str, Any]],
+        *,
+        tools: Sequence[dict[str, Any]] | None = None,
+        **kwargs: Any,
+    ) -> LLMResponse: ...
+
+@runtime_checkable
+class StreamingProvider(LLMProvider, Protocol):
+    """Provider that supports streaming (v0.2)."""
+    async def stream(
+        self,
+        messages: Sequence[dict[str, Any]],
+        **kwargs: Any,
+    ) -> AsyncIterator[LLMChunk]: ...
+
+# === Response ===
+@dataclass(frozen=True, slots=True)
+class ToolCall:  # [R6-arch-6] — replaces list[dict]
+    """Typed tool call, normalized across providers."""
+    id: str
+    name: str
+    arguments: dict[str, Any]
 
 @dataclass(frozen=True, slots=True)
 class LLMResponse:
     content: str
-    tool_calls: list[dict[str, Any]] = field(default_factory=list)
+    tool_calls: list[ToolCall] = field(default_factory=list)
     finish_reason: str = "stop"
     usage: dict[str, Any] = field(default_factory=dict)
     raw: Any = None
@@ -137,32 +230,60 @@ class LLMResponse:
     def has_tool_calls(self) -> bool: ...
     @property
     def was_truncated(self) -> bool:
-        return self.finish_reason == "length"  # [FIX: tech-5d]
+        return self.finish_reason == "length"
 
-# Error hierarchy (unchanged)
-class LLMError(Exception): ...
+# === Error Hierarchy [R6-arch-5] ===
+class ExecutionKitError(Exception):
+    """Root exception for all ExecutionKit errors."""
+
+class LLMError(ExecutionKitError):
+    """Provider-level errors (network, auth, rate limits)."""
+
 class RateLimitError(LLMError): ...
 class AuthenticationError(LLMError): ...
 class ModelNotFoundError(LLMError): ...
 class ContextLengthError(LLMError): ...
 class ProviderError(LLMError): ...
 
-# NEW [FIX: tech-5d]
-class TruncatedResponseError(LLMError):
-    """Response was cut off (finish_reason='length'). Retry with higher max_tokens."""
+class PatternError(ExecutionKitError):
+    """Pattern-level errors (budget, consensus failure, max iterations)."""
+
+class BudgetExhaustedError(PatternError): ...
+class ConsensusFailedError(PatternError): ...
+class MaxIterationsError(PatternError): ...
 ```
+
+**Design decisions from R6-arch review:**
+- `LLMProvider.complete()` no longer has `tools` or `response_format` in base Protocol. Tools are on `ToolCallingProvider`. This means small local models that can't do tool calling still satisfy `LLMProvider`.
+- `ToolCall` dataclass replaces `list[dict[str, Any]]`. Prevents untyped dict sprawl. Providers normalize to this format.
+- `StreamingProvider` defined now but unused until v0.2. Adding `stream()` later is additive, not a breaking change.
+- Error hierarchy split into `LLMError` (provider-level, often retried automatically) and `PatternError` (pattern-level, policy decisions by the caller).
 
 ### types.py — Results, Tools, Callbacks
 
 ```python
 @dataclass(frozen=True, slots=True)
-class TokenUsage:  # RENAMED from CostMetrics [FIX: api-naming]
+class TokenUsage:
     input_tokens: int = 0
     output_tokens: int = 0
     llm_calls: int = 0
     def __add__(self, other: TokenUsage) -> TokenUsage: ...
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
+class TraceEntry:
+    """Single step in a pattern's execution trace."""
+    step: str               # "branch", "evaluate", "prune", "think", "act", "observe", "sample", "vote", "generate", "refine"
+    iteration: int
+    input: str              # First 200 chars
+    output: str             # First 500 chars
+    score: float | None
+    duration_ms: float
+    tokens_used: int
+    request_id: str         # [R6-eng-6] UUID correlating all calls in one pattern invocation
+    started_at: float       # [R6-eng-6] monotonic timestamp
+    usage: dict[str, Any]   # [R6-eng-7] per-call token breakdown
+
+@dataclass(frozen=True, slots=True)
 class PatternResult(Generic[T]):
     value: T
     score: float | None = None
@@ -170,200 +291,131 @@ class PatternResult(Generic[T]):
     iterations: int = 0
     trace: list[TraceEntry] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
+    request_id: str = ""    # [R6-eng-6] same UUID as trace entries
 
     def __str__(self) -> str:
-        return str(self.value)  # [FIX: api-3] — print(result) works without .value
+        return str(self.value)
 
     def __iter__(self):
-        yield self.value       # [FIX: api-3] — value, = result unpacking
+        yield self.value
         yield self.cost
 
 @dataclass(frozen=True, slots=True)
 class Tool:
     name: str
     description: str
-    parameters: dict[str, Any]
+    parameters: dict[str, Any]  # JSON Schema
     execute: Callable[..., Awaitable[str]]
-    timeout: float = 30.0  # [FIX: tech-5b] — per-tool timeout in seconds
+    timeout: float = 30.0
 
     def to_openai_schema(self) -> dict[str, Any]: ...
     def to_anthropic_schema(self) -> dict[str, Any]: ...
 
-# Evaluator: (text, provider) -> score in [0.0, 1.0]
 Evaluator = Callable[[str, LLMProvider], Awaitable[float]]
 ProgressCallback = Callable[[TraceEntry], None]
-```
 
-### kit.py — Session class [FIX: api-2]
-
-```python
-@dataclass
-class Kit:
-    """Binds a provider + shared config. Eliminates boilerplate for multi-call usage."""
-    provider: LLMProvider
-    retry: RetryConfig | None = None
-    on_progress: ProgressCallback | None = None
-    max_cost: TokenUsage | None = None
-
-    async def tree_of_thought(self, prompt: str, **kwargs) -> PatternResult[str]:
-        return await tree_of_thought(self.provider, prompt,
-            retry=self.retry, on_progress=self.on_progress, max_cost=self.max_cost, **kwargs)
-
-    async def react_loop(self, prompt: str, tools: Sequence[Tool], **kwargs) -> PatternResult[str]:
-        return await react_loop(self.provider, prompt, tools,
-            retry=self.retry, on_progress=self.on_progress, max_cost=self.max_cost, **kwargs)
-
-    async def consensus(self, prompt: str, **kwargs) -> PatternResult:
-        return await consensus(self.provider, prompt,
-            retry=self.retry, on_progress=self.on_progress, **kwargs)
-
-    async def refine_loop(self, prompt: str, **kwargs) -> PatternResult[str]:
-        return await refine_loop(self.provider, prompt,
-            retry=self.retry, on_progress=self.on_progress, max_cost=self.max_cost, **kwargs)
-
-# Usage:
-# kit = Kit(provider, retry=RetryConfig(max_retries=5))
-# r1 = await kit.consensus("prompt 1")
-# r2 = await kit.refine_loop("prompt 2")  # No repeated provider/retry args
-```
-
-### compose.py — Pattern composition [FIX: api-4]
-
-```python
-async def pipe(
-    provider: LLMProvider,
-    prompt: str,
-    *steps: Callable,  # Pattern functions or lambdas
-    **shared_kwargs: Any,
-) -> PatternResult:
-    """Chain patterns sequentially. Output of step N feeds as prompt to step N+1.
-    Costs and traces are merged across all steps."""
-    merged_cost = TokenUsage()
-    merged_trace: list[TraceEntry] = []
-    current_input = prompt
-
-    for step_fn in steps:
-        result = await step_fn(provider, current_input, **shared_kwargs)
-        current_input = str(result.value)
-        merged_cost = merged_cost + result.cost
-        merged_trace.extend(result.trace)
-
-    return PatternResult(
-        value=result.value,
-        score=result.score,
-        cost=merged_cost,
-        iterations=len(steps),
-        trace=merged_trace,
-    )
-
-# Usage:
-# result = await pipe(provider, "Write a haiku", refine_loop, consensus)
-# result.cost  # Total across both patterns
+# [R6-arch-8] Type-safe callable for pipe()
+class PatternStep(Protocol):
+    async def __call__(self, provider: LLMProvider, prompt: str, **kwargs: Any) -> PatternResult: ...
 ```
 
 ---
 
-## Engine Internals (PUBLIC — `executionkit.engine`)
+## Engine (PUBLIC — `executionkit.engine`)
 
-**[FIX: api-6]** — Renamed from `_engine/` to `engine/`. All utilities are public so users can build custom patterns on the same infrastructure.
-
-### engine/parallel.py — TWO modes [FIX: tech-2]
+### engine/parallel.py — CancelledError-safe [R6-eng-1]
 
 ```python
 async def gather_resilient(
     coros: Sequence[Coroutine],
     max_concurrency: int = 10,
-) -> list[Any | Exception]:
-    """Run coroutines with bounded concurrency. RETURNS exceptions instead of raising.
-    Use for ToT beam search where partial results are acceptable."""
+) -> list[Any | BaseException]:
+    """Partial-result parallel execution. Returns exceptions as values.
+    CancelledError propagates (not caught) — caller handles cancellation."""
     semaphore = asyncio.Semaphore(max_concurrency)
     async def run(coro):
         async with semaphore:
             return await coro
-    return await asyncio.gather(*[run(c) for c in coros], return_exceptions=True)
+    try:
+        return await asyncio.gather(*[run(c) for c in coros], return_exceptions=True)
+    except asyncio.CancelledError:
+        raise  # Never swallow cancellation
 
 async def gather_strict(
     coros: Sequence[Coroutine],
     max_concurrency: int = 10,
 ) -> list[Any]:
-    """Run coroutines with bounded concurrency. RAISES on first failure (via TaskGroup).
-    Use for consensus where all samples must succeed."""
+    """All-or-nothing parallel execution. Wraps ExceptionGroup for clean handling."""
     semaphore = asyncio.Semaphore(max_concurrency)
     results: list[Any] = [None] * len(coros)
     async def run(i, coro):
         async with semaphore:
             results[i] = await coro
-    async with asyncio.TaskGroup() as tg:
-        for i, coro in enumerate(coros):
-            tg.create_task(run(i, coro))
+    try:
+        async with asyncio.TaskGroup() as tg:
+            for i, coro in enumerate(coros):
+                tg.create_task(run(i, coro))
+    except ExceptionGroup as eg:
+        # Unwrap single exceptions for clean caller handling
+        if len(eg.exceptions) == 1:
+            raise eg.exceptions[0] from eg
+        raise
     return results
 ```
 
-**ToT uses `gather_resilient`** — a failed evaluation scores as 0.0, branch continues.
-**Consensus uses `gather_strict`** — all samples must complete or pattern fails.
-
-### engine/convergence.py — NaN-safe [FIX: tech-5a]
+### engine/retry.py — CancelledError guard [R6-eng-2]
 
 ```python
-import math
+async def with_retry(fn, config, *args, **kwargs) -> T:
+    """Execute fn with retry/backoff. NEVER retries CancelledError."""
+    last_error: Exception | None = None
+    for attempt in range(1, config.max_retries + 1):
+        try:
+            return await fn(*args, **kwargs)
+        except asyncio.CancelledError:
+            raise  # [R6-eng-2] Immediate propagation, no retry
+        except Exception as exc:
+            last_error = exc
+            if not config.should_retry(exc) or attempt == config.max_retries:
+                raise
+            delay = config.get_delay(attempt)
+            await asyncio.sleep(delay)
+    raise last_error  # unreachable
+```
 
+### engine/convergence.py — NaN-safe, patience=3 default [R6-eng-10]
+
+```python
 @dataclass
 class ConvergenceDetector:
     delta_threshold: float = 0.01
-    patience: int = 2
+    patience: int = 3           # [R6-eng-10] increased from 2
     score_threshold: float | None = None
-    _scores: list[float] = field(default_factory=list, init=False)
-    _stale_count: int = field(default=0, init=False)
 
     def should_stop(self, score: float) -> bool:
         if math.isnan(score) or not (0.0 <= score <= 1.0):
-            raise ValueError(f"Evaluator returned invalid score: {score}. Must be in [0.0, 1.0].")
-        self._scores.append(score)
-        if self.score_threshold is not None and score >= self.score_threshold:
-            return True
-        if len(self._scores) < 2:
-            return False
-        delta = score - self._scores[-2]
-        if delta < self.delta_threshold:
-            self._stale_count += 1
-        else:
-            self._stale_count = 0
-        return self._stale_count >= self.patience
+            raise ValueError(f"Invalid score: {score}. Must be in [0.0, 1.0].")
+        ...
 ```
 
-### engine/message_converter.py — NEW [FIX: tech-4]
+### engine/context.py — Scoped purpose [R6-arch-7]
 
-```python
-def openai_to_anthropic(messages: list[dict]) -> list[dict]:
-    """Convert OpenAI-format message history to Anthropic format.
-
-    Handles:
-    - tool_calls array -> content blocks with type="tool_use"
-    - role="tool" messages -> role="user" with type="tool_result" blocks
-    - Merging consecutive user messages (Anthropic requires alternating roles)
-    - System message extraction (Anthropic uses top-level system param)
-    """
-
-def anthropic_to_openai(messages: list[dict]) -> list[dict]:
-    """Convert Anthropic-format message history to OpenAI format.
-
-    Handles:
-    - content blocks with type="tool_use" -> tool_calls array
-    - role="user" with type="tool_result" -> role="tool" messages
-    - Re-separating merged user messages
-    """
-```
-
-Estimated ~150 LOC. The AnthropicProvider calls `openai_to_anthropic()` on the full message history before each `provider.complete()` call, and normalizes the response back to OpenAI format. This is NOT a thin wrapper — it is the most complex provider code.
+ExecutionContext is used for ONE purpose in v0.1: **shared state in `pipe()` composition**. When `pipe()` chains patterns, the context carries the accumulated cost tracker so budget enforcement spans all steps. Not used by individual patterns (they are stateless). If context has no consumer, it is cut.
 
 ---
 
-## Pattern Algorithms (Post-Review)
-
-### patterns/_base.py — Shared safety checks [FIX: tech-5]
+## Pattern Base (PUBLIC — `executionkit.patterns.base`) [R6-arch-2]
 
 ```python
-async def _checked_complete(
+# patterns/base.py — PUBLIC (no underscore prefix)
+
+def validate_score(score: float) -> float:
+    """Validate evaluator output. Raises ValueError on NaN or out-of-range."""
+    if math.isnan(score) or not (0.0 <= score <= 1.0):
+        raise ValueError(f"Evaluator returned invalid score: {score}")
+    return score
+
+async def checked_complete(
     provider: LLMProvider,
     messages: Sequence[dict],
     tracker: CostTracker,
@@ -371,29 +423,67 @@ async def _checked_complete(
     retry: RetryConfig | None,
     **kwargs,
 ) -> LLMResponse:
-    """Wraps provider.complete() with budget check, retry, and truncation detection."""
-    # Budget guard: check BEFORE each call, not per-depth
+    """Provider.complete() with budget check, retry, and truncation detection.
+    Budget checked PER-CALL, not per-depth."""
     if budget and tracker.total_tokens >= budget.input_tokens + budget.output_tokens:
-        raise BudgetExhaustedError(f"Budget of {budget} exceeded")
-
-    response = await with_retry(provider.complete, retry or _DEFAULT_RETRY, messages, **kwargs)
-
-    # Truncation warning in metadata
-    if response.was_truncated:
-        # Don't raise, but flag it — patterns decide how to handle
-        pass
-
+        raise BudgetExhaustedError(f"Budget of {budget} exceeded at {tracker.total_tokens} tokens")
+    try:
+        response = await with_retry(provider.complete, retry or DEFAULT_RETRY, messages, **kwargs)
+    except asyncio.CancelledError:
+        raise
     tracker.record(response)
     return response
-
-def _validate_score(score: float) -> float:
-    """Validate evaluator output. Raises ValueError on NaN or out-of-range."""
-    if math.isnan(score) or not (0.0 <= score <= 1.0):
-        raise ValueError(f"Evaluator returned invalid score: {score}. Must be in [0.0, 1.0].")
-    return score
 ```
 
-### tree_of_thought() — with partial-result resilience [FIX: tech-2, tech-3]
+Custom pattern authors import these to get the same safety guarantees as built-in patterns.
+
+---
+
+## compose.py — Budget-aware composition [R6-arch-4]
+
+```python
+async def pipe(
+    provider: LLMProvider,
+    prompt: str,
+    *steps: PatternStep,
+    max_cost: TokenUsage | None = None,
+    **shared_kwargs: Any,
+) -> PatternResult:
+    """Chain patterns sequentially. Output feeds as prompt to next step.
+    Costs, traces, and request_ids merge across all steps.
+    Budget is shared — remaining budget passed to each step."""
+    accumulated = TokenUsage()
+    merged_trace: list[TraceEntry] = []
+    current_input = prompt
+    result: PatternResult | None = None
+
+    try:
+        for step_fn in steps:
+            remaining = _subtract(max_cost, accumulated) if max_cost else None
+            result = await step_fn(provider, current_input, max_cost=remaining, **shared_kwargs)
+            current_input = str(result.value)
+            accumulated = accumulated + result.cost
+            merged_trace.extend(result.trace)
+    except (asyncio.CancelledError, PatternError):
+        # [R6-eng-5] Preserve partial cost on failure
+        if result:
+            return PatternResult(
+                value=result.value, cost=accumulated, trace=merged_trace,
+                metadata={"pipe_interrupted": True},
+            )
+        raise
+
+    return PatternResult(
+        value=result.value, score=result.score,
+        cost=accumulated, iterations=len(steps), trace=merged_trace,
+    )
+```
+
+---
+
+## Pattern Signatures (Post R6)
+
+### tree_of_thought()
 
 ```python
 async def tree_of_thought(
@@ -406,40 +496,26 @@ async def tree_of_thought(
     evaluator: Evaluator | None = None,
     temperature: float = 0.9,
     max_tokens: int = 4096,
-    max_cost: TokenUsage | None = TokenUsage(input_tokens=500_000, output_tokens=200_000, llm_calls=100),
-    # ^^^ [FIX: tech-3] DEFAULT BUDGET — 100 calls max
+    max_cost: TokenUsage | None = TokenUsage(500_000, 200_000, 100),
+    max_concurrency: int = 10,  # [R6-eng-9] exposed, not hidden
     on_progress: ProgressCallback | None = None,
     retry: RetryConfig | None = None,
 ) -> PatternResult[str]:
 ```
 
-**Key fix:** Evaluations use `gather_resilient()`. Failed evaluations score as 0.0:
-```
-# EVALUATE with partial-result resilience
-eval_results = await gather_resilient(
-    [evaluator(c, provider) for c in candidates]
-)
-scored = []
-for candidate, result in zip(candidates, eval_results):
-    if isinstance(result, Exception):
-        scored.append((candidate, 0.0))  # Failed eval = worst score
-    else:
-        scored.append((candidate, _validate_score(result)))
-```
+Uses `gather_resilient`. Failed evaluations score 0.0. Budget per-call via `checked_complete`.
 
-Budget check happens per-call via `_checked_complete()`, not per-depth.
-
-### react_loop() — with tool timeouts [FIX: tech-5b]
+### react_loop()
 
 ```python
 async def react_loop(
-    provider: LLMProvider,
+    provider: ToolCallingProvider,  # [R6-arch-1] requires tool support
     prompt: str,
     tools: Sequence[Tool],
     *,
     max_rounds: int = 8,
     max_observation_chars: int = 12000,
-    tool_timeout: float | None = None,  # Override per-tool default (Tool.timeout)
+    tool_timeout: float | None = None,
     temperature: float = 0.3,
     max_tokens: int = 4096,
     max_cost: TokenUsage | None = None,
@@ -448,21 +524,9 @@ async def react_loop(
 ) -> PatternResult[str]:
 ```
 
-**Key fix:** Tool execution wrapped in `asyncio.wait_for`:
-```
-for tc in response.tool_calls:
-    call_id, name, args = normalize_tool_call(tc)
-    tool = tool_map.get(name)
-    timeout = tool_timeout or (tool.timeout if tool else 30.0)
-    try:
-        result = await asyncio.wait_for(tool.execute(**args), timeout=timeout)
-    except asyncio.TimeoutError:
-        result = json.dumps({"error": f"Tool '{name}' timed out after {timeout}s"})
-    except Exception as exc:
-        result = json.dumps({"error": str(exc)})
-```
+Tool execution wrapped in `asyncio.wait_for(tool.execute(), timeout)`. Uses `ToolCallingProvider` not base `LLMProvider`.
 
-### consensus() — with agreement_ratio [FIX: tech-5c]
+### consensus()
 
 ```python
 async def consensus(
@@ -480,224 +544,172 @@ async def consensus(
 ) -> PatternResult[T]:
 ```
 
-**Key fix:** `metadata` includes `agreement_ratio`:
-```
-winner_count = canonical.count(canonical[winner_index])
-agreement_ratio = winner_count / len(canonical)
+Uses `gather_strict`. Returns `agreement_ratio` in metadata. Raises `ConsensusFailedError` for `UNANIMOUS` strategy when responses disagree.
 
-return PatternResult(
-    value=parsed[winner_index],
-    metadata={
-        "agreement_ratio": agreement_ratio,  # 0.2 = random, 1.0 = unanimous
-        "unique_responses": len(set(canonical)),
-        "strategy": strategy,
-    },
-    ...
-)
-```
-
-### refine_loop() — with NaN guard [FIX: tech-5a]
-
-All evaluator calls go through `_validate_score()`. If the first eval returns NaN, it raises immediately instead of silently producing garbage.
-
----
-
-## Sync Wrappers — Jupyter-Safe [FIX: api-5]
+### refine_loop()
 
 ```python
-# __init__.py
-import asyncio
-
-def _run_sync(coro):
-    """Run async coroutine synchronously. Jupyter-safe."""
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = None
-
-    if loop and loop.is_running():
-        # Inside Jupyter or async context — use nest_asyncio
-        import nest_asyncio
-        nest_asyncio.apply()
-        return loop.run_until_complete(coro)
-    else:
-        return asyncio.run(coro)
-
-# Each pattern gets a sync variant:
-def consensus_sync(provider, prompt, **kwargs):
-    return _run_sync(consensus(provider, prompt, **kwargs))
+async def refine_loop(
+    provider: LLMProvider,
+    prompt: str,
+    *,
+    evaluator: Evaluator | None = None,
+    target_score: float = 0.9,
+    max_iterations: int = 5,
+    patience: int = 3,           # [R6-eng-10]
+    delta_threshold: float = 0.01,
+    temperature: float = 0.7,
+    max_tokens: int = 4096,
+    max_cost: TokenUsage | None = None,
+    on_progress: ProgressCallback | None = None,
+    retry: RetryConfig | None = None,
+) -> PatternResult[str]:
 ```
 
-`nest_asyncio` added as optional dependency. If not installed, sync wrappers raise a clear error when called from Jupyter: "Install nest_asyncio for Jupyter support: pip install nest_asyncio".
+All evaluator calls go through `validate_score()`. Patience=3 default.
 
 ---
 
-## Anthropic Provider — Full Message Conversion [FIX: tech-4]
+## Providers
 
-```python
-# providers/_anthropic.py (~120 LOC, not 60)
-@dataclass
-class AnthropicProvider:
-    model: str
-    api_key: str = field(default="", repr=False)
-    _client: Any = field(default=None, repr=False, init=False)
+### _conversion.py (~200-250 LOC) [R6-arch-3, R6-eng-3]
 
-    async def complete(self, messages, *, tools=None, **kwargs) -> LLMResponse:
-        from .._engine.message_converter import openai_to_anthropic
+Moved from engine/ to providers/. This is provider-specific, not engine infrastructure.
 
-        # Extract system message (Anthropic uses top-level param)
-        system_text, converted_messages = openai_to_anthropic(list(messages))
+**Edge cases that MUST be handled (from R6-eng review):**
+1. Multiple tool calls in single assistant message
+2. Assistant message with tool_calls but null/empty content
+3. Tool call ID format differences and ordering preservation
+4. Consecutive user/assistant messages (Anthropic requires alternation)
+5. System message extraction (Anthropic uses top-level param)
+6. Empty tool results (insert placeholder)
+7. Unknown content block types (image, etc.) — pass through or raise `UnsupportedContentError`
+8. Legacy `function_call` format — reject explicitly
+9. `stop_reason` mapping: `end_turn` -> `stop`, `tool_use` -> `tool_calls`, `max_tokens` -> `length`
 
-        # Convert tool schemas from OpenAI to Anthropic format
-        anthropic_tools = [_convert_tool_schema(t) for t in (tools or [])]
+**Realistic LOC: 200-250.** The earlier 150 LOC estimate was aggressive.
 
-        client = self._get_client()
-        response = await client.messages.create(
-            model=self.model,
-            system=system_text,
-            messages=converted_messages,
-            tools=anthropic_tools or NOT_GIVEN,
-            **kwargs,
-        )
+### AnthropicProvider (~120 LOC)
 
-        # Normalize response back to OpenAI format
-        content, tool_calls = _extract_response(response)
-        return LLMResponse(
-            content=content,
-            tool_calls=tool_calls,  # Already in OpenAI-normalized format
-            finish_reason=_map_stop_reason(response.stop_reason),
-            usage={"input_tokens": response.usage.input_tokens,
-                   "output_tokens": response.usage.output_tokens},
-            raw=response,
-        )
-```
+Calls `openai_to_anthropic()` on full message history before each `complete()`. Normalizes response back to `LLMResponse` with `ToolCall` dataclass instances.
+
+### Temperature documentation [R6-eng-8]
+
+All providers document: "Default temperatures are tuned for OpenAI-class models. For smaller local models via Ollama, lower to 0.5-0.7 for coherent output."
 
 ---
 
-## What to Extract vs Write New
+## Observability [R6-eng-5,6,7]
 
-### EXTRACT from `agentic-workflows-v2/agentic_v2/`
+Every pattern invocation generates a `request_id` (UUID4) at entry. This ID is:
+- Set on every `TraceEntry` created during the invocation
+- Set on the final `PatternResult.request_id`
+- Logged if a structured logger is configured
 
-| Target | Source | Adaptation |
-|--------|--------|------------|
-| `engine/context.py` | `engine/context.py` | Strip to ~120 LOC |
-| `engine/retry.py` | `engine/step.py:18-68` | Change retry_on defaults |
-| `engine/parallel.py` | `engine/dag_executor.py:194+` | Split into gather_resilient + gather_strict |
-| `engine/json_extraction.py` | `agents/json_extraction.py` | Extract verbatim |
-| `patterns/react_loop.py` | `engine/tool_execution.py:220-246` | normalize_tool_call verbatim |
-| `providers/_openai.py` | `tools/llm/provider_adapters.py` | Merge with base_url |
-| `providers/_ollama.py` | `tools/llm/provider_adapters.py` | Add asyncio.to_thread |
-| `providers/_anthropic.py` | `models/backends_cloud.py:289-300` | Full message converter |
+`TraceEntry` includes:
+- `request_id` — correlates all calls in one invocation
+- `started_at` — monotonic timestamp for timing analysis
+- `duration_ms` — wall-clock time for this step
+- `usage` — per-call token breakdown (raw `LLMResponse.usage` dict)
 
-### WRITE NEW
-
-| File | LOC | Why |
-|------|-----|-----|
-| `provider.py` | 90 | Protocol + LLMResponse + TruncatedResponseError |
-| `types.py` | 130 | PatternResult (with __str__/__iter__), TokenUsage, Tool (with timeout) |
-| `kit.py` | 60 | Session class binding provider + config |
-| `compose.py` | 50 | pipe() + merge logic |
-| `patterns/_base.py` | 80 | _checked_complete, _validate_score, BudgetExhaustedError |
-| `engine/convergence.py` | 70 | NaN-safe ConvergenceDetector |
-| `engine/message_converter.py` | 150 | OpenAI <-> Anthropic full conversion |
-| `providers/_mock.py` | 80 | Configurable mock |
-| `patterns/consensus.py` | 170 | With agreement_ratio |
-| `patterns/refine_loop.py` | 170 | With NaN guards |
-| `patterns/react_loop.py` | 220 | With tool timeouts |
-| `patterns/tree_of_thought.py` | 270 | With gather_resilient, default budget |
-
-**Total: ~1,900 LOC** (up from 1,700 — message converter and safety checks add ~200).
+This is sufficient for post-hoc debugging. OpenTelemetry integration deferred to v0.2 for production-grade distributed tracing.
 
 ---
 
 ## Phased Build Sequence
 
 ### Phase 1a: Type Foundation (Day 1)
-1. `pyproject.toml`, `.gitignore`, `py.typed`
-2. `provider.py` — Protocol, LLMResponse (with was_truncated), errors
-3. `types.py` — PatternResult (with __str__/__iter__), TokenUsage, Tool (with timeout), TraceEntry
-4. `providers/_mock.py` — MockProvider
-5. `tests/conftest.py` — fixtures
+1. `pyproject.toml` — full metadata, keywords, classifiers, URLs, license
+2. `.gitignore`, `LICENSE`, `CHANGELOG.md`, `src/executionkit/py.typed`
+3. `provider.py` — LLMProvider + ToolCallingProvider + StreamingProvider (defined, unused) + LLMResponse + ToolCall + full error hierarchy
+4. `types.py` — PatternResult, TraceEntry (with request_id, started_at, usage), TokenUsage, Tool, PatternStep Protocol
+5. `providers/_mock.py`
+6. `tests/conftest.py`
 
 ### Phase 1b: Engine (Day 2)
-6. Tests first: `tests/test_engine.py`
-7. `engine/retry.py` — RetryConfig + with_retry
-8. `engine/parallel.py` — gather_resilient + gather_strict
-9. `engine/convergence.py` — NaN-safe ConvergenceDetector
-10. `engine/context.py` — simplified ExecutionContext
-11. `engine/json_extraction.py` — balanced-brace fallback
-12. `engine/message_converter.py` — OpenAI <-> Anthropic + tests
+7. Tests first: `test_engine.py`, `test_concurrency.py`
+8. `engine/retry.py` — with CancelledError guard
+9. `engine/parallel.py` — gather_resilient + gather_strict with ExceptionGroup unwrap
+10. `engine/convergence.py` — NaN-safe, patience=3
+11. `engine/context.py` — minimal, for pipe() shared state only
+12. `engine/json_extraction.py`
 
-### Phase 1c: Providers + Cost + Kit (Day 3)
-13. Tests first: `tests/test_providers.py`, `tests/test_message_converter.py`
-14. `providers/_openai.py`, `_ollama.py`, `_anthropic.py` (with full conversion)
-15. `providers/__init__.py` — conditional imports
-16. `cost.py` — CostTracker
-17. `kit.py` — Session class
-18. `patterns/_base.py` — _checked_complete, _validate_score
+### Phase 1c: Providers + Infrastructure (Day 3)
+13. Tests first: `test_providers.py`, `test_conversion.py`
+14. `providers/_conversion.py` — OpenAI <-> Anthropic (200-250 LOC, all 9 edge cases)
+15. `providers/_openai.py`, `_ollama.py`, `_anthropic.py`
+16. `providers/__init__.py` — conditional imports
+17. `cost.py` — CostTracker
+18. `kit.py` — Session class
+19. `patterns/base.py` — PUBLIC checked_complete, validate_score
 
 ### Phase 2a: Consensus (Day 4)
-19. Tests first (including hypothesis property tests)
-20. `patterns/consensus.py` with agreement_ratio
+20. Tests first (including hypothesis)
+21. `patterns/consensus.py` with agreement_ratio, ConsensusFailedError
 
 ### Phase 2b: Refine Loop (Day 5)
-21. Tests first
-22. `patterns/refine_loop.py` with NaN guards
+22. Tests first
+23. `patterns/refine_loop.py` with NaN guards, patience=3
 
 ### Phase 2c: ReAct (Days 6-7)
-23. Tests first (multi-turn with tool timeouts)
-24. `patterns/react_loop.py` with asyncio.wait_for per tool
+24. Tests first (multi-turn, tool timeouts, CancelledError)
+25. `patterns/react_loop.py` with asyncio.wait_for, ToolCallingProvider
 
 ### Phase 2d: Tree of Thought (Days 7-8)
-25. Tests first
-26. `patterns/tree_of_thought.py` with gather_resilient + default budget
+26. Tests first
+27. `patterns/tree_of_thought.py` with gather_resilient, default budget, max_concurrency
 
-### Phase 3: Polish + Release (Days 9-10)
-27. `compose.py` — pipe()
-28. `__init__.py` — public exports + Jupyter-safe sync wrappers
-29. Examples (7 files including notebook)
-30. README.md, CI pipeline
-31. Final: ruff + mypy --strict + pytest --cov-fail-under=80
+### Phase 2.5: Composition + Polish (Day 9) [R6-oss]
+28. `compose.py` — budget-aware pipe() with partial cost preservation
+29. `__init__.py` — exports + Jupyter-safe sync wrappers
+30. `__main__.py` — CLI entry point (check/demo/version)
+31. Tests: `test_compose.py`, `test_kit.py`
+
+### Phase 3: Launch Readiness (Days 10-12) [R6-oss]
+32. README.md — hero example (pipe composition), install, pattern overview
+33. Examples — 10 files (see package structure)
+34. CONTRIBUTING.md — how to add providers and patterns
+35. Google-style docstrings on every public function/class
+36. `docs/` — mkdocs-material site auto-generated from docstrings
+37. Final: ruff + mypy --strict + pytest --cov-fail-under=80
 
 ### Phase 4: v0.2 (DEFER)
-- OpenTelemetry tracing (optional)
-- Streaming intermediate results
-- Additional composition operators (fan-out, conditional)
+- StreamingProvider implementation
+- OpenTelemetry integration
+- Additional composition operators
+- Multi-modal content support in message converter
 
 ---
 
-## Test Strategy
+## Stability Policy
 
-### Test Categories (per pattern)
+- `LLMProvider` Protocol is **frozen for 0.x**. New capabilities via extension Protocols (`ToolCallingProvider`, `StreamingProvider`), not `hasattr()` checks.
+- `PatternResult` fields frozen for 0.x. New data goes in `.metadata`.
+- `engine/` public API stable for 0.x: RetryConfig, gather_resilient, gather_strict, ConvergenceDetector, with_retry.
+- `patterns.base` public API stable for 0.x: checked_complete, validate_score.
+- SemVer: 0.x allows breaking changes between minors. 1.0 locks the public API.
 
-1. **Unit tests** — MockProvider with canned responses. Verify message formation, loop termination, cost tracking, trace entries.
-2. **Edge cases** — Budget exhaustion mid-call, all branches scored 0, NaN evaluator, tool timeout, empty responses, finish_reason="length", zero-agreement consensus.
-3. **Property-based** (hypothesis) — Consensus majority always returns most frequent. Convergence detector always terminates. gather_resilient never raises.
-4. **Message converter round-trip** — OpenAI -> Anthropic -> OpenAI produces equivalent messages for all tool-call scenarios.
-5. **Integration** — `@pytest.mark.integration` (skipped in CI).
+---
 
-### Coverage Targets
-- 80% overall, 90% for `patterns/`, 100% for `provider.py` and `types.py`
+## Hero Example (README)
 
-### CI Pipeline
-```yaml
-name: CI
-on: [push, pull_request]
-jobs:
-  test:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-        python-version: ["3.11", "3.12", "3.13"]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "${{ matrix.python-version }}" }
-      - run: pip install -e ".[dev,all]"
-      - run: ruff check src/executionkit && ruff format --check src/executionkit
-      - run: mypy --strict src/executionkit
-      - run: pytest tests/ -m "not integration" --cov=executionkit --cov-fail-under=80 -x
+```python
+from executionkit import pipe, refine_loop, consensus
+from executionkit.providers import OpenAIProvider
+
+provider = OpenAIProvider("gpt-4o-mini")
+
+# Draft an analysis, improve it, then verify with multiple samples
+result = await pipe(
+    provider,
+    "Analyze this contract clause for legal risks: ...",
+    refine_loop,   # Self-improve until quality converges
+    consensus,     # Cross-check with 5 independent samples
+)
+
+print(result.value)                          # The verified analysis
+print(result.cost)                           # Total tokens across BOTH steps
+print(result.metadata["agreement_ratio"])    # 0.8 = 4 of 5 agreed
 ```
 
 ---
@@ -706,25 +718,18 @@ jobs:
 
 | Risk | Mitigation |
 |------|-----------|
-| **Cost explosion** | DEFAULT max_cost on ToT (100 calls). Per-call budget check via _checked_complete(). BudgetExhaustedError raised, not silent. |
-| **Partial failures in ToT** | gather_resilient returns exceptions as values. Failed evals score 0.0. Pattern continues with surviving branches. |
-| **Tool hangs** | asyncio.wait_for with Tool.timeout (default 30s). Timeout produces error JSON, not hang. |
-| **NaN evaluator scores** | _validate_score raises ValueError immediately. ConvergenceDetector validates on entry. |
-| **Anthropic message format** | Dedicated message_converter.py (~150 LOC). Round-trip tested. Not hidden in provider. |
-| **Truncated responses** | LLMResponse.was_truncated property. Patterns can retry with doubled max_tokens or flag in metadata. |
-| **Paradigm lock-in** | Stateless functions. Drop-in replaceable. |
-| **Jupyter broken** | nest_asyncio detection + clear error message. |
-| **No composition** | pipe() ships v0.1. Costs and traces merge automatically. |
-| **Private engine** | engine/ is public. Custom patterns reuse RetryConfig, gather_resilient, ConvergenceDetector. |
-
----
-
-## Stability Policy
-
-- `LLMProvider` Protocol is **frozen for 0.x**. New capabilities via optional methods checked with `hasattr()`.
-- `PatternResult` fields frozen for 0.x. New data goes in `.metadata`.
-- `engine/` public API: RetryConfig, gather_resilient, gather_strict, ConvergenceDetector, with_retry — stable for 0.x.
-- SemVer: 0.x means breaking changes possible between minors. 1.0 locks the public API.
+| **Cost explosion** | Default max_cost on ToT (100 calls). Per-call budget via checked_complete(). BudgetExhaustedError raised. pipe() passes remaining budget to each step. |
+| **Partial failures** | gather_resilient returns exceptions as values. Failed evals = 0.0. |
+| **Tool hangs** | asyncio.wait_for with Tool.timeout (default 30s). |
+| **NaN scores** | validate_score raises immediately. ConvergenceDetector validates on entry. |
+| **Anthropic format** | Dedicated _conversion.py (200-250 LOC). 9 edge cases handled. Round-trip tested. |
+| **CancelledError** | with_retry never retries on cancellation. gather_resilient propagates it. |
+| **ExceptionGroup** | gather_strict unwraps single exceptions. Multi-exception groups propagate. |
+| **Pipe interruption** | try/finally preserves partial costs. Returns partial PatternResult. |
+| **Paradigm lock-in** | Stateless functions. Extension Protocols for evolution. |
+| **Jupyter** | nest_asyncio detection + clear error message. |
+| **Custom patterns** | engine/ and patterns.base are public. Same infrastructure as built-ins. |
+| **Protocol evolution** | ToolCallingProvider and StreamingProvider defined now. Additive, not breaking. |
 
 ---
 
@@ -761,8 +766,6 @@ jobs:
 | 27 | Checkpoint Store + SQLite Resume | adapters/native/engine.py | Execution | 289 |
 | 28 | Step State Machine (8-state lifecycle) | engine/step_state.py | Flow Control | 91 |
 
-**Total extractable LOC across all 28 patterns: ~7,866**
-
 ---
 
 ## Verification
@@ -771,11 +774,12 @@ jobs:
 2. `ruff format --check src/executionkit` — passes
 3. `mypy --strict src/executionkit` — passes
 4. `pytest tests/ -m "not integration" --cov=executionkit --cov-fail-under=80` — passes
-5. `examples/quickstart_github.py` — works end-to-end with GITHUB_TOKEN
-6. `examples/quickstart_ollama.py` — works with local Ollama, zero cloud deps
-7. `examples/quickstart_notebook.ipynb` — works in Jupyter without RuntimeError
-8. `examples/basic_compose.py` — pipe(refine_loop, consensus) merges costs correctly
-9. `examples/basic_tot.py` — produces valid tree, respects default budget
-10. `examples/basic_react.py` — tool timeout triggers gracefully
-11. `examples/basic_consensus.py` — agreement_ratio in metadata
-12. `examples/basic_refine.py` — converges within max_iterations
+5. `executionkit demo` — CLI runs with MockProvider, zero config
+6. `examples/quickstart_openai.py` — works with OPENAI_API_KEY
+7. `examples/quickstart_ollama.py` — works with local Ollama
+8. `examples/quickstart_notebook.ipynb` — works in Jupyter
+9. `examples/compose_pipeline.py` — pipe() merges costs correctly
+10. `examples/classification.py` — consensus with agreement_ratio
+11. `examples/structured_extraction.py` — refine_loop with Pydantic
+12. `examples/error_handling.py` — BudgetExhaustedError, timeouts
+13. `mkdocs serve` — docs site renders from docstrings
