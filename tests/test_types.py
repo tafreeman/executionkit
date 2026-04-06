@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
 from types import MappingProxyType
 from typing import Any
 
@@ -63,6 +64,21 @@ class TestTokenUsage:
     def test_inequality(self) -> None:
         assert TokenUsage(10, 5, 2) != TokenUsage(10, 5, 3)
 
+    def test_token_usage_is_immutable(self) -> None:
+        tu = TokenUsage(llm_calls=1)
+        with pytest.raises(FrozenInstanceError):
+            tu.llm_calls = 2  # type: ignore[misc]
+
+    def test_token_usage_addition_creates_new(self) -> None:
+        a = TokenUsage(input_tokens=3, output_tokens=1, llm_calls=1)
+        b = TokenUsage(input_tokens=7, output_tokens=2, llm_calls=1)
+        c = a + b
+        assert c is not a
+        assert c is not b
+        # Original objects unchanged
+        assert a.input_tokens == 3
+        assert b.input_tokens == 7
+
 
 # ---------------------------------------------------------------------------
 # PatternResult
@@ -74,6 +90,11 @@ class TestPatternResult:
         r: PatternResult[str] = PatternResult(value="hello")
         with pytest.raises(AttributeError):
             r.value = "other"  # type: ignore[misc]
+
+    def test_pattern_result_is_immutable(self) -> None:
+        pr: PatternResult[str] = PatternResult(value="x", cost=TokenUsage())
+        with pytest.raises(FrozenInstanceError):
+            pr.value = "y"  # type: ignore[misc]
 
     def test_str_returns_str_of_value(self) -> None:
         r: PatternResult[str] = PatternResult(value="hello")

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import unittest.mock
+from dataclasses import FrozenInstanceError
 from urllib import error
 
 import pytest
@@ -349,7 +350,7 @@ async def test_post_maps_5xx_errors(monkeypatch: pytest.MonkeyPatch) -> None:
 
     # Force urllib backend so the monkeypatch is effective regardless of
     # whether httpx is installed in the test environment.
-    provider._use_httpx = False
+    object.__setattr__(provider, "_use_httpx", False)
     monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
 
     with pytest.raises(ProviderError, match="server error"):
@@ -460,8 +461,9 @@ async def test_post_httpx_maps_429_to_rate_limit_error() -> None:
     async def fake_post(*args: object, **kwargs: object) -> object:
         raise exc
 
-    provider._client = unittest.mock.MagicMock()
-    provider._client.post = fake_post
+    mock_client = unittest.mock.MagicMock()
+    mock_client.post = fake_post
+    object.__setattr__(provider, "_client", mock_client)
 
     with pytest.raises(RateLimitError) as exc_info:
         await provider._post_httpx(
@@ -494,8 +496,9 @@ async def test_post_httpx_maps_401_to_permanent_error() -> None:
     async def fake_post(*args: object, **kwargs: object) -> object:
         raise exc
 
-    provider._client = unittest.mock.MagicMock()
-    provider._client.post = fake_post
+    mock_client = unittest.mock.MagicMock()
+    mock_client.post = fake_post
+    object.__setattr__(provider, "_client", mock_client)
 
     with pytest.raises(PermanentError):
         await provider._post_httpx(
@@ -527,8 +530,9 @@ async def test_post_httpx_maps_500_to_provider_error() -> None:
     async def fake_post(*args: object, **kwargs: object) -> object:
         raise exc
 
-    provider._client = unittest.mock.MagicMock()
-    provider._client.post = fake_post
+    mock_client = unittest.mock.MagicMock()
+    mock_client.post = fake_post
+    object.__setattr__(provider, "_client", mock_client)
 
     with pytest.raises(ProviderError, match="internal error"):
         await provider._post_httpx(
@@ -553,8 +557,9 @@ async def test_aclose_with_httpx() -> None:
     async def fake_aclose() -> None:
         closed.append(True)
 
-    provider._client = unittest.mock.MagicMock()
-    provider._client.aclose = fake_aclose
+    mock_client = unittest.mock.MagicMock()
+    mock_client.aclose = fake_aclose
+    object.__setattr__(provider, "_client", mock_client)
 
     await provider.aclose()
     assert closed == [True]
@@ -591,10 +596,29 @@ async def test_context_manager_closes_client() -> None:
     async def fake_aclose() -> None:
         closed.append(True)
 
-    provider._client = unittest.mock.MagicMock()
-    provider._client.aclose = fake_aclose
+    mock_client = unittest.mock.MagicMock()
+    mock_client.aclose = fake_aclose
+    object.__setattr__(provider, "_client", mock_client)
 
     async with provider:
         pass
 
     assert closed == [True]
+
+
+# ---------------------------------------------------------------------------
+# Provider immutability
+# ---------------------------------------------------------------------------
+
+
+class TestProviderImmutability:
+    def test_provider_is_immutable(self) -> None:
+        """Public field assignment on Provider must raise FrozenInstanceError."""
+        provider = Provider("https://api.openai.com/v1", model="gpt-4o-mini")
+        with pytest.raises(FrozenInstanceError):
+            provider.model = "new"  # type: ignore[misc]
+
+    def test_provider_client_is_set_post_init(self) -> None:
+        """_use_httpx is set to a bool by __post_init__ regardless of httpx."""
+        provider = Provider("https://api.openai.com/v1", model="gpt-4o-mini")
+        assert isinstance(provider._use_httpx, bool)

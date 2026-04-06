@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "executionkit"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Composable LLM reasoning patterns with budget-aware execution"
 requires-python = ">=3.11"
 license = "MIT"
@@ -41,7 +41,7 @@ dev = [
     "pytest>=8.4",
     "pytest-asyncio>=1.2",
     "pytest-cov>=7.0",
-    "ruff>=0.14.0",
+    "ruff>=0.14.0,<0.15",
 ]
 
 [project.urls]
@@ -49,11 +49,15 @@ Homepage = "https://github.com/your-org/executionkit"
 Issues = "https://github.com/your-org/executionkit/issues"
 Changelog = "https://github.com/your-org/executionkit/CHANGELOG.md"
 
+[tool.hatch.version]
+path = "executionkit/__init__.py"
+
 [tool.hatch.build.targets.wheel]
 packages = ["executionkit"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 addopts = "--cov=executionkit --cov-report=term-missing"
 markers = [

@@ -43,6 +43,8 @@ from executionkit.types import (
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+__version__ = "0.1.0"
+
 __all__ = [
     "DEFAULT_RETRY",
     "BudgetExhaustedError",
@@ -70,6 +72,7 @@ __all__ = [
     "ToolCall",
     "ToolCallingProvider",
     "VotingStrategy",
+    "__version__",
     "checked_complete",
     "consensus",
     "consensus_sync",
