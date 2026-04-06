@@ -274,8 +274,6 @@ async def _execute_tool_call(
         return _truncate(str(raw_result), max_observation_chars)
     except TimeoutError:
         return f"Tool execution timed out after {timeout}s"
-    except asyncio.CancelledError:
-        raise
     except Exception as exc:
         import logging
 

@@ -191,6 +191,21 @@ class TestConsensus:
         result = await consensus(provider, "q", num_samples=3)
         assert result.metadata["unique_responses"] == 1
 
+    async def test_consensus_all_five_unique_tie_count_and_unique_responses(
+        self,
+    ) -> None:
+        """When all 5 responses are unique, tie_count=5 and unique_responses=5."""
+        from executionkit.patterns.consensus import consensus
+
+        # 5 completely distinct responses → every response count=1 → all tied
+        responses = ["alpha", "beta", "gamma", "delta", "epsilon"]
+        provider = MockProvider(responses=responses)
+        result = await consensus(provider, "q", num_samples=5)
+        assert result.metadata["unique_responses"] == 5
+        assert result.metadata["tie_count"] == 5
+        # agreement_ratio = 1/5 since winner got only 1 of 5 votes
+        assert result.metadata["agreement_ratio"] == pytest.approx(1 / 5)
+
 
 # ---------------------------------------------------------------------------
 # refine_loop()
@@ -312,6 +327,35 @@ class TestRefineLoop:
         )
         assert isinstance(result, PatternResult)
         assert isinstance(result.value, str)
+
+    async def test_refine_loop_returns_best_score_not_last_when_max_iterations_hit(
+        self,
+    ) -> None:
+        """When max_iterations is exhausted the returned score must be the best seen."""
+        from executionkit.patterns.refine_loop import refine_loop
+
+        # Scores: 0.4 (initial), 0.7 (iter 1), 0.5 (iter 2), 0.3 (iter 3)
+        # Best is 0.7 on iteration 1; last is 0.3 on iteration 3.
+        scores_sequence = [0.4, 0.7, 0.5, 0.3]
+        call_idx = 0
+
+        async def descending_after_peak(response: str, provider: Any) -> float:
+            nonlocal call_idx
+            score = scores_sequence[call_idx % len(scores_sequence)]
+            call_idx += 1
+            return score
+
+        provider = MockProvider(responses=["v1", "v2", "v3", "v4", "v5"])
+        result = await refine_loop(
+            provider,
+            "prompt",
+            evaluator=descending_after_peak,
+            max_iterations=3,
+            target_score=1.0,  # unreachable → runs all iterations
+        )
+        # Must return the best (0.7), NOT the last (0.3)
+        assert result.score == pytest.approx(0.7)
+        assert result.value == "v2"  # The response that earned score 0.7
 
     async def test_default_evaluator_resists_injection(self) -> None:
         """Adversarial text containing override instructions must not force a
@@ -558,6 +602,20 @@ class TestReactLoop:
 
         result = await react_loop(provider, "question", tools=[tool])
         assert result.cost.llm_calls == 2
+
+    async def test_finish_reason_stop_on_first_call_terminates_in_one_llm_call(
+        self,
+    ) -> None:
+        """LLM returning finish_reason='stop' immediately exits with 1 LLM call."""
+        from executionkit.patterns.react_loop import react_loop
+
+        stop_response = _make_final_response("Immediate answer")
+        provider = MockProvider(responses=[stop_response])
+        tool = self._make_search_tool()
+
+        result = await react_loop(provider, "direct question", tools=[tool])
+        assert result.value == "Immediate answer"
+        assert result.cost.llm_calls == 1
 
     async def test_tool_call_missing_required_arg(self) -> None:
         """Schema requires 'query'; LLM sends empty args -> error observation."""

@@ -193,7 +193,7 @@ class ToolCallingProvider(LLMProvider, Protocol):
 # ---------------------------------------------------------------------------
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Provider:
     """Universal LLM provider. Posts JSON, parses JSON. No SDK needed.
 
@@ -208,14 +208,25 @@ class Provider:
     default_max_tokens: int = 4096
     timeout: float = 120.0
     supports_tools: Literal[True] = field(default=True, init=False)
+    # Derived state — excluded from repr/eq/hash; initialized only in __post_init__
+    _client: Any = field(
+        default=None, init=False, repr=False, compare=False, hash=False
+    )
+    _use_httpx: bool = field(
+        default=False, init=False, repr=False, compare=False, hash=False
+    )
 
     def __post_init__(self) -> None:
+        # object.__setattr__ is the standard pattern for derived state on frozen
+        # dataclasses
         if _HTTPX_AVAILABLE and _httpx is not None:
-            self._client: Any = _httpx.AsyncClient(timeout=self.timeout)
-            self._use_httpx: bool = True
+            object.__setattr__(
+                self, "_client", _httpx.AsyncClient(timeout=self.timeout)
+            )
+            object.__setattr__(self, "_use_httpx", True)
         else:
-            self._client = None
-            self._use_httpx = False
+            object.__setattr__(self, "_client", None)
+            object.__setattr__(self, "_use_httpx", False)
 
     def __repr__(self) -> str:
         masked = "***" if self.api_key else ""
