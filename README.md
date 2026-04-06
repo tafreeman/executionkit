@@ -52,10 +52,10 @@ pip install executionkit
 For high-throughput workloads requiring connection pooling:
 
 ```bash
-pip install executionkit[http]
+pip install executionkit[httpx]
 ```
 
-The `[http]` extra adds `httpx` as the HTTP backend. Without it, the stdlib
+The `[httpx]` extra adds `httpx` as the HTTP backend. Without it, the stdlib
 `urllib` backend is used (one new TCP connection per call).
 
 Requires Python 3.11+.
@@ -135,7 +135,7 @@ print(result.metadata["tool_calls_made"])         # 1
 
 `Provider` speaks the OpenAI-compatible `/chat/completions` format. By default
 it uses stdlib `urllib` with no external dependencies. When `httpx` is
-installed (via `pip install executionkit[http]`), it automatically switches to
+installed (via `pip install executionkit[httpx]`), it automatically switches to
 an `httpx.AsyncClient` with connection pooling.
 
 `Provider` supports the async context manager protocol for clean resource
@@ -425,7 +425,7 @@ and primitive type checks) before invoking the tool execute function.
 **No connection pooling (stdlib backend).**
 The default HTTP backend opens a new TCP+TLS connection per LLM call. For
 high-throughput workloads (e.g. `consensus` with many samples or long
-`react_loop` chains), install `executionkit[http]` to enable the `httpx`
+`react_loop` chains), install `executionkit[httpx]` to enable the `httpx`
 connection-pool backend.
 
 **`react_loop` context growth.**

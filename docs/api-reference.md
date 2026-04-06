@@ -692,7 +692,7 @@ Universal LLM provider. Posts JSON to `{base_url}/chat/completions` and parses t
 `Provider` automatically uses `httpx.AsyncClient` (with connection pooling) when `httpx` is installed, and falls back to `asyncio.to_thread(urllib.request)` otherwise. Install the optional backend with:
 
 ```
-pip install executionkit[http]
+pip install executionkit[httpx]
 ```
 
 **Methods:**
@@ -1130,7 +1130,7 @@ Uses `asyncio.to_thread(urllib.request)` for HTTP. No additional dependencies.
 ### With httpx backend (recommended)
 
 ```
-pip install executionkit[http]
+pip install executionkit[httpx]
 ```
 
 Enables `httpx.AsyncClient` with connection pooling and keep-alive. Improves throughput for patterns that make many concurrent calls (e.g., `consensus()` with high `num_samples`).
