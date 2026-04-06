@@ -52,7 +52,7 @@ class ConvergenceDetector:
         # Delta-based convergence check (need at least 2 scores)
         if len(self._scores) >= 2:
             delta = abs(self._scores[-1] - self._scores[-2])
-            if delta < self.delta_threshold:
+            if delta <= self.delta_threshold:
                 self._stale_count += 1
             else:
                 self._stale_count = 0

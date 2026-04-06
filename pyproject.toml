@@ -32,7 +32,7 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-http = ["httpx>=0.27"]
+httpx = ["httpx>=0.27"]
 dev = [
     "bandit[toml]>=1.8",
     "build>=1.2",

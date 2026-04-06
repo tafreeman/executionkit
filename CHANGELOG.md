@@ -18,7 +18,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- Add optional `httpx` backend for HTTP connection pooling — install with `pip install executionkit[http]`; falls back to `urllib` when `httpx` is absent (P1-5)
+- Add optional `httpx` backend for HTTP connection pooling — install with `pip install executionkit[httpx]`; falls back to `urllib` when `httpx` is absent (P1-5)
 - Add `max_history_messages: int | None` parameter to `react_loop` for capping message history size; always preserves the original user prompt (P2-PERF-07)
 - Add `_validate_tool_args` helper in `react_loop` that validates tool call arguments against JSON Schema (required fields, `additionalProperties`, and type checks) before execution — uses stdlib only, no `jsonschema` dependency (P1-4)
 - Add `aclose()` and async context manager support (`__aenter__`/`__aexit__`) to `Provider` for explicit HTTP client lifecycle management (P1-5)

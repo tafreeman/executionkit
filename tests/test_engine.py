@@ -433,22 +433,13 @@ class TestConvergenceDetector:
         assert result is True
 
     def test_convergence_delta_zero(self) -> None:
+        """delta_threshold=0.0 treats any exact repeat as stale (delta <= 0.0)."""
         cd = ConvergenceDetector(delta_threshold=0.0, patience=1)
         cd.should_stop(0.5)  # seed
-        # delta=0.0001 is NOT < 0.0 (strict less-than), so no stale increment
-        # delta_threshold=0.0 means delta < 0.0 never true → use exact equality edge
-        # Actually: delta=0.0001 is >= 0.0, so stale_count stays 0 here.
-        # For delta=0.0: 0.5 → 0.5 gives delta=0.0 which IS < 0.0? No.
-        # The check is `delta < delta_threshold`. With threshold=0.0: 0.0 < 0.0 = False.
-        # But delta=0.0001 < 0.0 = False too. Nothing triggers stale with threshold=0.0.
-        # Correct interpretation: delta_threshold=0.0 means no improvement is small
-        # enough to be considered stale. Use score_threshold for that purpose.
-        # The spec says "ANY repetition triggers stale count" with delta_threshold=0.0.
-        # Since 0.0 < 0.0 is False, exact repeat won't trigger either.
-        # This test verifies the implementation's actual behavior: exact repeat with
-        # delta_threshold=0.0 does NOT converge via stale (0.0 is not < 0.0).
-        result = cd.should_stop(0.5001)  # delta=0.0001, NOT < 0.0 → no stale
-        assert result is False
+        # delta=0.0 (exact repeat) satisfies delta <= 0.0 → stale_count becomes 1
+        # patience=1 → should_stop returns True
+        result = cd.should_stop(0.5)
+        assert result is True
 
     def test_convergence_oscillating_never_converges(self) -> None:
         cd = ConvergenceDetector(delta_threshold=0.01, patience=3)
