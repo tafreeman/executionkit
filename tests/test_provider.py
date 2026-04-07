@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import unittest.mock
 from dataclasses import FrozenInstanceError
+from types import MappingProxyType
 from urllib import error
 
 import pytest
@@ -154,30 +155,31 @@ class TestLLMResponse:
     def test_llmresponse_default_fields(self) -> None:
         r = LLMResponse(content="hi")
         assert r.content == "hi"
-        assert r.tool_calls == []
+        assert r.tool_calls == ()
         assert r.finish_reason == "stop"
-        assert r.usage == {}
+        assert r.usage == MappingProxyType({})
         assert r.raw is None
 
     def test_input_tokens_from_prompt_tokens(self) -> None:
-        r = LLMResponse(content="", usage={"prompt_tokens": 42})
+        r = LLMResponse(content="", usage=MappingProxyType({"prompt_tokens": 42}))
         assert r.input_tokens == 42
 
     def test_input_tokens_from_input_tokens_key(self) -> None:
-        r = LLMResponse(content="", usage={"input_tokens": 55})
+        r = LLMResponse(content="", usage=MappingProxyType({"input_tokens": 55}))
         assert r.input_tokens == 55
 
     def test_output_tokens_from_completion_tokens(self) -> None:
-        r = LLMResponse(content="", usage={"completion_tokens": 10})
+        r = LLMResponse(content="", usage=MappingProxyType({"completion_tokens": 10}))
         assert r.output_tokens == 10
 
     def test_output_tokens_from_output_tokens_key(self) -> None:
-        r = LLMResponse(content="", usage={"output_tokens": 20})
+        r = LLMResponse(content="", usage=MappingProxyType({"output_tokens": 20}))
         assert r.output_tokens == 20
 
     def test_total_tokens(self) -> None:
         r = LLMResponse(
-            content="", usage={"prompt_tokens": 30, "completion_tokens": 15}
+            content="",
+            usage=MappingProxyType({"prompt_tokens": 30, "completion_tokens": 15}),
         )
         assert r.total_tokens == 45
 
@@ -199,7 +201,7 @@ class TestLLMResponse:
 
     def test_has_tool_calls_true_with_tool_calls(self) -> None:
         tc = ToolCall(id="1", name="fn", arguments={})
-        r = LLMResponse(content="", tool_calls=[tc])
+        r = LLMResponse(content="", tool_calls=(tc,))
         assert r.has_tool_calls is True
 
     def test_input_tokens_zero_when_no_usage(self) -> None:
@@ -214,7 +216,7 @@ class TestLLMResponse:
         # When both keys present, input_tokens takes priority (truthy check)
         r = LLMResponse(
             content="",
-            usage={"input_tokens": 5, "prompt_tokens": 99},
+            usage=MappingProxyType({"input_tokens": 5, "prompt_tokens": 99}),
         )
         assert r.input_tokens == 5
 
@@ -222,7 +224,7 @@ class TestLLMResponse:
         # input_tokens=0 (e.g. cached prompt) must NOT fall back to prompt_tokens
         r = LLMResponse(
             content="",
-            usage={"input_tokens": 0, "prompt_tokens": 99},
+            usage=MappingProxyType({"input_tokens": 0, "prompt_tokens": 99}),
         )
         assert r.input_tokens == 0
 

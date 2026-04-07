@@ -3,7 +3,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Coverage: 83%](https://img.shields.io/badge/coverage-83%25-brightgreen)](pyproject.toml)
-[![CI](https://img.shields.io/badge/CI-passing-brightgreen)](https://github.com/your-org/executionkit/actions)
+[![CI](https://img.shields.io/badge/CI-passing-brightgreen)](https://github.com/tafreeman/executionkit/actions)
 
 Composable LLM reasoning patterns with budget-aware execution.
 

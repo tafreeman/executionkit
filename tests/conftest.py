@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from types import MappingProxyType
+
 import pytest
 
 from executionkit._mock import MockProvider
@@ -42,11 +44,13 @@ def make_llm_response():
         return LLMResponse(
             content=content,
             finish_reason=finish_reason,
-            tool_calls=tool_calls or [],
-            usage={
-                "prompt_tokens": input_tokens,
-                "completion_tokens": output_tokens,
-            },
+            tool_calls=tuple(tool_calls or []),
+            usage=MappingProxyType(
+                {
+                    "prompt_tokens": input_tokens,
+                    "completion_tokens": output_tokens,
+                }
+            ),
         )
 
     return _make

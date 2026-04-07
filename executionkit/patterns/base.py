@@ -64,15 +64,34 @@ async def checked_complete(
     """
     if budget is not None:
         current = tracker.to_usage()
+        # -1 sentinel: field was limited and fully consumed by a prior pipe() step.
+        if budget.llm_calls == -1:
+            raise BudgetExhaustedError(
+                "LLM call budget exhausted (forwarded from pipe)",
+                cost=current,
+                metadata={"budget": budget},
+            )
         if budget.llm_calls > 0 and current.llm_calls >= budget.llm_calls:
             raise BudgetExhaustedError(
                 "LLM call budget exhausted before dispatch",
                 cost=current,
                 metadata={"budget": budget},
             )
+        if budget.input_tokens == -1:
+            raise BudgetExhaustedError(
+                "Input token budget exhausted (forwarded from pipe)",
+                cost=current,
+                metadata={"budget": budget},
+            )
         if budget.input_tokens > 0 and current.input_tokens >= budget.input_tokens:
             raise BudgetExhaustedError(
                 "Input token budget exhausted before dispatch",
+                cost=current,
+                metadata={"budget": budget},
+            )
+        if budget.output_tokens == -1:
+            raise BudgetExhaustedError(
+                "Output token budget exhausted (forwarded from pipe)",
                 cost=current,
                 metadata={"budget": budget},
             )

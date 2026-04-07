@@ -69,7 +69,19 @@
       "Bash(python -m mypy executionkit/provider.py --strict --ignore-missing-imports)",
       "Bash(python -m pytest tests/test_engine.py tests/test_types.py tests/test_patterns.py -q --no-cov)",
       "Bash(python -m pytest tests/test_provider.py -q --no-cov -v)",
-      "Bash(python -m pytest tests/test_engine.py tests/test_types.py -v --tb=short -q)"
+      "Bash(python -m pytest tests/test_engine.py tests/test_types.py -v --tb=short -q)",
+      "Bash(gh pr:*)",
+      "Bash(python -m pytest tests/ -x -q)",
+      "Bash(python -m mypy executionkit/provider.py --strict)",
+      "Bash(python -m ruff check executionkit/provider.py tests/)",
+      "Bash(python -m mypy executionkit/ tests/ --strict)",
+      "Bash(python -m mypy executionkit/ --strict)",
+      "Bash(python -m pytest tests/test_patterns.py::TestConsensus::test_max_cost_budget_exhausted_after_first_sample -v --tb=long)",
+      "Bash(git -C . remote get-url origin)",
+      "Bash(grep -E \"^\\(class|def|async def\\) \\(consensus|refine_loop|react_loop|pipe|Kit|MockProvider|Provider|CostTracker|PatternStep|PatternResult|TokenUsage|Tool|LLMResponse|LLMProvider|ToolCallingProvider|VotingStrategy|ConvergenceDetector|RetryConfig|BudgetExhaustedError|ConsensusFailedError|MaxIterationsError|ProviderError|PatternError|PermanentError|RateLimitError|LLMError|ExecutionKitError|ToolCall|Evaluator\\)\" executionkit/**/*.py)",
+      "Bash(grep -n \"^class\" executionkit/**/*.py)",
+      "Bash(grep -h \"^async def\\\\|^def\" executionkit/**/*.py)",
+      "Bash(grep -E \"Evaluator|ResponseFactory|ScriptedResponse|DEFAULT_RETRY\" executionkit/**/*.py)"
     ]
   }
 }

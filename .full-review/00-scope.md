@@ -2,7 +2,7 @@
 
 ## Target
 
-**ExecutionKit source library** — `C:/Users/tandf/source/executionkit/executionkit/` and supporting files.
+**ExecutionKit source library** — `executionkit/` package and supporting files.
 
 ExecutionKit is a minimal Python library (v0.1.0-alpha) for composable LLM reasoning patterns targeting OpenAI-compatible APIs. Has 8 committed development cycles, 324 passing tests at 83.29% coverage, optional httpx transport, immutable `Provider` dataclass.
 

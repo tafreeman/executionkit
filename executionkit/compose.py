@@ -36,11 +36,28 @@ class PatternStep(Protocol):
 
 
 def _subtract(total: TokenUsage, used: TokenUsage) -> TokenUsage:
-    """Return *total* minus *used*, clamped to zero on each field."""
+    """Return remaining budget after subtracting *used* from *total*.
+
+    Convention:
+    - ``0`` on a field means "no limit" — preserved as-is.
+    - ``> 0`` means tokens/calls still available.
+    - ``-1`` means the field was limited and is now fully exhausted.
+
+    Using ``-1`` (rather than clamping to ``0``) prevents
+    :func:`~executionkit.patterns.base.checked_complete` from
+    misreading an exhausted budget as "unlimited".
+    """
+
+    def _remaining(budget: int, spent: int) -> int:
+        if budget == 0:  # unlimited field — preserve it
+            return 0
+        remaining = budget - spent
+        return remaining if remaining > 0 else -1  # -1 = exhausted
+
     return TokenUsage(
-        input_tokens=max(0, total.input_tokens - used.input_tokens),
-        output_tokens=max(0, total.output_tokens - used.output_tokens),
-        llm_calls=max(0, total.llm_calls - used.llm_calls),
+        input_tokens=_remaining(total.input_tokens, used.input_tokens),
+        output_tokens=_remaining(total.output_tokens, used.output_tokens),
+        llm_calls=_remaining(total.llm_calls, used.llm_calls),
     )
 
 

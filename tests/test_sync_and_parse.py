@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from types import MappingProxyType
 from typing import Any
 
 import pytest
@@ -145,9 +146,9 @@ class TestReactLoopSyncWrapper:
 
         final = LLMResponse(
             content="Direct answer",
-            tool_calls=[],
+            tool_calls=(),
             finish_reason="stop",
-            usage={"prompt_tokens": 10, "completion_tokens": 5},
+            usage=MappingProxyType({"prompt_tokens": 10, "completion_tokens": 5}),
         )
         provider = MockProvider(responses=[final])
 
