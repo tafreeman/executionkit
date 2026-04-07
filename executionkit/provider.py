@@ -14,6 +14,7 @@ import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
@@ -120,9 +121,11 @@ class LLMResponse:
     """
 
     content: str
-    tool_calls: list[ToolCall] = field(default_factory=list)
+    tool_calls: tuple[ToolCall, ...] = field(default_factory=tuple)
     finish_reason: str = "stop"
-    usage: dict[str, Any] = field(default_factory=dict)
+    usage: MappingProxyType[str, Any] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
     raw: Any = None
 
     @property
@@ -323,6 +326,8 @@ class Provider:
             if status in {401, 403, 404}:
                 raise PermanentError(_format_http_error(status, raw)) from exc
             raise ProviderError(_format_http_error(status, raw)) from exc
+        except _httpx.TransportError as exc:
+            raise ProviderError(f"Transport failure: {exc}") from exc
 
     async def _post_urllib(
         self,
@@ -364,6 +369,8 @@ class Provider:
                 if status in {401, 403, 404}:
                     raise PermanentError(_format_http_error(status, raw)) from exc
                 raise ProviderError(_format_http_error(status, raw)) from exc
+            except urllib.error.URLError as exc:
+                raise ProviderError(f"Transport failure: {exc.reason}") from exc
 
         return await asyncio.to_thread(_sync)
 
@@ -376,9 +383,9 @@ class Provider:
             usage = {}
         return LLMResponse(
             content=_extract_content(message.get("content")),
-            tool_calls=_parse_tool_calls(message.get("tool_calls")),
+            tool_calls=tuple(_parse_tool_calls(message.get("tool_calls"))),
             finish_reason=str(choice.get("finish_reason", "stop")),
-            usage=usage,
+            usage=MappingProxyType(usage),
             raw=data,
         )
 

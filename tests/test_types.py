@@ -231,6 +231,43 @@ class TestTool:
         result = await tool.execute(query="hello")
         assert "hello" in result
 
+    def test_parameters_wrapped_in_mapping_proxy(self) -> None:
+        """parameters must be a MappingProxyType after construction."""
+        tool = self._make_tool()
+        assert isinstance(tool.parameters, MappingProxyType)
+
+    def test_parameters_is_read_only(self) -> None:
+        """Mutating parameters after construction must raise TypeError."""
+        tool = self._make_tool()
+        with pytest.raises(TypeError):
+            tool.parameters["injected"] = "evil"  # type: ignore[index]
+
+    def test_parameters_already_proxy_not_double_wrapped(self) -> None:
+        """Passing a MappingProxyType directly should not double-wrap it."""
+        proxy = MappingProxyType({"type": "object"})
+
+        async def _noop() -> str:
+            return ""
+
+        tool = Tool(
+            name="t",
+            description="d",
+            parameters=proxy,
+            execute=_noop,
+        )
+        assert tool.parameters is proxy
+
+    def test_to_schema_parameters_is_plain_dict(self) -> None:
+        """to_schema() must return a plain dict for parameters (JSON serializable)."""
+        import json
+
+        tool = self._make_tool()
+        schema = tool.to_schema()
+        params = schema["function"]["parameters"]
+        assert isinstance(params, dict)
+        # Must be JSON-serializable
+        json.dumps(params)
+
 
 # ---------------------------------------------------------------------------
 # VotingStrategy

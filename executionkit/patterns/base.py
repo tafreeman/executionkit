@@ -64,15 +64,34 @@ async def checked_complete(
     """
     if budget is not None:
         current = tracker.to_usage()
+        # -1 sentinel: field was limited and fully consumed by a prior pipe() step.
+        if budget.llm_calls == -1:
+            raise BudgetExhaustedError(
+                "LLM call budget exhausted (forwarded from pipe)",
+                cost=current,
+                metadata={"budget": budget},
+            )
         if budget.llm_calls > 0 and current.llm_calls >= budget.llm_calls:
             raise BudgetExhaustedError(
                 "LLM call budget exhausted before dispatch",
                 cost=current,
                 metadata={"budget": budget},
             )
+        if budget.input_tokens == -1:
+            raise BudgetExhaustedError(
+                "Input token budget exhausted (forwarded from pipe)",
+                cost=current,
+                metadata={"budget": budget},
+            )
         if budget.input_tokens > 0 and current.input_tokens >= budget.input_tokens:
             raise BudgetExhaustedError(
                 "Input token budget exhausted before dispatch",
+                cost=current,
+                metadata={"budget": budget},
+            )
+        if budget.output_tokens == -1:
+            raise BudgetExhaustedError(
+                "Output token budget exhausted (forwarded from pipe)",
                 cost=current,
                 metadata={"budget": budget},
             )
@@ -84,7 +103,7 @@ async def checked_complete(
             )
     # Reserve the call slot BEFORE yielding to the event loop (P0-3: TOCTOU fix).
     # If the HTTP call fails, the slot is released so it does not distort budget.
-    tracker._calls += 1
+    tracker.reserve_call()
     try:
         response = await with_retry(
             provider.complete,
@@ -93,7 +112,7 @@ async def checked_complete(
             **kwargs,
         )
     except Exception:
-        tracker._calls -= 1  # release reserved slot on failure
+        tracker.release_call()  # release reserved slot on failure
         raise
     tracker.record_without_call(response)
     return response

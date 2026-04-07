@@ -8,8 +8,8 @@ from typing import Any
 import pytest
 
 from executionkit._mock import MockProvider
-from executionkit.compose import pipe
-from executionkit.provider import LLMResponse
+from executionkit.compose import _subtract, pipe
+from executionkit.provider import BudgetExhaustedError, LLMResponse
 from executionkit.types import PatternResult, TokenUsage
 
 # ---------------------------------------------------------------------------
@@ -22,7 +22,10 @@ def _make_response(
 ) -> LLMResponse:
     return LLMResponse(
         content=content,
-        usage={"prompt_tokens": input_tokens, "completion_tokens": output_tokens},
+        usage=MappingProxyType({
+            "prompt_tokens": input_tokens,
+            "completion_tokens": output_tokens,
+        }),
     )
 
 
@@ -182,8 +185,8 @@ async def test_pipe_without_max_budget_passes_no_max_cost() -> None:
 
 
 @pytest.mark.asyncio
-async def test_pipe_budget_clamped_to_zero() -> None:
-    """Budget subtraction never goes negative."""
+async def test_pipe_budget_exhausted_uses_sentinel() -> None:
+    """Exhausted budget fields are forwarded as -1, not 0, to avoid 'unlimited' misread."""
     _budget_received.clear()
     provider = MockProvider(responses=[])
     # Very tight budget — first step will consume more than it
@@ -199,9 +202,9 @@ async def test_pipe_budget_clamped_to_zero() -> None:
 
     second_budget = _budget_received[1]
     assert second_budget is not None
-    assert second_budget.input_tokens == 0
-    assert second_budget.output_tokens == 0
-    assert second_budget.llm_calls == 0
+    assert second_budget.input_tokens == -1
+    assert second_budget.output_tokens == -1
+    assert second_budget.llm_calls == -1
 
 
 @pytest.mark.asyncio
@@ -229,3 +232,17 @@ async def test_pipe_returns_last_step_score() -> None:
     provider = MockProvider(responses=[])
     result = await pipe(provider, "input", _scored_step)
     assert result.score == pytest.approx(0.95)
+
+
+def test_pipe_enforces_exhausted_budget() -> None:
+    """Budget forwarded from pipe() must not bypass checked_complete when exhausted."""
+    # _subtract should use -1 for exhausted fields
+    result = _subtract(TokenUsage(llm_calls=2), TokenUsage(llm_calls=2))
+    assert result.llm_calls == -1
+
+    result = _subtract(TokenUsage(llm_calls=2), TokenUsage(llm_calls=3))
+    assert result.llm_calls == -1  # overspent also exhausted
+
+    # unlimited fields (0) must be preserved
+    result = _subtract(TokenUsage(llm_calls=0), TokenUsage(llm_calls=5))
+    assert result.llm_calls == 0
