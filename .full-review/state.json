@@ -1,0 +1,16 @@
+{
+  "target": "C:/Users/tandf/source/executionkit — executionkit Python library (8 commits, 324 tests, 83% coverage)",
+  "status": "in_progress",
+  "flags": {
+    "security_focus": false,
+    "performance_critical": false,
+    "strict_mode": false,
+    "framework": "Python 3.11+ / asyncio / httpx"
+  },
+  "current_step": "1AB",
+  "current_phase": 1,
+  "completed_steps": ["0-scope"],
+  "files_created": ["00-scope.md"],
+  "started_at": "2026-04-06T23:45:00Z",
+  "last_updated": "2026-04-06T23:45:00Z"
+}
