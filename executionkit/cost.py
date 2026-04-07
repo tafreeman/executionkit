@@ -28,6 +28,22 @@ class CostTracker:
         self._output += response.output_tokens
         self._calls += 1
 
+    def reserve_call(self) -> None:
+        """Reserve a call slot before dispatching (for TOCTOU-safe budget checks).
+
+        Called by :func:`checked_complete` before awaiting the provider call.
+        If the call fails, use :meth:`release_call` to undo the reservation.
+        """
+        self._calls += 1
+
+    def release_call(self) -> None:
+        """Release a reserved call slot (after a failed call).
+
+        Only call this after :meth:`reserve_call` if the provider call raised
+        an exception and did not complete successfully.
+        """
+        self._calls -= 1
+
     def record_without_call(self, response: LLMResponse) -> None:
         """Record token usage from a response without incrementing the call counter.
 

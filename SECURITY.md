@@ -38,7 +38,7 @@ ExecutionKit passes LLM-generated content to evaluators and tools. Treat all LLM
 - Store API keys in environment variables, not source code
 - The `Provider` class accepts `api_key=""` for keyless endpoints (e.g. local Ollama)
 - `Provider.__repr__` **masks** the API key (prints `'***'` when non-empty), so logging provider instances is safe
-- API keys can still surface in: environment variables if logged carelessly, exception messages that include raw request details before redaction kicks in, and user-written code that directly accesses `provider.api_key`
+- API keys may still appear in environment variable dumps, raw error messages before redaction, or user-created logs — ensure logging practices exclude credentials
 
 ### Prompt Injection
 

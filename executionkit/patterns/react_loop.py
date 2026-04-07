@@ -89,7 +89,7 @@ def _trim_messages(
     if max_messages < 1:
         raise ValueError(f"max_messages must be >= 1, got {max_messages}")
     if max_messages == 1:
-        return [messages[0]]
+        return [messages[0]] if messages else []
     if len(messages) <= max_messages:
         return messages
     return [messages[0], *messages[-(max_messages - 1) :]]

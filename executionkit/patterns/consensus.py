@@ -41,7 +41,7 @@ async def consensus(
     Args:
         provider: LLM provider to call.
         prompt: User prompt sent identically to every sample.
-        num_samples: Number of parallel completions to request.
+        num_samples: Number of parallel completions to request. Must be >= 1.
         strategy: ``"majority"`` (most common wins) or ``"unanimous"``
             (all must agree).  Accepts a :class:`VotingStrategy` enum or
             a plain string.
