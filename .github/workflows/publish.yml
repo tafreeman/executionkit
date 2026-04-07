@@ -34,9 +34,38 @@ jobs:
 
       - name: Tests with coverage
         run: pytest tests/ --cov=executionkit --cov-report=term-missing --cov-fail-under=80 -x -q
+jobs:
+  verify:
+    name: Verify release candidate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install verification tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install . pytest mypy bandit ruff
+
+      - name: Run lint
+        run: ruff check .
+
+      - name: Run tests
+        run: pytest
+
+      - name: Run type checks
+        run: mypy .
+
+      - name: Run security checks
+        run: bandit -r .
 
   build:
     name: Build distribution
+    needs: verify
     needs: verify
     runs-on: ubuntu-latest
     steps:
