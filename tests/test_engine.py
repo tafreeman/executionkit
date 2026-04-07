@@ -459,12 +459,12 @@ class TestConvergenceDetector:
     def test_convergence_reset_clears_stale_count(self) -> None:
         cd = ConvergenceDetector(delta_threshold=0.01, patience=3)
         # Build up stale_count to 2 (just below patience=3)
-        cd.should_stop(0.5)   # seed
+        cd.should_stop(0.5)  # seed
         cd.should_stop(0.505)  # stale_count=1
         cd.should_stop(0.505)  # stale_count=2
         cd.reset()
         # After reset, stale_count is 0 — need patience iters again to converge
-        cd.should_stop(0.5)    # seed again
+        cd.should_stop(0.5)  # seed again
         result = cd.should_stop(0.505)  # stale_count=1, not yet 3
         assert result is False
 

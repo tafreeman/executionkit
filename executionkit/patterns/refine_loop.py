@@ -210,9 +210,11 @@ async def refine_loop(
         value=best_text,
         score=best_score,
         cost=tracker.to_usage(),
-        metadata=MappingProxyType({
-            "iterations": iterations,
-            "converged": converged,
-            "score_history": score_history,
-        }),
+        metadata=MappingProxyType(
+            {
+                "iterations": iterations,
+                "converged": converged,
+                "score_history": score_history,
+            }
+        ),
     )

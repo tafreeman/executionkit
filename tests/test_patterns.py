@@ -857,9 +857,7 @@ async def test_react_loop_no_trim_when_none() -> None:
 
     tool_response = _make_tool_response("search", "tc1", {"query": "x"})
     final_response = _make_final_response("Done")
-    provider = MockProvider(
-        responses=[tool_response, tool_response, final_response]
-    )
+    provider = MockProvider(responses=[tool_response, tool_response, final_response])
 
     search_tool = Tool(
         name="search",
