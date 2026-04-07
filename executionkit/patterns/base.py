@@ -84,7 +84,7 @@ async def checked_complete(
             )
     # Reserve the call slot BEFORE yielding to the event loop (P0-3: TOCTOU fix).
     # If the HTTP call fails, the slot is released so it does not distort budget.
-    tracker._calls += 1
+    tracker.reserve_call()
     try:
         response = await with_retry(
             provider.complete,
@@ -93,7 +93,7 @@ async def checked_complete(
             **kwargs,
         )
     except Exception:
-        tracker._calls -= 1  # release reserved slot on failure
+        tracker.release_call()  # release reserved slot on failure
         raise
     tracker.record_without_call(response)
     return response
