@@ -10,7 +10,7 @@
 
 **Please do not open a public GitHub issue for security vulnerabilities.**
 
-To report a security vulnerability, use [GitHub's private security advisory feature](https://github.com/your-org/executionkit/security/advisories/new).
+To report a security vulnerability, use [GitHub's private security advisory feature](https://github.com/tafreeman/executionkit/security/advisories/new).
 
 Alternatively, email the maintainers directly. Include:
 - Description of the vulnerability
@@ -37,7 +37,7 @@ ExecutionKit passes LLM-generated content to evaluators and tools. Treat all LLM
 
 - Store API keys in environment variables, not source code
 - The `Provider` class accepts `api_key=""` for keyless endpoints (e.g. local Ollama)
-- `Provider.__repr__` masks API keys as `***` to prevent accidental exposure in logs
+- `Provider.__repr__` **masks** the API key (prints `'***'` when non-empty), so logging provider instances is safe
 - API keys may still appear in environment variable dumps, raw error messages before redaction, or user-created logs — ensure logging practices exclude credentials
 
 ### Prompt Injection

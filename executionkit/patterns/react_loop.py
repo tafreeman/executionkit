@@ -17,7 +17,7 @@ from executionkit.provider import (
 from executionkit.types import PatternResult, TokenUsage, Tool
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
 
 _JSON_SCHEMA_TYPE_MAP: dict[str, type | tuple[type, ...]] = {
     "string": str,
@@ -30,7 +30,7 @@ _JSON_SCHEMA_TYPE_MAP: dict[str, type | tuple[type, ...]] = {
 
 
 def _validate_tool_args(
-    parameters_schema: dict[str, Any], arguments: dict[str, Any]
+    parameters_schema: Mapping[str, Any], arguments: dict[str, Any]
 ) -> str | None:
     """Return None if valid, or an error string describing the problem."""
     props: dict[str, Any] = parameters_schema.get("properties", {})
@@ -79,11 +79,12 @@ def _trim_messages(
     Returns a new list; does not mutate the input.
 
     Args:
-        messages: The full message history.
+        messages: The full conversation history.
         max_messages: Maximum number of messages to keep. Must be >= 1.
+            A value of 1 returns only the first message.
 
     Raises:
-        ValueError: If max_messages < 1.
+        ValueError: If ``max_messages`` is less than 1.
     """
     if max_messages < 1:
         raise ValueError(f"max_messages must be >= 1, got {max_messages}")

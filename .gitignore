@@ -46,3 +46,6 @@ package-lock.json
 
 # Coverage artifacts
 coverage.json
+
+# Local review artifacts
+.full-review/

@@ -45,9 +45,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/your-org/executionkit"
-Issues = "https://github.com/your-org/executionkit/issues"
-Changelog = "https://github.com/your-org/executionkit/CHANGELOG.md"
+Homepage = "https://github.com/tafreeman/executionkit"
+Issues = "https://github.com/tafreeman/executionkit/issues"
+Changelog = "https://github.com/tafreeman/executionkit/CHANGELOG.md"
 
 [tool.hatch.version]
 path = "executionkit/__init__.py"
