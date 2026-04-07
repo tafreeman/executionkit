@@ -12,7 +12,7 @@ from executionkit.engine.parallel import gather_strict
 from executionkit.engine.retry import RetryConfig  # noqa: TC001
 from executionkit.patterns.base import checked_complete
 from executionkit.provider import ConsensusFailedError, LLMProvider
-from executionkit.types import PatternResult, VotingStrategy
+from executionkit.types import PatternResult, TokenUsage, VotingStrategy
 
 
 def _normalize(text: str) -> str:
@@ -30,6 +30,7 @@ async def consensus(
     max_tokens: int = 4096,
     max_concurrency: int = 5,
     retry: RetryConfig | None = None,
+    max_cost: TokenUsage | None = None,
 ) -> PatternResult[str]:
     """Run parallel LLM samples and aggregate via voting.
 
@@ -39,7 +40,7 @@ async def consensus(
     Args:
         provider: LLM provider to call.
         prompt: User prompt sent identically to every sample.
-        num_samples: Number of parallel completions to request.
+        num_samples: Number of parallel completions to request. Must be >= 1.
         strategy: ``"majority"`` (most common wins) or ``"unanimous"``
             (all must agree).  Accepts a :class:`VotingStrategy` enum or
             a plain string.
@@ -47,6 +48,7 @@ async def consensus(
         max_tokens: Maximum tokens per completion.
         max_concurrency: Semaphore limit for parallel calls.
         retry: Optional retry configuration per call.
+        max_cost: Optional token/call budget.
 
     Returns:
         A :class:`PatternResult` whose ``value`` is the winning response,
@@ -56,12 +58,15 @@ async def consensus(
     Raises:
         ConsensusFailedError: When ``strategy="unanimous"`` and responses
             are not all identical.
+        ValueError: If num_samples < 1.
 
     Metadata:
         agreement_ratio (float): Fraction of samples matching the winner (0.0-1.0).
         unique_responses (int): Number of distinct response strings observed.
         tie_count (int): Number of responses that tied for the top vote count.
     """
+    if num_samples < 1:
+        raise ValueError(f"num_samples must be >= 1, got {num_samples}")
     if isinstance(strategy, str):
         strategy = VotingStrategy(strategy)
 
@@ -73,7 +78,7 @@ async def consensus(
             provider,
             messages,
             tracker,
-            budget=None,
+            budget=max_cost,
             retry=retry,
             temperature=temperature,
             max_tokens=max_tokens,

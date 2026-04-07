@@ -77,7 +77,18 @@ def _trim_messages(
 
     Always preserves the first message (the original user prompt).
     Returns a new list; does not mutate the input.
+
+    Args:
+        messages: The full message history.
+        max_messages: Maximum number of messages to keep. Must be >= 1.
+
+    Raises:
+        ValueError: If max_messages < 1.
     """
+    if max_messages < 1:
+        raise ValueError(f"max_messages must be >= 1, got {max_messages}")
+    if max_messages == 1:
+        return [messages[0]] if messages else []
     if len(messages) <= max_messages:
         return messages
     return [messages[0], *messages[-(max_messages - 1) :]]
