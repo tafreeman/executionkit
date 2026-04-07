@@ -226,7 +226,7 @@ class TestConsensus:
         assert result.metadata["unique_responses"] == 1
 
     async def test_max_cost_budget_exhausted_after_first_sample(self) -> None:
-        """max_cost=TokenUsage(llm_calls=1) raises BudgetExhaustedError after first call.
+        """Budget cap of one call raises BudgetExhaustedError after first sample.
 
         gather_strict uses TaskGroup which may surface multiple simultaneous
         BudgetExhaustedErrors as an ExceptionGroup when tasks 2 and 3 both

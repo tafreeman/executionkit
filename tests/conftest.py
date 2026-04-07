@@ -45,10 +45,12 @@ def make_llm_response():
             content=content,
             finish_reason=finish_reason,
             tool_calls=tuple(tool_calls or []),
-            usage=MappingProxyType({
-                "prompt_tokens": input_tokens,
-                "completion_tokens": output_tokens,
-            }),
+            usage=MappingProxyType(
+                {
+                    "prompt_tokens": input_tokens,
+                    "completion_tokens": output_tokens,
+                }
+            ),
         )
 
     return _make
