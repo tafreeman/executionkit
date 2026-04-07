@@ -110,9 +110,11 @@ async def consensus(
         value=winner,
         score=agreement_ratio,
         cost=tracker.to_usage(),
-        metadata=MappingProxyType({
-            "agreement_ratio": agreement_ratio,
-            "unique_responses": len(counter),
-            "tie_count": tie_count,
-        }),
+        metadata=MappingProxyType(
+            {
+                "agreement_ratio": agreement_ratio,
+                "unique_responses": len(counter),
+                "tie_count": tie_count,
+            }
+        ),
     )

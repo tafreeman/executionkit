@@ -466,9 +466,7 @@ async def test_post_httpx_maps_429_to_rate_limit_error() -> None:
     object.__setattr__(provider, "_client", mock_client)
 
     with pytest.raises(RateLimitError) as exc_info:
-        await provider._post_httpx(
-            "https://example.com/v1/chat/completions", b"{}", {}
-        )
+        await provider._post_httpx("https://example.com/v1/chat/completions", b"{}", {})
     assert exc_info.value.retry_after == 3.0
 
 
@@ -501,9 +499,7 @@ async def test_post_httpx_maps_401_to_permanent_error() -> None:
     object.__setattr__(provider, "_client", mock_client)
 
     with pytest.raises(PermanentError):
-        await provider._post_httpx(
-            "https://example.com/v1/chat/completions", b"{}", {}
-        )
+        await provider._post_httpx("https://example.com/v1/chat/completions", b"{}", {})
 
 
 @pytest.mark.asyncio
@@ -535,9 +531,7 @@ async def test_post_httpx_maps_500_to_provider_error() -> None:
     object.__setattr__(provider, "_client", mock_client)
 
     with pytest.raises(ProviderError, match="internal error"):
-        await provider._post_httpx(
-            "https://example.com/v1/chat/completions", b"{}", {}
-        )
+        await provider._post_httpx("https://example.com/v1/chat/completions", b"{}", {})
 
 
 @pytest.mark.asyncio

@@ -315,9 +315,7 @@ class Provider:
             except Exception:
                 raw = {}
             if status == 429:
-                retry_after = float(
-                    exc.response.headers.get("retry-after", "1")
-                )
+                retry_after = float(exc.response.headers.get("retry-after", "1"))
                 raise RateLimitError(
                     "Rate limited (HTTP 429)",
                     retry_after=retry_after,
@@ -364,9 +362,7 @@ class Provider:
                         retry_after=retry_after,
                     ) from exc
                 if status in {401, 403, 404}:
-                    raise PermanentError(
-                        _format_http_error(status, raw)
-                    ) from exc
+                    raise PermanentError(_format_http_error(status, raw)) from exc
                 raise ProviderError(_format_http_error(status, raw)) from exc
 
         return await asyncio.to_thread(_sync)
@@ -441,11 +437,13 @@ def _parse_tool_calls(raw_tool_calls: Any) -> list[ToolCall]:
             raise ProviderError("tool_call.function.name was missing")
         arguments = _parse_tool_arguments(function.get("arguments"))
         tool_id = raw_tc.get("id")
-        parsed.append(ToolCall(
-            id=tool_id if isinstance(tool_id, str) else "",
-            name=name,
-            arguments=arguments,
-        ))
+        parsed.append(
+            ToolCall(
+                id=tool_id if isinstance(tool_id, str) else "",
+                name=name,
+                arguments=arguments,
+            )
+        )
     return parsed
 
 
