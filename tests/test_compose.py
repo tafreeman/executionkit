@@ -9,7 +9,7 @@ import pytest
 
 from executionkit._mock import MockProvider
 from executionkit.compose import _subtract, pipe
-from executionkit.provider import BudgetExhaustedError, LLMResponse
+from executionkit.provider import LLMResponse
 from executionkit.types import PatternResult, TokenUsage
 
 # ---------------------------------------------------------------------------
@@ -22,10 +22,12 @@ def _make_response(
 ) -> LLMResponse:
     return LLMResponse(
         content=content,
-        usage=MappingProxyType({
-            "prompt_tokens": input_tokens,
-            "completion_tokens": output_tokens,
-        }),
+        usage=MappingProxyType(
+            {
+                "prompt_tokens": input_tokens,
+                "completion_tokens": output_tokens,
+            }
+        ),
     )
 
 
@@ -186,7 +188,7 @@ async def test_pipe_without_max_budget_passes_no_max_cost() -> None:
 
 @pytest.mark.asyncio
 async def test_pipe_budget_exhausted_uses_sentinel() -> None:
-    """Exhausted budget fields are forwarded as -1, not 0, to avoid 'unlimited' misread."""
+    """Forward exhausted budget fields as -1 (not 0) to avoid 'unlimited' misread."""
     _budget_received.clear()
     provider = MockProvider(responses=[])
     # Very tight budget — first step will consume more than it

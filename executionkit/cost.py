@@ -53,19 +53,6 @@ class CostTracker:
         self._input += response.input_tokens
         self._output += response.output_tokens
 
-    def reserve_call(self) -> None:
-        """Reserve one call slot before an async LLM dispatch.
-
-        Pre-increments the call counter to prevent TOCTOU races when
-        concurrent coroutines check the budget. If the dispatch fails,
-        call :meth:`release_call` to restore the slot.
-        """
-        self._calls += 1
-
-    def release_call(self) -> None:
-        """Release a previously reserved call slot on dispatch failure."""
-        self._calls -= 1
-
     @property
     def call_count(self) -> int:
         """Number of LLM calls recorded so far."""

@@ -25,10 +25,12 @@ def _make_response(
 ) -> LLMResponse:
     return LLMResponse(
         content=content,
-        usage=MappingProxyType({
-            "prompt_tokens": input_tokens,
-            "completion_tokens": output_tokens,
-        }),
+        usage=MappingProxyType(
+            {
+                "prompt_tokens": input_tokens,
+                "completion_tokens": output_tokens,
+            }
+        ),
     )
 
 
