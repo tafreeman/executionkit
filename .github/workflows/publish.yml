@@ -23,11 +23,14 @@ jobs:
       - name: Lint (ruff)
         run: ruff check executionkit/ tests/
 
+      - name: Format check (ruff)
+        run: ruff format --check executionkit/ tests/
+
       - name: Type check (mypy)
         run: mypy --strict executionkit/
 
       - name: Run tests
-        run: pytest tests/ --cov=executionkit --cov-fail-under=80 -q
+        run: pytest tests/ --cov=executionkit --cov-report=term-missing --cov-fail-under=80 -x -q
 
       - name: Security scan (bandit)
         run: pip install bandit[toml] && bandit -r executionkit/ -c pyproject.toml
