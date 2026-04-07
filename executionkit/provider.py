@@ -385,7 +385,7 @@ class Provider:
             content=_extract_content(message.get("content")),
             tool_calls=tuple(_parse_tool_calls(message.get("tool_calls"))),
             finish_reason=str(choice.get("finish_reason", "stop")),
-            usage=MappingProxyType(usage),
+            usage=MappingProxyType(dict(usage)),
             raw=data,
         )
 

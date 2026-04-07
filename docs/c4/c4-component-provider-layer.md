@@ -86,9 +86,9 @@ class Provider:
 @dataclass(frozen=True)
 class LLMResponse:
     content: str
-    tool_calls: list[ToolCall]
+    tool_calls: tuple[ToolCall, ...]
     finish_reason: str
-    usage: dict[str, Any]
+    usage: MappingProxyType[str, Any]
     raw: Any
 
     @property
@@ -108,7 +108,7 @@ class PatternResult(Generic[T]):
     value: T
     score: float | None
     cost: TokenUsage
-    metadata: dict[str, Any]
+    metadata: MappingProxyType[str, Any]
 
 # Token budget
 @dataclass(frozen=True)
