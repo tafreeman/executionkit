@@ -69,7 +69,7 @@ components:
           $ref: "#/components/schemas/TokenUsage"
           description: Total token consumption across all LLM calls in this pattern run
         metadata:
-          type: "dict[str, Any]"
+          type: "MappingProxyType[str, Any]"
           description: Pattern-specific extra data (e.g. agreement_ratio, iterations, rounds)
 
     LLMResponse:
@@ -83,14 +83,14 @@ components:
           type: str
           description: Text content of the completion
         tool_calls:
-          type: "list[ToolCall]"
-          description: Parsed tool/function call invocations (empty list if none)
+          type: "tuple[ToolCall, ...]"
+          description: Parsed tool/function call invocations (empty tuple if none)
         finish_reason:
           type: str
           description: Provider finish reason (e.g. stop, tool_calls, length)
         usage:
-          type: "dict[str, Any]"
-          description: Raw usage dict from the provider response
+          type: "MappingProxyType[str, Any]"
+          description: Immutable view of the raw usage mapping from the provider response
         raw:
           type: Any
           description: Full unmodified provider response payload
