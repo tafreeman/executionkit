@@ -6,7 +6,7 @@ focused and test-first.
 ## Dev Setup
 
 ```bash
-git clone https://github.com/your-org/executionkit.git
+git clone https://github.com/tafreeman/executionkit.git
 cd executionkit
 python -m venv .venv
 source .venv/bin/activate      # Windows: .venv\Scripts\activate

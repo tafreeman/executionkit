@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import MappingProxyType
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -24,7 +25,10 @@ def _make_response(
 ) -> LLMResponse:
     return LLMResponse(
         content=content,
-        usage={"prompt_tokens": input_tokens, "completion_tokens": output_tokens},
+        usage=MappingProxyType({
+            "prompt_tokens": input_tokens,
+            "completion_tokens": output_tokens,
+        }),
     )
 
 

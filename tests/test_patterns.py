@@ -8,6 +8,7 @@ are written against the BUILD_SPEC signatures and will pass once implemented.
 from __future__ import annotations
 
 import asyncio
+from types import MappingProxyType
 from typing import Any
 
 import pytest
@@ -205,6 +206,55 @@ class TestConsensus:
         assert result.metadata["tie_count"] == 5
         # agreement_ratio = 1/5 since winner got only 1 of 5 votes
         assert result.metadata["agreement_ratio"] == pytest.approx(1 / 5)
+
+    async def test_num_samples_zero_raises_value_error(self) -> None:
+        """num_samples=0 must raise ValueError before any LLM call."""
+        from executionkit.patterns.consensus import consensus
+
+        provider = MockProvider(responses=["irrelevant"])
+        with pytest.raises(ValueError, match="num_samples must be >= 1"):
+            await consensus(provider, "q", num_samples=0)
+
+    async def test_num_samples_one_returns_single_sample(self) -> None:
+        """num_samples=1 with majority strategy returns that one sample."""
+        from executionkit.patterns.consensus import consensus
+
+        provider = MockProvider(responses=["only_answer"])
+        result = await consensus(provider, "q", num_samples=1, strategy="majority")
+        assert result.value == "only_answer"
+        assert result.metadata["agreement_ratio"] == pytest.approx(1.0)
+        assert result.metadata["unique_responses"] == 1
+
+    async def test_max_cost_budget_exhausted_after_first_sample(self) -> None:
+        """max_cost=TokenUsage(llm_calls=1) raises BudgetExhaustedError after first call.
+
+        gather_strict uses TaskGroup which may surface multiple simultaneous
+        BudgetExhaustedErrors as an ExceptionGroup when tasks 2 and 3 both
+        check the budget after task 1 exhausts it.
+        """
+        from executionkit.patterns.consensus import consensus
+        from executionkit.provider import BudgetExhaustedError
+
+        provider = MockProvider(responses=["a", "b", "c"])
+        # Accept either a bare BudgetExhaustedError (single failure unwrapped
+        # by gather_strict) or an ExceptionGroup whose members are all
+        # BudgetExhaustedError (multiple simultaneous failures).
+        try:
+            await consensus(
+                provider,
+                "q",
+                num_samples=3,
+                max_cost=TokenUsage(llm_calls=1),
+                max_concurrency=1,
+            )
+        except BudgetExhaustedError:
+            pass  # single exception unwrapped — expected
+        except ExceptionGroup as eg:
+            assert all(
+                isinstance(exc, BudgetExhaustedError) for exc in eg.exceptions
+            ), f"Unexpected exception types in group: {eg.exceptions}"
+        else:
+            pytest.fail("Expected BudgetExhaustedError but no exception was raised")
 
 
 # ---------------------------------------------------------------------------
@@ -417,8 +467,8 @@ def _make_tool_response(
     return LLMResponse(
         content="",
         finish_reason="tool_calls",
-        tool_calls=[ToolCall(id=tool_id, name=tool_name, arguments=args)],
-        usage={"prompt_tokens": 10, "completion_tokens": 5},
+        tool_calls=(ToolCall(id=tool_id, name=tool_name, arguments=args),),
+        usage=MappingProxyType({"prompt_tokens": 10, "completion_tokens": 5}),
     )
 
 
@@ -427,8 +477,8 @@ def _make_final_response(content: str) -> LLMResponse:
     return LLMResponse(
         content=content,
         finish_reason="stop",
-        tool_calls=[],
-        usage={"prompt_tokens": 10, "completion_tokens": 20},
+        tool_calls=(),
+        usage=MappingProxyType({"prompt_tokens": 10, "completion_tokens": 20}),
     )
 
 
@@ -747,9 +797,9 @@ async def test_react_loop_rejects_plain_llm_provider() -> None:
         async def complete(self, messages: list, **kwargs: object) -> LLMResponse:
             return LLMResponse(
                 content="hi",
-                usage={"prompt_tokens": 1, "completion_tokens": 1},
+                usage=MappingProxyType({"prompt_tokens": 1, "completion_tokens": 1}),
                 finish_reason="stop",
-                tool_calls=[],
+                tool_calls=(),
             )
 
     provider = PlainProvider()
@@ -871,6 +921,80 @@ async def test_react_loop_no_trim_when_none() -> None:
     # With 2 tool rounds, the final call should have > 3 messages (not trimmed)
     final_call = provider.calls[-1]
     assert len(final_call.messages) > 3, "Messages grow unbounded when trim disabled"
+
+
+# ---------------------------------------------------------------------------
+# _trim_messages unit tests
+# ---------------------------------------------------------------------------
+
+
+class TestTrimMessages:
+    """Unit tests for the _trim_messages helper."""
+
+    def _msgs(self, n: int) -> list[dict[str, Any]]:
+        """Return a list of n distinct message dicts."""
+        return [{"role": "user", "content": f"msg{i}"} for i in range(n)]
+
+    def test_no_trim_when_within_limit(self) -> None:
+        from executionkit.patterns.react_loop import _trim_messages
+
+        msgs = self._msgs(3)
+        result = _trim_messages(msgs, 5)
+        assert result is msgs  # same object — no copy needed
+
+    def test_trim_keeps_first_and_recent(self) -> None:
+        from executionkit.patterns.react_loop import _trim_messages
+
+        msgs = self._msgs(6)
+        result = _trim_messages(msgs, 3)
+        assert len(result) == 3
+        assert result[0] is msgs[0]
+        assert result[1] is msgs[4]
+        assert result[2] is msgs[5]
+
+    def test_max_messages_equal_to_length_no_trim(self) -> None:
+        from executionkit.patterns.react_loop import _trim_messages
+
+        msgs = self._msgs(4)
+        result = _trim_messages(msgs, 4)
+        assert result is msgs
+
+    def test_max_messages_one_returns_only_first(self) -> None:
+        from executionkit.patterns.react_loop import _trim_messages
+
+        msgs = self._msgs(5)
+        result = _trim_messages(msgs, 1)
+        assert result == [msgs[0]]
+        assert len(result) == 1
+
+    def test_max_messages_one_single_element_list(self) -> None:
+        from executionkit.patterns.react_loop import _trim_messages
+
+        msgs = self._msgs(1)
+        result = _trim_messages(msgs, 1)
+        assert result == [msgs[0]]
+
+    def test_max_messages_zero_raises_value_error(self) -> None:
+        from executionkit.patterns.react_loop import _trim_messages
+
+        msgs = self._msgs(3)
+        with pytest.raises(ValueError, match="max_messages must be >= 1"):
+            _trim_messages(msgs, 0)
+
+    def test_negative_max_messages_raises_value_error(self) -> None:
+        from executionkit.patterns.react_loop import _trim_messages
+
+        msgs = self._msgs(3)
+        with pytest.raises(ValueError, match="max_messages must be >= 1"):
+            _trim_messages(msgs, -5)
+
+    def test_does_not_mutate_input(self) -> None:
+        from executionkit.patterns.react_loop import _trim_messages
+
+        msgs = self._msgs(6)
+        original_len = len(msgs)
+        _trim_messages(msgs, 3)
+        assert len(msgs) == original_len
 
 
 # ---------------------------------------------------------------------------
@@ -1051,7 +1175,7 @@ async def test_note_truncation_emits_warning() -> None:
 
     response = LLMResponse(
         content="hi",
-        usage={"prompt_tokens": 1, "completion_tokens": 1},
+        usage=MappingProxyType({"prompt_tokens": 1, "completion_tokens": 1}),
         finish_reason="length",
     )
     meta: dict[str, object] = {}

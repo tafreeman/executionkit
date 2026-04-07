@@ -6,7 +6,7 @@ and memory efficiency.
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from types import MappingProxyType
@@ -72,15 +72,23 @@ class PatternResult(Generic[T]):
 class Tool:
     """Describes a tool available for LLM tool-calling.
 
-    ``parameters`` is a JSON Schema dict describing the function arguments.
+    ``parameters`` is a JSON Schema mapping describing the function arguments.
+    Automatically wrapped in a read-only proxy.
     ``execute`` is the async callable invoked when the LLM requests this tool.
     """
 
     name: str
     description: str
-    parameters: dict[str, Any]
+    parameters: Mapping[str, Any]
     execute: Callable[..., Awaitable[str]]
     timeout: float = 30.0
+
+    def __post_init__(self) -> None:
+        """Wrap ``parameters`` in a read-only proxy to enforce immutability."""
+        if not isinstance(self.parameters, MappingProxyType):
+            object.__setattr__(
+                self, "parameters", MappingProxyType(dict(self.parameters))
+            )
 
     def to_schema(self) -> dict[str, Any]:
         """Return the OpenAI-compatible function tool schema."""
@@ -89,7 +97,7 @@ class Tool:
             "function": {
                 "name": self.name,
                 "description": self.description,
-                "parameters": self.parameters,
+                "parameters": dict(self.parameters),
             },
         }
 

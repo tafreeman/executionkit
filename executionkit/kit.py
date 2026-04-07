@@ -66,7 +66,7 @@ class Kit:
 
         All keyword arguments are forwarded unchanged to :func:`react_loop`.
         The provider must satisfy :class:`~executionkit.provider.ToolCallingProvider`;
-        react_loop will raise :exc:`~executionkit.provider.PatternError` if it does not.
+        react_loop will raise :exc:`TypeError` if it does not.
         """
         result = await react_loop(self.provider, prompt, tools, **kwargs)  # type: ignore[arg-type]
         self._record(result.cost)
