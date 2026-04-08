@@ -4,6 +4,8 @@ Discovery date: 2026-04-08
 
 Detection method: searched for build manifests (pyproject.toml, package.json, go.mod, Cargo.toml) and language-specific entry points; reviewed top-level folders for independent stacks or test suites.
 
+Re-verified: 2026-04-08 — no new build manifests or independent stacks identified during documentation refresh.
+
 ## Included
 - **executionkit** (Python package) — Root `pyproject.toml`, shared dev dependencies, and a single pytest suite under `tests/` confirm one cohesive library.
 

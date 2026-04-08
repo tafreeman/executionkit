@@ -449,6 +449,8 @@ supported.
 - API reference: `docs/api-reference.md`
 - C4 diagrams and component guides: `docs/c4/`
 - Agent configuration overview: `AGENTS.md`
+- Deep review playbooks: `.full-review/README.md`
+- Agent coordination and drift tracking: `_analysis/CLAIMS.md`, `_analysis/DRIFT_REPORT.md`, `_analysis/SUBPROJECT_LIST.md`
 - Contributor workflow and security policy: `CONTRIBUTING.md`, `SECURITY.md`
 
 ## Development
