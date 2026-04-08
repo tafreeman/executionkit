@@ -1,0 +1,5 @@
+# Claims Ledger
+
+- 2026-04-08T02:20Z — codex — claiming creation of _analysis/{CLAIMS.md,SUBPROJECT_LIST.md,DRIFT_REPORT.md} for documentation refresh tracking.
+- 2026-04-08T02:20Z — codex — claiming agent-config documentation updates (.claude/README.md, .serena/README.md, .full-review/README.md) and repo-level AGENTS.md.
+- 2026-04-08T02:20Z — codex — claiming README.md adjustments for documentation navigation and accuracy.
