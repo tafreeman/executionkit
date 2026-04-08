@@ -5,7 +5,7 @@ This repository includes several agent-specific configuration directories. Use t
 ## Assets and Canonical Roles
 - `.claude/` — Anthropic/Claude desktop settings file. Source of truth for the command allowlist that Claude loads automatically. See `.claude/README.md` for layout and update steps.
 - `.serena/` — Serena project configuration for language servers and editor behaviour. See `.serena/README.md`.
-- `.full-review/` — Human-readable playbooks and templates for deep review passes (quality, security, performance, documentation). See `.full-review/README.md`.
+- `.full-review/` — Human-readable playbooks and templates for deep review passes (quality, security, performance, documentation). See `.full-review/README.md` for layout and usage.
 
 ## Repo-Wide Conventions for All Agents
 - Python 3.11+; install with `pip install -e ".[dev]"`.
@@ -14,5 +14,6 @@ This repository includes several agent-specific configuration directories. Use t
 - Credentials: never commit secrets; examples must read keys from environment variables.
 
 ## Coordination and Drift
-- Known stale allowlist entries (e.g., `src/executionkit` paths) are recorded in `_analysis/DRIFT_REPORT.md`. Update the machine-loaded config alongside this guide when layout or workflows change.
+- Claim work before editing by appending `_analysis/CLAIMS.md`. Record any documentation/code drift in `_analysis/DRIFT_REPORT.md`.
+- The Claude allowlist in `.claude/settings.local.json` uses the `executionkit/` root paths and the standard lint/type/test commands. Update it when workflows change; avoid adding machine-specific paths.
 - Add new agent rules to the directory that loads them, then cross-link from here instead of duplicating text.
