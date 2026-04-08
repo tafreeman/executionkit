@@ -443,16 +443,28 @@ workloads or when input may contain adversarial content.
 All completions are batch requests. Streaming responses are not currently
 supported.
 
+## Documentation
+
+- Architecture and invariants: `docs/architecture.md`
+- API reference: `docs/api-reference.md`
+- C4 diagrams and component guides: `docs/c4/`
+- Agent configuration overview: `AGENTS.md`
+- Contributor workflow and security policy: `CONTRIBUTING.md`, `SECURITY.md`
+
 ## Development
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, code style, and PR process.
 
-The test suite has 300 tests at 83% coverage (enforced at 80% by CI).
-Run tests with:
+Run checks locally with:
 
 ```bash
-pytest
+ruff check .
+ruff format . --check
+mypy --strict executionkit/
+pytest --cov=executionkit --cov-fail-under=80
 ```
+
+The test suite currently has 340 tests at ~83% coverage (enforced at 80% by CI).
 
 ## License
 
