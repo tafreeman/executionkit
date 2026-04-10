@@ -330,11 +330,8 @@ class TestGatherResilient:
         assert results == [0, 1, 2, 3, 4]
 
     async def test_invalid_max_concurrency_raises(self) -> None:
-        async def task() -> int:
-            return 1
-
         with pytest.raises(ValueError, match="max_concurrency must be >= 1"):
-            await gather_resilient([task()], max_concurrency=0)
+            await gather_resilient([], max_concurrency=0)
 
 
 # ---------------------------------------------------------------------------
@@ -396,11 +393,8 @@ class TestGatherStrict:
         assert results == [0, 1, 2, 3, 4]
 
     async def test_invalid_max_concurrency_raises(self) -> None:
-        async def task() -> int:
-            return 1
-
         with pytest.raises(ValueError, match="max_concurrency must be >= 1"):
-            await gather_strict([task()], max_concurrency=0)
+            await gather_strict([], max_concurrency=0)
 
 
 # ---------------------------------------------------------------------------
@@ -410,7 +404,7 @@ class TestGatherStrict:
 
 class TestConvergenceDetector:
     def test_invalid_delta_threshold_raises(self) -> None:
-        with pytest.raises(ValueError, match="delta_threshold must be >= 0.0"):
+        with pytest.raises(ValueError, match=r"delta_threshold must be >= 0\.0"):
             ConvergenceDetector(delta_threshold=-0.1)
 
     def test_invalid_patience_raises(self) -> None:

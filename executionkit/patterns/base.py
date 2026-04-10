@@ -101,6 +101,7 @@ async def checked_complete(
                 cost=current,
                 metadata={"budget": budget},
             )
+
     async def _before_attempt(attempt: int) -> None:
         if attempt > 1 and budget is not None:
             current = tracker.to_usage()

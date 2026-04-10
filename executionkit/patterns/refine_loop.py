@@ -111,9 +111,7 @@ async def refine_loop(
     if patience < 1:
         raise ValueError(f"patience must be >= 1, got {patience}")
     if delta_threshold < 0.0:
-        raise ValueError(
-            f"delta_threshold must be >= 0.0, got {delta_threshold}"
-        )
+        raise ValueError(f"delta_threshold must be >= 0.0, got {delta_threshold}")
     if max_tokens < 1:
         raise ValueError(f"max_tokens must be >= 1, got {max_tokens}")
     if max_eval_chars < 1:
