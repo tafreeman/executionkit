@@ -85,6 +85,9 @@ async def with_retry(
         except Exception as exc:
             if not config.should_retry(exc) or attempt == config.max_retries:
                 raise
-            await asyncio.sleep(config.get_delay(attempt))
+            delay = config.get_delay(attempt)
+            if isinstance(exc, RateLimitError):
+                delay = max(delay, exc.retry_after or 0.0)
+            await asyncio.sleep(delay)
 
     raise RuntimeError("unreachable")  # pragma: no cover

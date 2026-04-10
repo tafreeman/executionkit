@@ -1,0 +1,53 @@
+site_name: ExecutionKit
+site_description: Composable LLM reasoning patterns with budget-aware execution
+repo_url: https://github.com/tafreeman/executionkit
+repo_name: tafreeman/executionkit
+
+theme:
+  name: material
+  palette:
+    - scheme: slate
+      primary: amber
+      accent: amber
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    - scheme: default
+      primary: amber
+      accent: amber
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.highlight
+    - content.code.copy
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            show_source: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Quick Start: quick-start.md
+    - Custom Providers: custom-providers.md
+  - Patterns:
+    - consensus: patterns/consensus.md
+    - refine_loop: patterns/refine_loop.md
+    - react_loop: patterns/react_loop.md
+    - pipe: patterns/pipe.md
+  - Reference:
+    - API Reference: api-reference.md
+    - Architecture: architecture.md
+  - Development:
+    - Contributing: contributing.md
+    - Security: security.md
+    - Changelog: changelog.md
