@@ -1,5 +1,9 @@
 # ExecutionKit v0.1 — Build Specification
 
+> Historical build artifact for the original v0.1 scope. Current code in
+> `/home/runner/work/executionkit/executionkit/executionkit/` is authoritative
+> when this document conflicts with the implementation.
+
 Single source of truth for building. Consolidates PLAN_SIMPLE.md + FINAL_VERDICT.md + all iteration fixes.
 
 **Start here. Don't read anything else until you need historical context (see `planning/`).**
@@ -59,7 +63,7 @@ Three creep zones to reject at all times:
 - TraceEntry + ProgressCallback (observability)
 - StreamingProvider
 - OpenTelemetry
-- mkdocs documentation site
+- Astro/MkDocs documentation unification work
 
 ---
 
@@ -88,7 +92,7 @@ groq     = Provider("https://api.groq.com/openai/v1", api_key=GROQ_KEY, model="l
 
 ## The Provider: URL + API Key + JSON
 
-Core insight: almost every LLM provider speaks OpenAI-compatible `/chat/completions`. One class, stdlib `urllib` + `asyncio.to_thread`, zero pip dependencies beyond pydantic.
+Core insight: almost every LLM provider speaks OpenAI-compatible `/chat/completions`. One class, stdlib `urllib` + optional `httpx`, zero required runtime dependencies.
 
 ```python
 @dataclass
@@ -177,7 +181,7 @@ class Provider:
 ## Package Structure
 
 ```
-src/executionkit/
+executionkit/
   __init__.py             # Public exports + sync wrappers
   py.typed
   provider.py             # Provider class + LLMResponse + ToolCall + errors
@@ -202,7 +206,7 @@ tests/
 examples/
 ```
 
-**Dependencies:** `pydantic>=2.0,<3` only. Zero SDK deps.
+**Dependencies:** none required at runtime. `httpx` is optional for pooled HTTP.
 
 ---
 

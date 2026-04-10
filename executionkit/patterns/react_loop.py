@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from itertools import chain
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
@@ -71,8 +72,33 @@ def _truncate(text: str, max_chars: int) -> str:
     """Truncate text to at most ``max_chars`` chars, appending a marker if trimmed."""
     if len(text) <= max_chars:
         return text
+    if max_chars <= len(_TRUNCATION_MARKER):
+        return _TRUNCATION_MARKER[:max_chars]
     keep = max_chars - len(_TRUNCATION_MARKER)
     return text[:keep] + _TRUNCATION_MARKER
+
+
+def _message_blocks(messages: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+    """Group conversation history into trim-safe blocks.
+
+    Assistant tool-call messages and their following tool results are kept in
+    the same block so history trimming never splits a request/result pair.
+    """
+    blocks: list[list[dict[str, Any]]] = []
+    index = 1
+    while index < len(messages):
+        message = messages[index]
+        if message.get("role") == "assistant" and message.get("tool_calls"):
+            block = [message]
+            index += 1
+            while index < len(messages) and messages[index].get("role") == "tool":
+                block.append(messages[index])
+                index += 1
+            blocks.append(block)
+            continue
+        blocks.append([message])
+        index += 1
+    return blocks
 
 
 def _trim_messages(
@@ -97,7 +123,19 @@ def _trim_messages(
         return [messages[0]] if messages else []
     if len(messages) <= max_messages:
         return messages
-    return [messages[0], *messages[-(max_messages - 1) :]]
+
+    remaining = max_messages - 1
+    selected_blocks: list[list[dict[str, Any]]] = []
+    used = 0
+    for block in reversed(_message_blocks(messages)):
+        block_len = len(block)
+        if used + block_len > remaining:
+            break
+        selected_blocks.append(block)
+        used += block_len
+
+    tail = list(chain.from_iterable(reversed(selected_blocks)))
+    return [messages[0], *tail]
 
 
 async def react_loop(
@@ -159,6 +197,20 @@ async def react_loop(
         raise TypeError(
             "react_loop() requires a ToolCallingProvider. "
             "Ensure the provider has supports_tools = True."
+        )
+    if max_rounds < 1:
+        raise ValueError(f"max_rounds must be >= 1, got {max_rounds}")
+    if max_observation_chars < 1:
+        raise ValueError(
+            f"max_observation_chars must be >= 1, got {max_observation_chars}"
+        )
+    if tool_timeout is not None and tool_timeout <= 0:
+        raise ValueError(f"tool_timeout must be > 0, got {tool_timeout}")
+    if max_tokens < 1:
+        raise ValueError(f"max_tokens must be >= 1, got {max_tokens}")
+    if max_history_messages is not None and max_history_messages < 1:
+        raise ValueError(
+            f"max_history_messages must be >= 1, got {max_history_messages}"
         )
     tracker = CostTracker()
     metadata: dict[str, Any] = {

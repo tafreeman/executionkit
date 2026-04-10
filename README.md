@@ -35,7 +35,7 @@ groq     = Provider("https://api.groq.com/openai/v1", api_key=GROQ_KEY, model="l
 
 ## Features
 
-- Composable reasoning patterns: consensus, refine_loop, react_loop
+- Composable reasoning patterns: consensus, refine_loop, react_loop, structured
 - Budget-aware execution with per-call cost tracking
 - Works with any OpenAI-compatible endpoint — zero config change
 - Zero runtime dependencies (stdlib only; httpx optional for connection pooling)
@@ -130,6 +130,19 @@ print(result.metadata["tool_calls_made"])         # 1
 > **Security note:** Never use Python's `eval()` with untrusted LLM output. The
 > example above uses a safe AST-based evaluator. See `examples/react_tool_use.py`
 > for the full implementation.
+
+### Structured output
+
+```python
+from executionkit import structured
+
+result = await structured(
+    provider,
+    "Return a JSON object with keys 'summary' and 'confidence'.",
+)
+print(result.value["summary"])
+print(result.metadata["parse_attempts"])
+```
 
 ## Provider Setup
 

@@ -101,19 +101,30 @@ async def checked_complete(
                 cost=current,
                 metadata={"budget": budget},
             )
-    # Reserve the call slot BEFORE yielding to the event loop (P0-3: TOCTOU fix).
-    # If the HTTP call fails, the slot is released so it does not distort budget.
-    tracker.reserve_call()
-    try:
-        response = await with_retry(
-            provider.complete,
-            retry or DEFAULT_RETRY,
-            messages,
-            **kwargs,
-        )
-    except Exception:
-        tracker.release_call()  # release reserved slot on failure
-        raise
+    async def _before_attempt(attempt: int) -> None:
+        if attempt > 1 and budget is not None:
+            current = tracker.to_usage()
+            if budget.llm_calls == -1:
+                raise BudgetExhaustedError(
+                    "LLM call budget exhausted before retry (forwarded from pipe)",
+                    cost=current,
+                    metadata={"budget": budget},
+                )
+            if budget.llm_calls > 0 and current.llm_calls >= budget.llm_calls:
+                raise BudgetExhaustedError(
+                    "LLM call budget exhausted before retry dispatch",
+                    cost=current,
+                    metadata={"budget": budget},
+                )
+        tracker.reserve_call()
+
+    response = await with_retry(
+        provider.complete,
+        retry or DEFAULT_RETRY,
+        messages,
+        _before_attempt=_before_attempt,
+        **kwargs,
+    )
     tracker.record_without_call(response)
     return response
 

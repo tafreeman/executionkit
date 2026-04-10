@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import random
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, TypeVar
@@ -57,6 +58,7 @@ async def with_retry(
     fn: Callable[..., Awaitable[T]],
     config: RetryConfig,
     *args: Any,
+    _before_attempt: Callable[[int], Awaitable[None] | None] | None = None,
     **kwargs: Any,
 ) -> T:
     """Execute an async function with retry logic.
@@ -65,6 +67,9 @@ async def with_retry(
         fn: Async callable to execute.
         config: Retry configuration.
         *args: Positional arguments forwarded to *fn*.
+        _before_attempt: Optional callback invoked before each attempt
+            (1-indexed). Used internally for call accounting and retry budget
+            enforcement.
         **kwargs: Keyword arguments forwarded to *fn*.
 
     Returns:
@@ -75,10 +80,18 @@ async def with_retry(
         Exception: Re-raised when retries are exhausted or exception is not retryable.
     """
     if config.max_retries == 0:
+        if _before_attempt is not None:
+            maybe_awaitable = _before_attempt(1)
+            if inspect.isawaitable(maybe_awaitable):
+                await maybe_awaitable
         return await fn(*args, **kwargs)
 
     for attempt in range(1, config.max_retries + 1):
         try:
+            if _before_attempt is not None:
+                maybe_awaitable = _before_attempt(attempt)
+                if inspect.isawaitable(maybe_awaitable):
+                    await maybe_awaitable
             return await fn(*args, **kwargs)
         except asyncio.CancelledError:
             raise

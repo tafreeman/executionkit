@@ -120,6 +120,25 @@ class TestWithRetry:
         result = await with_retry(fn, cfg)
         assert result == "ok"
 
+    async def test_before_attempt_runs_for_each_attempt(self) -> None:
+        attempts: list[int] = []
+        call_count = 0
+
+        async def before_attempt(attempt: int) -> None:
+            attempts.append(attempt)
+
+        async def fn() -> str:
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise ProviderError("transient")
+            return "ok"
+
+        cfg = RetryConfig(max_retries=3, base_delay=0.0)
+        result = await with_retry(fn, cfg, _before_attempt=before_attempt)
+        assert result == "ok"
+        assert attempts == [1, 2, 3]
+
     async def test_retries_on_retryable_error(self) -> None:
         call_count = 0
 
@@ -310,6 +329,13 @@ class TestGatherResilient:
         results = await gather_resilient([task(i) for i in range(5)])
         assert results == [0, 1, 2, 3, 4]
 
+    async def test_invalid_max_concurrency_raises(self) -> None:
+        async def task() -> int:
+            return 1
+
+        with pytest.raises(ValueError, match="max_concurrency must be >= 1"):
+            await gather_resilient([task()], max_concurrency=0)
+
 
 # ---------------------------------------------------------------------------
 # gather_strict
@@ -369,6 +395,13 @@ class TestGatherStrict:
         results = await gather_strict([task(i) for i in range(5)])
         assert results == [0, 1, 2, 3, 4]
 
+    async def test_invalid_max_concurrency_raises(self) -> None:
+        async def task() -> int:
+            return 1
+
+        with pytest.raises(ValueError, match="max_concurrency must be >= 1"):
+            await gather_strict([task()], max_concurrency=0)
+
 
 # ---------------------------------------------------------------------------
 # ConvergenceDetector
@@ -376,6 +409,18 @@ class TestGatherStrict:
 
 
 class TestConvergenceDetector:
+    def test_invalid_delta_threshold_raises(self) -> None:
+        with pytest.raises(ValueError, match="delta_threshold must be >= 0.0"):
+            ConvergenceDetector(delta_threshold=-0.1)
+
+    def test_invalid_patience_raises(self) -> None:
+        with pytest.raises(ValueError, match="patience must be >= 1"):
+            ConvergenceDetector(patience=0)
+
+    def test_invalid_score_threshold_raises(self) -> None:
+        with pytest.raises(ValueError, match="score_threshold must be in"):
+            ConvergenceDetector(score_threshold=1.1)
+
     def test_nan_score_raises_value_error(self) -> None:
         cd = ConvergenceDetector()
         with pytest.raises(ValueError, match="Invalid score"):
