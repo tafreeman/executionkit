@@ -24,7 +24,18 @@
       "Bash(python -m pytest tests/test_engine.py -q)",
       "Bash(git -C . remote get-url origin)",
       "Bash(grep -n \"^class\" executionkit/**/*.py)",
-      "Bash(grep -h \"^async def\\|^def\" executionkit/**/*.py)"
+      "Bash(grep -h \"^async def\\|^def\" executionkit/**/*.py)",
+      "Bash(pytest:*)",
+      "Bash(mkdocs build:*)",
+      "Bash(git add:*)",
+      "Bash(git restore:*)",
+      "Bash(rm -rf /c/Users/tandf/source/executionkit/site/404.html /c/Users/tandf/source/executionkit/site/index.html /c/Users/tandf/source/executionkit/site/objects.inv /c/Users/tandf/source/executionkit/site/sitemap.xml /c/Users/tandf/source/executionkit/site/sitemap.xml.gz)",
+      "Bash(rm -rf /c/Users/tandf/source/executionkit/site/api-reference /c/Users/tandf/source/executionkit/site/architecture /c/Users/tandf/source/executionkit/site/assets /c/Users/tandf/source/executionkit/site/c4 /c/Users/tandf/source/executionkit/site/changelog /c/Users/tandf/source/executionkit/site/contributing /c/Users/tandf/source/executionkit/site/custom-providers /c/Users/tandf/source/executionkit/site/patterns /c/Users/tandf/source/executionkit/site/quick-start /c/Users/tandf/source/executionkit/site/search /c/Users/tandf/source/executionkit/site/security /c/Users/tandf/source/executionkit/site/superpowers /c/Users/tandf/source/executionkit/site/test-audit)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(gh pr:*)",
+      "Bash(gh api:*)",
+      "Bash(python -m pytest -m \"not integration\" -q)"
     ]
   }
 }
