@@ -14,6 +14,8 @@ Version: **0.1.0** | Requires Python 3.11+
 | `refine_loop_sync()` | function | Synchronous wrapper for `refine_loop()` |
 | `react_loop()` | function | Think-act-observe tool-calling loop |
 | `react_loop_sync()` | function | Synchronous wrapper for `react_loop()` |
+| `structured()` | function | JSON extraction, repair, and validation pattern |
+| `structured_sync()` | function | Synchronous wrapper for `structured()` |
 | `pipe()` | function | Chain patterns, threading output as next prompt |
 | `pipe_sync()` | function | Synchronous wrapper for `pipe()` |
 | `Kit` | class | Session wrapper holding a provider and tracking cumulative usage |
@@ -343,6 +345,45 @@ def react_loop_sync(
 ```
 
 Synchronous wrapper for `react_loop()`. Accepts all the same keyword arguments.
+
+Raises `RuntimeError` if called from within an already-running event loop.
+
+---
+
+### `structured()`
+
+```python
+async def structured(
+    provider: LLMProvider,
+    prompt: str,
+    *,
+    validator: Callable[[dict[str, Any] | list[Any]], str | None | bool] | None = None,
+    max_retries: int = 3,
+    temperature: float = 0.0,
+    max_tokens: int = 4096,
+    max_cost: TokenUsage | None = None,
+    retry: RetryConfig | None = None,
+) -> PatternResult[dict[str, Any] | list[Any]]
+```
+
+Requests JSON output, parses it with `extract_json()`, and optionally retries
+with a repair prompt when parsing or validation fails.
+
+Metadata keys: `parse_attempts`, `repair_attempts`, `validated`.
+
+---
+
+### `structured_sync()`
+
+```python
+def structured_sync(
+    provider: LLMProvider,
+    prompt: str,
+    **kwargs: Any,
+) -> PatternResult[dict[str, Any] | list[Any]]
+```
+
+Synchronous wrapper for `structured()`. Accepts all the same keyword arguments.
 
 Raises `RuntimeError` if called from within an already-running event loop.
 

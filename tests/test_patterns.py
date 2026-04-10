@@ -1046,6 +1046,30 @@ class TestTrimMessages:
         _trim_messages(msgs, 3)
         assert len(msgs) == original_len
 
+    def test_trim_does_not_split_tool_call_pair(self) -> None:
+        from executionkit.patterns.react_loop import _trim_messages
+
+        msgs = [
+            {"role": "user", "content": "prompt"},
+            {"role": "assistant", "content": None, "tool_calls": [{"id": "tc1"}]},
+            {"role": "tool", "tool_call_id": "tc1", "content": "result"},
+            {"role": "assistant", "content": "final"},
+        ]
+        result = _trim_messages(msgs, 3)
+        assert result == [msgs[0], msgs[3]]
+
+    def test_trim_keeps_complete_tool_block_when_it_fits(self) -> None:
+        from executionkit.patterns.react_loop import _trim_messages
+
+        msgs = [
+            {"role": "user", "content": "prompt"},
+            {"role": "assistant", "content": None, "tool_calls": [{"id": "tc1"}]},
+            {"role": "tool", "tool_call_id": "tc1", "content": "result"},
+            {"role": "assistant", "content": "final"},
+        ]
+        result = _trim_messages(msgs, 4)
+        assert result == msgs
+
 
 # ---------------------------------------------------------------------------
 # _parse_score unit tests — Group A
@@ -1295,7 +1319,7 @@ async def test_checked_complete_raises_on_input_token_budget() -> None:
 
 @pytest.mark.asyncio
 async def test_checked_complete_releases_slot_on_failure() -> None:
-    """tracker._calls must be restored if provider.complete raises."""
+    """Failed retries still count real wire attempts in the tracker."""
     from executionkit.cost import CostTracker
     from executionkit.patterns.base import checked_complete
     from executionkit.provider import ProviderError
@@ -1309,9 +1333,201 @@ async def test_checked_complete_releases_slot_on_failure() -> None:
 
     msgs = [{"role": "user", "content": "hi"}]
     with pytest.raises(ProviderError):
-        await checked_complete(provider, msgs, tracker, None, None)
+        await checked_complete(
+            provider,
+            msgs,
+            tracker,
+            None,
+            RetryConfig(max_retries=3, base_delay=0.0),
+        )
 
-    assert tracker.call_count == 0  # slot must have been released
+    assert tracker.call_count == 3
+
+
+@pytest.mark.asyncio
+async def test_checked_complete_stops_retry_when_call_budget_exhausted() -> None:
+    """Call budgets must stop retry dispatch once the attempt limit is reached."""
+    from executionkit.cost import CostTracker
+    from executionkit.patterns.base import checked_complete
+    from executionkit.provider import BudgetExhaustedError, ProviderError
+    from executionkit.types import TokenUsage
+
+    class FailingProvider:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def complete(self, messages: object, **kwargs: object) -> object:
+            self.calls += 1
+            raise ProviderError("network down")
+
+    provider = FailingProvider()  # type: ignore[arg-type]
+    tracker = CostTracker()
+    budget = TokenUsage(llm_calls=1)
+
+    with pytest.raises(BudgetExhaustedError, match="before retry dispatch"):
+        await checked_complete(
+            provider,
+            [{"role": "user", "content": "hi"}],
+            tracker,
+            budget,
+            RetryConfig(max_retries=3, base_delay=0.0),
+        )
+
+    assert provider.calls == 1
+    assert tracker.call_count == 1
+
+
+class TestPatternInputValidation:
+    @pytest.mark.asyncio
+    async def test_consensus_rejects_invalid_max_concurrency(self) -> None:
+        from executionkit.patterns.consensus import consensus
+
+        provider = MockProvider(responses=["ok"])
+        with pytest.raises(ValueError, match="max_concurrency must be >= 1"):
+            await consensus(provider, "hi", max_concurrency=0)
+
+    @pytest.mark.asyncio
+    async def test_consensus_rejects_invalid_max_tokens(self) -> None:
+        from executionkit.patterns.consensus import consensus
+
+        provider = MockProvider(responses=["ok"])
+        with pytest.raises(ValueError, match="max_tokens must be >= 1"):
+            await consensus(provider, "hi", max_tokens=0)
+
+    @pytest.mark.asyncio
+    async def test_refine_loop_rejects_invalid_target_score(self) -> None:
+        from executionkit.patterns.refine_loop import refine_loop
+
+        provider = MockProvider(responses=["ok"])
+        with pytest.raises(ValueError, match="target_score must be in"):
+            await refine_loop(provider, "hi", target_score=1.5)
+
+    @pytest.mark.asyncio
+    async def test_refine_loop_rejects_invalid_patience(self) -> None:
+        from executionkit.patterns.refine_loop import refine_loop
+
+        provider = MockProvider(responses=["ok"])
+        with pytest.raises(ValueError, match="patience must be >= 1"):
+            await refine_loop(provider, "hi", patience=0)
+
+    @pytest.mark.asyncio
+    async def test_refine_loop_rejects_invalid_max_eval_chars(self) -> None:
+        from executionkit.patterns.refine_loop import refine_loop
+
+        provider = MockProvider(responses=["ok"])
+        with pytest.raises(ValueError, match="max_eval_chars must be >= 1"):
+            await refine_loop(provider, "hi", max_eval_chars=0)
+
+    @pytest.mark.asyncio
+    async def test_react_loop_rejects_invalid_max_rounds(self) -> None:
+        from executionkit.patterns.react_loop import react_loop
+
+        provider = MockProvider(responses=[_make_final_response("done")])
+        with pytest.raises(ValueError, match="max_rounds must be >= 1"):
+            await react_loop(provider, "hi", tools=[], max_rounds=0)
+
+    @pytest.mark.asyncio
+    async def test_react_loop_rejects_invalid_tool_timeout(self) -> None:
+        from executionkit.patterns.react_loop import react_loop
+
+        provider = MockProvider(responses=[_make_final_response("done")])
+        with pytest.raises(ValueError, match="tool_timeout must be > 0"):
+            await react_loop(provider, "hi", tools=[], tool_timeout=0)
+
+    @pytest.mark.asyncio
+    async def test_react_loop_rejects_invalid_history_limit(self) -> None:
+        from executionkit.patterns.react_loop import react_loop
+
+        provider = MockProvider(responses=[_make_final_response("done")])
+        with pytest.raises(ValueError, match="max_history_messages must be >= 1"):
+            await react_loop(provider, "hi", tools=[], max_history_messages=0)
+
+    @pytest.mark.asyncio
+    async def test_react_loop_truncates_small_limit(self) -> None:
+        from executionkit.patterns.react_loop import _execute_tool_call
+
+        async def tool_fn() -> str:
+            return "abcdef"
+
+        tool = Tool(
+            name="tiny",
+            description="tiny",
+            parameters={"type": "object", "properties": {}},
+            execute=tool_fn,
+        )
+        result = await _execute_tool_call(
+            tc_name="tiny",
+            tc_arguments={},
+            tc_id="tc1",
+            tool_lookup={"tiny": tool},
+            tool_timeout=None,
+            max_observation_chars=1,
+        )
+        assert len(result) == 1
+
+
+class TestStructuredPattern:
+    @pytest.mark.asyncio
+    async def test_structured_returns_parsed_json(self) -> None:
+        from executionkit.patterns.structured import structured
+
+        provider = MockProvider(responses=['{"answer": 42}'])
+        result = await structured(provider, "Return an answer")
+        assert result.value == {"answer": 42}
+        assert result.metadata["parse_attempts"] == 1
+        assert result.metadata["repair_attempts"] == 0
+        assert result.metadata["validated"] is True
+
+    @pytest.mark.asyncio
+    async def test_structured_repairs_invalid_json(self) -> None:
+        from executionkit.patterns.structured import structured
+
+        provider = MockProvider(responses=["not json", '{"answer": 42}'])
+        result = await structured(provider, "Return an answer", max_retries=1)
+        assert result.value == {"answer": 42}
+        assert result.metadata["parse_attempts"] == 2
+        assert result.metadata["repair_attempts"] == 1
+
+    @pytest.mark.asyncio
+    async def test_structured_validator_triggers_repair(self) -> None:
+        from executionkit.patterns.structured import structured
+
+        provider = MockProvider(
+            responses=['{"status": "draft"}', '{"status": "ready"}']
+        )
+
+        def validator(value: dict[str, Any] | list[Any]) -> str | None:
+            if not isinstance(value, dict):
+                return "value must be an object"
+            if value["status"] != "ready":
+                return "status must be ready"
+            return None
+
+        result = await structured(
+            provider,
+            "Return a ready status",
+            validator=validator,
+            max_retries=1,
+        )
+        assert result.value == {"status": "ready"}
+        assert result.metadata["validated"] is True
+        assert result.metadata["repair_attempts"] == 1
+
+    @pytest.mark.asyncio
+    async def test_structured_accepts_fenced_json(self) -> None:
+        from executionkit.patterns.structured import structured
+
+        provider = MockProvider(responses=['```json\n{"answer": 42}\n```'])
+        result = await structured(provider, "Return an answer")
+        assert result.value == {"answer": 42}
+
+    @pytest.mark.asyncio
+    async def test_structured_raises_after_retries_exhausted(self) -> None:
+        from executionkit.patterns.structured import structured
+
+        provider = MockProvider(responses=["still not json", "still not json"])
+        with pytest.raises(ValueError, match="JSON parse failed"):
+            await structured(provider, "Return an answer", max_retries=1)
 
 
 # ---------------------------------------------------------------------------

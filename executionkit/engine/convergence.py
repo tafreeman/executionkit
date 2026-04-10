@@ -28,6 +28,20 @@ class ConvergenceDetector:
     _scores: list[float] = field(default_factory=list, init=False, repr=False)
     _stale_count: int = field(default=0, init=False, repr=False)
 
+    def __post_init__(self) -> None:
+        if self.delta_threshold < 0.0:
+            raise ValueError(
+                f"delta_threshold must be >= 0.0, got {self.delta_threshold}"
+            )
+        if self.patience < 1:
+            raise ValueError(f"patience must be >= 1, got {self.patience}")
+        if self.score_threshold is not None and not (
+            0.0 <= self.score_threshold <= 1.0
+        ):
+            raise ValueError(
+                f"score_threshold must be in [0.0, 1.0], got {self.score_threshold}"
+            )
+
     def should_stop(self, score: float) -> bool:
         """Record a score and return whether convergence is reached.
 

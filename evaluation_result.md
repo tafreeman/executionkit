@@ -1,5 +1,11 @@
 # ExecutionKit v0.1 — Release Readiness Evaluation
 
+> Historical evaluation snapshot from before CI, security, and provider/doc
+> follow-up landed. The current repository state supersedes findings here when
+> they conflict with `/home/runner/work/executionkit/executionkit/.github/workflows/ci.yml`,
+> `README.md`, or the implementation under
+> `/home/runner/work/executionkit/executionkit/executionkit/`.
+
 ```json
 {
   "candidate_name": "executionkit",

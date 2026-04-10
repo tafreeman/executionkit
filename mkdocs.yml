@@ -2,6 +2,7 @@ site_name: ExecutionKit
 site_description: Composable LLM reasoning patterns with budget-aware execution
 repo_url: https://github.com/tafreeman/executionkit
 repo_name: tafreeman/executionkit
+site_dir: mkdocs-site
 
 theme:
   name: material
@@ -43,6 +44,7 @@ nav:
     - consensus: patterns/consensus.md
     - refine_loop: patterns/refine_loop.md
     - react_loop: patterns/react_loop.md
+    - structured: patterns/structured.md
     - pipe: patterns/pipe.md
   - Reference:
     - API Reference: api-reference.md

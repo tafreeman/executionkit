@@ -82,6 +82,18 @@ print(result)                                     # 1411
 print(result.metadata["tool_calls_made"])         # 1
 ```
 
+## Structured Output
+
+```python
+from executionkit import structured
+
+result = await structured(
+    provider,
+    "Return a JSON object with keys 'label' and 'confidence'.",
+)
+print(result.value["label"])
+```
+
 ## Budget Control
 
 All patterns accept a `max_cost` budget:

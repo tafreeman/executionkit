@@ -42,6 +42,8 @@ def test_public_api_surface() -> None:
         "react_loop_sync",
         "refine_loop",
         "refine_loop_sync",
+        "structured",
+        "structured_sync",
         "validate_score",
     ]
     missing = [name for name in expected if not hasattr(executionkit, name)]
