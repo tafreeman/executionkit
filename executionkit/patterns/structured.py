@@ -51,7 +51,8 @@ async def structured(
 
     Validators should return ``None``, ``True``, or ``""`` for success. Any
     other value is treated as a validation failure and included in the repair
-    prompt.
+    prompt. ``max_retries=0`` is supported and means "make one parse attempt
+    with no repair call".
     """
     if max_retries < 0:
         raise ValueError(f"max_retries must be >= 0, got {max_retries}")

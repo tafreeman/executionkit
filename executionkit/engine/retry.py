@@ -58,7 +58,10 @@ async def _run_before_attempt(
     callback: Callable[[int], Awaitable[None] | None] | None,
     attempt: int,
 ) -> None:
-    """Invoke an optional per-attempt callback, awaiting async results."""
+    """Invoke an optional per-attempt callback, awaiting async results.
+
+    Any callback return value is ignored; callbacks should return ``None``.
+    """
     if callback is None:
         return
     maybe_awaitable = callback(attempt)

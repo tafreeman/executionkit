@@ -1497,7 +1497,8 @@ class TestStructuredPattern:
         )
 
         def validator(value: dict[str, Any] | list[Any]) -> str | None:
-            assert isinstance(value, dict)
+            if not isinstance(value, dict):
+                return "value must be an object"
             if value["status"] != "ready":
                 return "status must be ready"
             return None
