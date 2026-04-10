@@ -221,6 +221,34 @@ class TestWithRetry:
 
         assert call_count == 3
 
+    async def test_rate_limit_retry_after_respected(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """RateLimitError.retry_after must be used as a lower bound on sleep delay."""
+        import asyncio as _asyncio
+
+        sleep_calls: list[float] = []
+
+        async def fake_sleep(seconds: float) -> None:
+            sleep_calls.append(seconds)
+
+        monkeypatch.setattr(_asyncio, "sleep", fake_sleep)
+
+        call_count = 0
+
+        async def fn() -> str:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise RateLimitError("rate limited", retry_after=5.0)
+            return "ok"
+
+        cfg = RetryConfig(max_retries=2, base_delay=0.0, max_delay=1.0)
+        result = await with_retry(fn, cfg)
+        assert result == "ok"
+        assert sleep_calls, "asyncio.sleep must have been called"
+        assert sleep_calls[0] >= 5.0, f"Expected sleep >= 5.0s, got {sleep_calls[0]}"
+
 
 # ---------------------------------------------------------------------------
 # gather_resilient
@@ -561,3 +589,34 @@ class TestExtractJson:
         text = 'Here is my JSON:\n```json\n{"x": 1}\n```\nDone.'
         result = extract_json(text)
         assert result == {"x": 1}
+
+
+# ---------------------------------------------------------------------------
+# _truncate (react_loop utility)
+# ---------------------------------------------------------------------------
+
+
+class TestTruncate:
+    def test_short_text_unchanged(self) -> None:
+        from executionkit.patterns.react_loop import _truncate
+
+        assert _truncate("hello", 100) == "hello"
+
+    def test_exact_length_unchanged(self) -> None:
+        from executionkit.patterns.react_loop import _truncate
+
+        text = "a" * 100
+        assert _truncate(text, 100) == text
+
+    def test_truncated_result_fits_within_max_chars(self) -> None:
+        from executionkit.patterns.react_loop import _truncate
+
+        long_text = "x" * 200
+        result = _truncate(long_text, 100)
+        assert len(result) <= 100
+
+    def test_truncated_result_ends_with_marker(self) -> None:
+        from executionkit.patterns.react_loop import _truncate
+
+        result = _truncate("x" * 200, 100)
+        assert result.endswith("\n[truncated]")
