@@ -69,6 +69,10 @@ async def consensus(
     """
     if num_samples < 1:
         raise ValueError(f"num_samples must be >= 1, got {num_samples}")
+    if max_concurrency < 1:
+        raise ValueError(f"max_concurrency must be >= 1, got {max_concurrency}")
+    if max_tokens < 1:
+        raise ValueError(f"max_tokens must be >= 1, got {max_tokens}")
 
     if isinstance(strategy, str):
         strategy = VotingStrategy(strategy)
