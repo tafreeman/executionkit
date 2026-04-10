@@ -54,6 +54,18 @@ class RetryConfig:
 DEFAULT_RETRY: RetryConfig = RetryConfig()
 
 
+async def _run_before_attempt(
+    callback: Callable[[int], Awaitable[None] | None] | None,
+    attempt: int,
+) -> None:
+    """Invoke an optional per-attempt callback, awaiting async results."""
+    if callback is None:
+        return
+    maybe_awaitable = callback(attempt)
+    if inspect.isawaitable(maybe_awaitable):
+        await maybe_awaitable
+
+
 async def with_retry(
     fn: Callable[..., Awaitable[T]],
     config: RetryConfig,
@@ -80,18 +92,12 @@ async def with_retry(
         Exception: Re-raised when retries are exhausted or exception is not retryable.
     """
     if config.max_retries == 0:
-        if _before_attempt is not None:
-            maybe_awaitable = _before_attempt(1)
-            if inspect.isawaitable(maybe_awaitable):
-                await maybe_awaitable
+        await _run_before_attempt(_before_attempt, 1)
         return await fn(*args, **kwargs)
 
     for attempt in range(1, config.max_retries + 1):
         try:
-            if _before_attempt is not None:
-                maybe_awaitable = _before_attempt(attempt)
-                if inspect.isawaitable(maybe_awaitable):
-                    await maybe_awaitable
+            await _run_before_attempt(_before_attempt, attempt)
             return await fn(*args, **kwargs)
         except asyncio.CancelledError:
             raise

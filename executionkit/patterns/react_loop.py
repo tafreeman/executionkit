@@ -85,19 +85,22 @@ def _message_blocks(messages: list[dict[str, Any]]) -> list[list[dict[str, Any]]
     the same block so history trimming never splits a request/result pair.
     """
     blocks: list[list[dict[str, Any]]] = []
-    index = 1
-    while index < len(messages):
-        message = messages[index]
+    message_index = 1
+    while message_index < len(messages):
+        message = messages[message_index]
         if message.get("role") == "assistant" and message.get("tool_calls"):
             block = [message]
-            index += 1
-            while index < len(messages) and messages[index].get("role") == "tool":
-                block.append(messages[index])
-                index += 1
+            message_index += 1
+            while (
+                message_index < len(messages)
+                and messages[message_index].get("role") == "tool"
+            ):
+                block.append(messages[message_index])
+                message_index += 1
             blocks.append(block)
             continue
         blocks.append([message])
-        index += 1
+        message_index += 1
     return blocks
 
 

@@ -94,7 +94,7 @@ async def structured(
         if attempt == max_retries:
             break
 
-        metadata["repair_attempts"] = int(metadata["repair_attempts"]) + 1
+        metadata["repair_attempts"] += 1
         repair_prompt = (
             "The previous response was not valid structured output.\n"
             f"Error: {last_error}\n\n"
