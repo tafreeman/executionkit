@@ -193,15 +193,25 @@ print(result.cost)     # Cumulative cost across both steps`;
   </section>
 
   <script>
-    document.getElementById('copy-install')?.addEventListener('click', () => {
-      navigator.clipboard.writeText('pip install executionkit');
+    document.getElementById('copy-install')?.addEventListener('click', async () => {
       const btn = document.getElementById('copy-install');
-      if (btn) {
-        btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>';
-        setTimeout(() => {
-          btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z"/></svg>';
-        }, 2000);
+      if (!btn) return;
+
+      const defaultIcon = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z"/></svg>';
+      const successIcon = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>';
+      const errorIcon = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.5a6.5 6.5 0 110 13 6.5 6.5 0 010-13zm0 1.5a5 5 0 100 10 5 5 0 000-10zm2.03 2.97a.75.75 0 00-1.06 0L8 6.94 7.03 5.97a.75.75 0 10-1.06 1.06L6.94 8l-.97.97a.75.75 0 101.06 1.06L8 9.06l.97.97a.75.75 0 001.06-1.06L9.06 8l.97-.97a.75.75 0 000-1.06z"/></svg>';
+
+      try {
+        await navigator.clipboard.writeText('pip install executionkit');
+        btn.innerHTML = successIcon;
+      } catch (error) {
+        console.error('Failed to copy install command to clipboard.', error);
+        btn.innerHTML = errorIcon;
       }
+
+      setTimeout(() => {
+        btn.innerHTML = defaultIcon;
+      }, 2000);
     });
   </script>
 </Base>
