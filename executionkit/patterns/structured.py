@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from executionkit.cost import CostTracker
 from executionkit.engine.json_extraction import extract_json
@@ -12,9 +13,6 @@ from executionkit.engine.retry import RetryConfig  # noqa: TC001
 from executionkit.patterns.base import checked_complete
 from executionkit.provider import LLMProvider  # noqa: TC001
 from executionkit.types import PatternResult, TokenUsage
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
 
 StructuredValue = dict[str, Any] | list[Any]
 StructuredValidator = Callable[[StructuredValue], str | None | bool]

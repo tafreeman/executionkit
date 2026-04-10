@@ -35,10 +35,11 @@ class ConvergenceDetector:
             )
         if self.patience < 1:
             raise ValueError(f"patience must be >= 1, got {self.patience}")
-        if self.score_threshold is not None and not (0.0 <= self.score_threshold <= 1.0):
+        if self.score_threshold is not None and not (
+            0.0 <= self.score_threshold <= 1.0
+        ):
             raise ValueError(
-                "score_threshold must be in [0.0, 1.0], "
-                f"got {self.score_threshold}"
+                f"score_threshold must be in [0.0, 1.0], got {self.score_threshold}"
             )
 
     def should_stop(self, score: float) -> bool:

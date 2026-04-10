@@ -1516,7 +1516,7 @@ class TestStructuredPattern:
     async def test_structured_accepts_fenced_json(self) -> None:
         from executionkit.patterns.structured import structured
 
-        provider = MockProvider(responses=["```json\n{\"answer\": 42}\n```"])
+        provider = MockProvider(responses=['```json\n{"answer": 42}\n```'])
         result = await structured(provider, "Return an answer")
         assert result.value == {"answer": 42}
 
