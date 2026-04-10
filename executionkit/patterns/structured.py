@@ -16,6 +16,8 @@ from executionkit.types import PatternResult, TokenUsage
 
 StructuredValue = dict[str, Any] | list[Any]
 StructuredValidator = Callable[[StructuredValue], str | None | bool]
+"""Return ``None``, ``True``, or ``""`` to accept a value; otherwise return
+``False`` or an error string to trigger repair."""
 
 
 def _json_prompt(prompt: str) -> str:
@@ -45,7 +47,12 @@ async def structured(
     max_cost: TokenUsage | None = None,
     retry: RetryConfig | None = None,
 ) -> PatternResult[StructuredValue]:
-    """Request JSON output, parse it, and optionally repair invalid responses."""
+    """Request JSON output, parse it, and optionally repair invalid responses.
+
+    Validators should return ``None``, ``True``, or ``""`` for success. Any
+    other value is treated as a validation failure and included in the repair
+    prompt.
+    """
     if max_retries < 0:
         raise ValueError(f"max_retries must be >= 0, got {max_retries}")
     if max_tokens < 1:

@@ -69,11 +69,15 @@ _TRUNCATION_MARKER = "\n[truncated]"
 
 
 def _truncate(text: str, max_chars: int) -> str:
-    """Truncate text to at most ``max_chars`` chars, appending a marker if trimmed."""
+    """Truncate text to at most ``max_chars`` chars, appending a marker if trimmed.
+
+    When the limit is smaller than the truncation marker itself, return the
+    leading slice of the original text instead of a partial marker.
+    """
     if len(text) <= max_chars:
         return text
     if max_chars <= len(_TRUNCATION_MARKER):
-        return _TRUNCATION_MARKER[:max_chars]
+        return text[:max_chars]
     keep = max_chars - len(_TRUNCATION_MARKER)
     return text[:keep] + _TRUNCATION_MARKER
 
