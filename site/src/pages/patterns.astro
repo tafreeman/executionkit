@@ -1,0 +1,285 @@
+---
+import Base from "../layouts/Base.astro";
+import Mermaid from "../components/Mermaid.astro";
+import { Code } from "astro-expressive-code/components";
+
+const overviewChart = `graph TB
+    subgraph Patterns
+        C[consensus] -->|vote on N samples| R[PatternResult]
+        RL[refine_loop] -->|iterative improvement| R
+        RE[react_loop] -->|tool-calling loop| R
+    end
+    subgraph Composition
+        P[pipe] -->|chain any patterns| R2[PatternResult]
+        K[Kit] -->|session tracking| R2
+    end
+    style C fill:#1c2128,stroke:#f0883e,color:#e6edf3
+    style RL fill:#1c2128,stroke:#f0883e,color:#e6edf3
+    style RE fill:#1c2128,stroke:#f0883e,color:#e6edf3
+    style R fill:#1c2128,stroke:#39d353,color:#e6edf3
+    style P fill:#1c2128,stroke:#58a6ff,color:#e6edf3
+    style K fill:#1c2128,stroke:#58a6ff,color:#e6edf3
+    style R2 fill:#1c2128,stroke:#39d353,color:#e6edf3`;
+
+const consensusChart = `sequenceDiagram
+    participant User
+    participant consensus
+    participant Provider as LLM Provider
+    User->>consensus: prompt, num_samples=5
+    par Parallel requests
+        consensus->>Provider: complete(messages)
+        consensus->>Provider: complete(messages)
+        consensus->>Provider: complete(messages)
+        consensus->>Provider: complete(messages)
+        consensus->>Provider: complete(messages)
+    end
+    Provider-->>consensus: 5 responses
+    consensus->>consensus: Normalize and vote
+    consensus-->>User: PatternResult`;
+
+const refineChart = `flowchart TD
+    A[Generate response] --> B[Evaluate score]
+    B --> C{score >= target}
+    C -->|Yes| D[Return best result]
+    C -->|No| E{Converged or max iters}
+    E -->|Yes| D
+    E -->|No| F[Refine with feedback]
+    F --> A
+    style A fill:#1c2128,stroke:#f0883e,color:#e6edf3
+    style B fill:#1c2128,stroke:#58a6ff,color:#e6edf3
+    style D fill:#1c2128,stroke:#39d353,color:#e6edf3
+    style F fill:#1c2128,stroke:#f0883e,color:#e6edf3`;
+
+const reactChart = `sequenceDiagram
+    participant User
+    participant react_loop
+    participant LLM
+    participant Tool
+    User->>react_loop: prompt, tools
+    loop Each round
+        react_loop->>LLM: messages + tool definitions
+        LLM-->>react_loop: response with tool_calls
+        alt Has tool calls
+            react_loop->>react_loop: Validate args vs JSON Schema
+            react_loop->>Tool: execute validated_args
+            Tool-->>react_loop: observation
+            react_loop->>react_loop: Append to history
+        else No tool calls
+            react_loop-->>User: PatternResult final_answer
+        end
+    end`;
+
+const consensusSig = `async def consensus(
+    provider: LLMProvider,
+    prompt: str,
+    *,
+    num_samples: int = 5,
+    strategy: VotingStrategy | str = "majority",
+    temperature: float = 0.9,
+    max_tokens: int = 4096,
+    max_concurrency: int = 5,
+    retry: RetryConfig | None = None,
+) -> PatternResult[str]`;
+
+const consensusExample = `from executionkit import consensus
+
+result = await consensus(
+    provider,
+    "What is the capital of France?",
+    num_samples=3,
+)
+
+print(result)                              # Paris
+print(result.metadata["agreement_ratio"])  # 1.0
+print(result.metadata["unique_responses"]) # 1
+print(result.cost)                         # TokenUsage(...)`;
+
+const refineSig = `async def refine_loop(
+    provider: LLMProvider,
+    prompt: str,
+    *,
+    evaluator: Evaluator | None = None,
+    target_score: float = 0.9,
+    max_iterations: int = 5,
+    patience: int = 3,
+    delta_threshold: float = 0.01,
+    temperature: float = 0.7,
+    max_tokens: int = 4096,
+    max_cost: TokenUsage | None = None,
+    retry: RetryConfig | None = None,
+) -> PatternResult[str]`;
+
+const refineExample = `from executionkit import refine_loop
+
+result = await refine_loop(
+    provider,
+    "Write a one-paragraph summary of the Turing test.",
+    target_score=0.85,
+    max_iterations=4,
+)
+
+print(result)                        # Best response found
+print(result.score)                  # 0.91
+print(result.metadata["iterations"]) # 2
+print(result.metadata["converged"])  # True`;
+
+const reactSig = `async def react_loop(
+    provider: ToolCallingProvider,
+    prompt: str,
+    tools: Sequence[Tool],
+    *,
+    max_rounds: int = 8,
+    max_observation_chars: int = 12000,
+    tool_timeout: float | None = None,
+    temperature: float = 0.3,
+    max_tokens: int = 4096,
+    max_cost: TokenUsage | None = None,
+    retry: RetryConfig | None = None,
+    max_history_messages: int | None = None,
+) -> PatternResult[str]`;
+
+const reactExample = `from executionkit import react_loop, Tool
+
+async def _calculator(expression: str) -> str:
+    # Use a safe AST-based evaluator — never eval() untrusted input
+    ...
+
+calc_tool = Tool(
+    name="calculator",
+    description="Evaluate a math expression and return the result.",
+    parameters={
+        "type": "object",
+        "properties": {"expression": {"type": "string"}},
+        "required": ["expression"],
+    },
+    execute=_calculator,
+)
+
+result = await react_loop(provider, "What is 17 * 83?", tools=[calc_tool])
+print(result)                              # 1411
+print(result.metadata["tool_calls_made"])  # 1
+print(result.metadata["rounds"])           # 2`;
+---
+
+<Base title="Patterns" description="ExecutionKit's three composable LLM reasoning patterns: consensus, refine_loop, and react_loop.">
+  <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-20">
+    <h1 class="text-4xl font-bold mb-4">Patterns</h1>
+    <p class="text-lg text-[var(--color-text-secondary)] mb-12">
+      Three composable async functions that handle the hard parts of LLM reasoning.
+      Each returns an immutable PatternResult with the answer, score, cost, and metadata.
+    </p>
+
+    <Mermaid chart={overviewChart} caption="All patterns return PatternResult — composable via pipe() or Kit" />
+
+    <!-- Consensus -->
+    <section id="consensus" class="mt-16 scroll-mt-20">
+      <div class="flex items-center gap-3 mb-6">
+        <span class="text-3xl">🗳️</span>
+        <h2 class="text-3xl font-bold">consensus</h2>
+      </div>
+      <p class="text-[var(--color-text-secondary)] mb-6 leading-relaxed">
+        Fires num_samples concurrent completions and selects the winning response
+        via majority or unanimous voting. Whitespace and trailing newlines are
+        normalized before comparison.
+      </p>
+      <div class="mb-6">
+        <h3 class="text-lg font-semibold mb-3">Signature</h3>
+        <Code code={consensusSig} lang="python" />
+      </div>
+      <div class="mb-6">
+        <h3 class="text-lg font-semibold mb-3">How it works</h3>
+        <Mermaid chart={consensusChart} />
+      </div>
+      <div class="mb-6">
+        <h3 class="text-lg font-semibold mb-3">Example</h3>
+        <Code code={consensusExample} lang="python" />
+      </div>
+      <div class="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4">
+        <h4 class="text-sm font-semibold text-[var(--color-text-primary)] mb-2">Metadata keys</h4>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
+          <div><code class="text-[var(--color-accent-blue)]">agreement_ratio</code> <span class="text-[var(--color-text-muted)]">— fraction agreed</span></div>
+          <div><code class="text-[var(--color-accent-blue)]">unique_responses</code> <span class="text-[var(--color-text-muted)]">— distinct answers</span></div>
+          <div><code class="text-[var(--color-accent-blue)]">tie_count</code> <span class="text-[var(--color-text-muted)]">— ties detected</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Refine Loop -->
+    <section id="refine-loop" class="mt-20 scroll-mt-20">
+      <div class="flex items-center gap-3 mb-6">
+        <span class="text-3xl">🔄</span>
+        <h2 class="text-3xl font-bold">refine_loop</h2>
+      </div>
+      <p class="text-[var(--color-text-secondary)] mb-6 leading-relaxed">
+        Iteratively improves a response until a score target is reached or convergence
+        is detected. The default evaluator uses XML delimiter sandboxing to defend
+        against prompt injection.
+      </p>
+      <div class="mb-6">
+        <h3 class="text-lg font-semibold mb-3">Signature</h3>
+        <Code code={refineSig} lang="python" />
+      </div>
+      <div class="mb-6">
+        <h3 class="text-lg font-semibold mb-3">How it works</h3>
+        <Mermaid chart={refineChart} />
+      </div>
+      <div class="mb-6">
+        <h3 class="text-lg font-semibold mb-3">Example</h3>
+        <Code code={refineExample} lang="python" />
+      </div>
+      <div class="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4">
+        <h4 class="text-sm font-semibold text-[var(--color-text-primary)] mb-2">Metadata keys</h4>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
+          <div><code class="text-[var(--color-accent-blue)]">iterations</code> <span class="text-[var(--color-text-muted)]">— loops completed</span></div>
+          <div><code class="text-[var(--color-accent-blue)]">converged</code> <span class="text-[var(--color-text-muted)]">— hit target or plateau</span></div>
+          <div><code class="text-[var(--color-accent-blue)]">score_history</code> <span class="text-[var(--color-text-muted)]">— all iteration scores</span></div>
+        </div>
+      </div>
+      <div class="mt-4 p-4 rounded-lg border border-[var(--color-accent-orange)]/30 bg-[var(--color-accent-orange)]/5">
+        <p class="text-sm text-[var(--color-text-secondary)]">
+          <strong class="text-[var(--color-accent-orange)]">⚠️ Security note:</strong> The default evaluator wraps content in
+          XML delimiters. For production use, supply a custom evaluator function.
+        </p>
+      </div>
+    </section>
+
+    <!-- React Loop -->
+    <section id="react-loop" class="mt-20 scroll-mt-20">
+      <div class="flex items-center gap-3 mb-6">
+        <span class="text-3xl">🔧</span>
+        <h2 class="text-3xl font-bold">react_loop</h2>
+      </div>
+      <p class="text-[var(--color-text-secondary)] mb-6 leading-relaxed">
+        Think-act-observe loop with tool calling. Tool arguments are validated
+        against their JSON Schema before execution. Tool errors are caught and
+        returned as observations rather than crashing the loop.
+      </p>
+      <div class="mb-6">
+        <h3 class="text-lg font-semibold mb-3">Signature</h3>
+        <Code code={reactSig} lang="python" />
+      </div>
+      <div class="mb-6">
+        <h3 class="text-lg font-semibold mb-3">How it works</h3>
+        <Mermaid chart={reactChart} />
+      </div>
+      <div class="mb-6">
+        <h3 class="text-lg font-semibold mb-3">Example</h3>
+        <Code code={reactExample} lang="python" />
+      </div>
+      <div class="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4">
+        <h4 class="text-sm font-semibold text-[var(--color-text-primary)] mb-2">Metadata keys</h4>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
+          <div><code class="text-[var(--color-accent-blue)]">rounds</code> <span class="text-[var(--color-text-muted)]">— completed rounds</span></div>
+          <div><code class="text-[var(--color-accent-blue)]">tool_calls_made</code> <span class="text-[var(--color-text-muted)]">— total invocations</span></div>
+          <div><code class="text-[var(--color-accent-blue)]">messages_trimmed</code> <span class="text-[var(--color-text-muted)]">— history trim count</span></div>
+        </div>
+      </div>
+      <div class="mt-4 p-4 rounded-lg border border-[var(--color-accent-orange)]/30 bg-[var(--color-accent-orange)]/5">
+        <p class="text-sm text-[var(--color-text-secondary)]">
+          <strong class="text-[var(--color-accent-orange)]">⚠️ Security note:</strong> Never use Python's eval()
+          with untrusted LLM output. Tool arguments are validated against their JSON Schema before execution.
+        </p>
+      </div>
+    </section>
+  </div>
+</Base>

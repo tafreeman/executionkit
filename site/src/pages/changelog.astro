@@ -1,0 +1,81 @@
+---
+import Base from "../layouts/Base.astro";
+---
+
+<Base title="Changelog" description="All notable changes to ExecutionKit, following Keep a Changelog format.">
+  <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-20">
+    <h1 class="text-4xl font-bold mb-4">Changelog</h1>
+    <p class="text-lg text-[var(--color-text-secondary)] mb-12">
+      All notable changes. Format follows
+      <a href="https://keepachangelog.com/en/1.1.0/" target="_blank" rel="noopener noreferrer" class="text-[var(--color-accent-blue)] hover:underline">Keep a Changelog</a>.
+      Versioning follows <a href="https://semver.org/" target="_blank" rel="noopener noreferrer" class="text-[var(--color-accent-blue)] hover:underline">Semantic Versioning</a>.
+    </p>
+
+    <!-- v0.1.0 -->
+    <section class="mb-12">
+      <div class="flex items-center gap-3 mb-6">
+        <h2 class="text-2xl font-bold">v0.1.0</h2>
+        <span class="text-sm px-3 py-1 rounded-full bg-[var(--color-accent)]/10 text-[var(--color-accent)] border border-[var(--color-accent-dim)]">
+          2026-04-06
+        </span>
+        <span class="text-sm px-3 py-1 rounded-full bg-[var(--color-accent-blue)]/10 text-[var(--color-accent-blue)] border border-[var(--color-accent-blue)]/30">
+          Latest
+        </span>
+      </div>
+
+      <!-- Security -->
+      <div class="mb-8">
+        <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+          <span class="w-3 h-3 rounded-full bg-red-500"></span>
+          Security
+        </h3>
+        <ul class="space-y-3 text-sm text-[var(--color-text-secondary)]">
+          <li class="flex gap-2"><span class="text-[var(--color-text-muted)] mt-1">•</span><span>Fix prompt injection in refine_loop default evaluator via XML delimiter sandboxing and input truncation to 32,768 chars</span></li>
+          <li class="flex gap-2"><span class="text-[var(--color-text-muted)] mt-1">•</span><span>Mask API key in Provider.__repr__ — previously leaked sk-... values in logs and tracebacks</span></li>
+          <li class="flex gap-2"><span class="text-[var(--color-text-muted)] mt-1">•</span><span>Redact credential-pattern substrings from HTTP error messages using _redact_sensitive regex</span></li>
+          <li class="flex gap-2"><span class="text-[var(--color-text-muted)] mt-1">•</span><span>Return only exception type name (not message) from tool error handler in react_loop</span></li>
+          <li class="flex gap-2"><span class="text-[var(--color-text-muted)] mt-1">•</span><span>Add Bandit SAST job to CI and Dependabot weekly auto-update configuration</span></li>
+        </ul>
+      </div>
+
+      <!-- Added -->
+      <div class="mb-8">
+        <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+          <span class="w-3 h-3 rounded-full bg-[var(--color-accent)]"></span>
+          Added
+        </h3>
+        <ul class="space-y-3 text-sm text-[var(--color-text-secondary)]">
+          <li class="flex gap-2"><span class="text-[var(--color-text-muted)] mt-1">•</span><span>Optional httpx backend for HTTP connection pooling — install with pip install executionkit[httpx]</span></li>
+          <li class="flex gap-2"><span class="text-[var(--color-text-muted)] mt-1">•</span><span>max_history_messages parameter in react_loop for capping message history size</span></li>
+          <li class="flex gap-2"><span class="text-[var(--color-text-muted)] mt-1">•</span><span>_validate_tool_args helper validates tool call arguments against JSON Schema before execution</span></li>
+          <li class="flex gap-2"><span class="text-[var(--color-text-muted)] mt-1">•</span><span>aclose() and async context manager support for Provider</span></li>
+          <li class="flex gap-2"><span class="text-[var(--color-text-muted)] mt-1">•</span><span>messages_trimmed counter in react_loop metadata</span></li>
+        </ul>
+      </div>
+
+      <!-- Fixed -->
+      <div class="mb-8">
+        <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+          <span class="w-3 h-3 rounded-full bg-[var(--color-accent-orange)]"></span>
+          Fixed
+        </h3>
+        <ul class="space-y-3 text-sm text-[var(--color-text-secondary)]">
+          <li class="flex gap-2"><span class="text-[var(--color-text-muted)] mt-1">•</span><span>Fix consensus voting incorrectly splitting semantically identical responses differing only in whitespace</span></li>
+          <li class="flex gap-2"><span class="text-[var(--color-text-muted)] mt-1">•</span><span>Fix _parse_score silently accepting scores outside 0–10 range</span></li>
+          <li class="flex gap-2"><span class="text-[var(--color-text-muted)] mt-1">•</span><span>Remove phantom pydantic from project.dependencies</span></li>
+        </ul>
+      </div>
+
+      <!-- Changed -->
+      <div>
+        <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+          <span class="w-3 h-3 rounded-full bg-[var(--color-accent-blue)]"></span>
+          Changed
+        </h3>
+        <ul class="space-y-3 text-sm text-[var(--color-text-secondary)]">
+          <li class="flex gap-2"><span class="text-[var(--color-text-muted)] mt-1">•</span><span>Change PatternResult.metadata from dict to MappingProxyType for true immutability</span></li>
+        </ul>
+      </div>
+    </section>
+  </div>
+</Base>
