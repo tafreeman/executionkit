@@ -1,0 +1,299 @@
+---
+import Base from "../layouts/Base.astro";
+import { Code } from "astro-expressive-code/components";
+
+const consensusSig = `async def consensus(
+    provider: LLMProvider,
+    prompt: str,
+    *,
+    num_samples: int = 5,
+    strategy: VotingStrategy | str = "majority",
+    temperature: float = 0.9,
+    max_tokens: int = 4096,
+    max_cost: TokenUsage | None = None,
+    max_concurrency: int = 5,
+    retry: RetryConfig | None = None,
+) -> PatternResult[str]`;
+
+const refineSig = `async def refine_loop(
+    provider: LLMProvider,
+    prompt: str,
+    *,
+    evaluator: Evaluator | None = None,
+    target_score: float = 0.9,
+    max_iterations: int = 5,
+    patience: int = 3,
+    delta_threshold: float = 0.01,
+    temperature: float = 0.7,
+    max_tokens: int = 4096,
+    max_cost: TokenUsage | None = None,
+    retry: RetryConfig | None = None,
+) -> PatternResult[str]`;
+
+const reactSig = `async def react_loop(
+    provider: ToolCallingProvider,
+    prompt: str,
+    tools: Sequence[Tool],
+    *,
+    max_rounds: int = 8,
+    max_observation_chars: int = 12000,
+    tool_timeout: float | None = None,
+    temperature: float = 0.3,
+    max_tokens: int = 4096,
+    max_cost: TokenUsage | None = None,
+    retry: RetryConfig | None = None,
+    max_history_messages: int | None = None,
+) -> PatternResult[str]`;
+
+const pipeSig = `async def pipe(
+    provider: LLMProvider,
+    prompt: str,
+    *steps: PatternStep,
+    max_budget: TokenUsage | None = None,
+    **shared_kwargs: Any,
+) -> PatternResult[Any]`;
+
+const patternResultCode = `@dataclass(frozen=True, slots=True)
+class PatternResult(Generic[T]):
+    value: T
+    cost: TokenUsage
+    score: float | None = None
+    metadata: MappingProxyType[str, Any] = MappingProxyType({})`;
+
+const tokenUsageCode = `@dataclass(frozen=True, slots=True)
+class TokenUsage:
+    input_tokens: int = 0
+    output_tokens: int = 0
+    llm_calls: int = 0`;
+
+const toolCode = `@dataclass(frozen=True, slots=True)
+class Tool:
+    name: str
+    description: str
+    parameters: MappingProxyType[str, Any]
+    execute: Callable[..., Awaitable[str]]`;
+
+const providerCode = `@dataclass(frozen=True, slots=True)
+class Provider:
+    base_url: str
+    model: str
+    api_key: str = ""
+    default_temperature: float = 0.7
+    default_max_tokens: int = 4096
+    timeout: float = 120.0
+    supports_tools: bool = True`;
+
+const retryCode = `@dataclass(frozen=True, slots=True)
+class RetryConfig:
+    max_retries: int = 3
+    base_delay: float = 1.0
+    max_delay: float = 60.0
+    exponential_base: float = 2.0
+    retryable_exceptions: tuple[type[Exception], ...] = (RateLimitError, ProviderError)`;
+
+const extractJsonCode = `def extract_json(text: str) -> dict | list`;
+
+const convergenceCode = `class ConvergenceDetector:
+    def __init__(self, score_threshold: float, delta_threshold: float, patience: int): ...
+    def should_stop(self, score: float) -> bool: ...
+    def reset(self) -> None: ...`;
+---
+
+<Base title="API Reference" description="Complete API reference for ExecutionKit — every function, class, type, and exception.">
+  <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-20">
+    <h1 class="text-4xl font-bold mb-4">API Reference</h1>
+    <p class="text-lg text-[var(--color-text-secondary)] mb-8">
+      Version <strong>0.1.0</strong> — Python 3.11+
+    </p>
+
+    <!-- Quick reference -->
+    <section class="mb-16">
+      <h2 class="text-2xl font-bold mb-6">Quick Reference</h2>
+      <div class="overflow-x-auto rounded-lg border border-[var(--color-border)]">
+        <table class="w-full text-sm border-collapse">
+          <thead>
+            <tr class="bg-[var(--color-bg-tertiary)] border-b border-[var(--color-border)]">
+              <th class="text-left py-3 px-4 font-semibold text-[var(--color-text-primary)]">Symbol</th>
+              <th class="text-left py-3 px-4 font-semibold text-[var(--color-text-primary)]">Kind</th>
+              <th class="text-left py-3 px-4 font-semibold text-[var(--color-text-primary)]">Description</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-[var(--color-border)]">
+            {[
+              ["consensus()", "function", "Parallel sampling with majority or unanimous voting"],
+              ["refine_loop()", "function", "Iterative refinement with convergence detection"],
+              ["react_loop()", "function", "Think-act-observe tool-calling loop"],
+              ["pipe()", "function", "Chain patterns, threading output as next prompt"],
+              ["Kit", "class", "Session wrapper tracking cumulative usage"],
+              ["Provider", "class", "Universal OpenAI-compatible HTTP provider"],
+              ["PatternResult[T]", "dataclass", "Return type for every pattern"],
+              ["TokenUsage", "dataclass", "Accumulated token and call counts"],
+              ["Tool", "dataclass", "Tool definition for LLM tool-calling"],
+              ["LLMResponse", "dataclass", "Parsed LLM completion response"],
+              ["LLMProvider", "protocol", "Structural protocol for any LLM backend"],
+              ["ToolCallingProvider", "protocol", "Extension for tool-calling backends"],
+              ["VotingStrategy", "enum", "MAJORITY or UNANIMOUS"],
+              ["Evaluator", "type alias", "async (str, LLMProvider) → float"],
+              ["RetryConfig", "dataclass", "Immutable retry configuration"],
+              ["ConvergenceDetector", "class", "Score history tracker for convergence"],
+              ["extract_json()", "function", "Robust JSON extraction from LLM output"],
+            ].map(([symbol, kind, desc]) => (
+              <tr class="hover:bg-[var(--color-bg-secondary)] transition-colors">
+                <td class="py-3 px-4"><code class="text-[var(--color-accent-blue)] font-mono text-xs">{symbol}</code></td>
+                <td class="py-3 px-4"><span class="text-xs px-2 py-0.5 rounded-full bg-[var(--color-bg-tertiary)] text-[var(--color-text-muted)]">{kind}</span></td>
+                <td class="py-3 px-4 text-[var(--color-text-secondary)]">{desc}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Patterns -->
+    <section class="mb-16">
+      <h2 class="text-2xl font-bold mb-6">Patterns</h2>
+      <div class="space-y-12">
+        <div id="consensus" class="scroll-mt-20">
+          <h3 class="text-xl font-bold mb-3 text-[var(--color-accent)]">consensus()</h3>
+          <Code code={consensusSig} lang="python" />
+          <p class="mt-3 text-sm text-[var(--color-text-secondary)]">
+            Fires num_samples concurrent completions and selects the winning response via voting.
+            <strong>Metadata keys:</strong> agreement_ratio, unique_responses, tie_count.
+            Raises ConsensusFailedError when strategy="unanimous" and not all responses match.
+          </p>
+        </div>
+
+        <div id="refine-loop" class="scroll-mt-20">
+          <h3 class="text-xl font-bold mb-3 text-[var(--color-accent)]">refine_loop()</h3>
+          <Code code={refineSig} lang="python" />
+          <p class="mt-3 text-sm text-[var(--color-text-secondary)]">
+            Iteratively improves a response until target_score is reached or convergence detected.
+            <strong>Metadata keys:</strong> iterations, converged, score_history.
+          </p>
+        </div>
+
+        <div id="react-loop" class="scroll-mt-20">
+          <h3 class="text-xl font-bold mb-3 text-[var(--color-accent)]">react_loop()</h3>
+          <Code code={reactSig} lang="python" />
+          <p class="mt-3 text-sm text-[var(--color-text-secondary)]">
+            Think-act-observe loop with tool calling. max_history_messages caps context growth.
+            <strong>Metadata keys:</strong> rounds, tool_calls_made, truncated_responses,
+            truncated_observations, messages_trimmed.
+            Raises MaxIterationsError when max_rounds is exhausted.
+          </p>
+        </div>
+
+        <div id="pipe" class="scroll-mt-20">
+          <h3 class="text-xl font-bold mb-3 text-[var(--color-accent)]">pipe()</h3>
+          <Code code={pipeSig} lang="python" />
+          <p class="mt-3 text-sm text-[var(--color-text-secondary)]">
+            Chains patterns, threading each result's value as the next prompt.
+            Costs accumulate; max_budget sets a shared token/call budget forwarded to
+            each step as max_cost. Extra **shared_kwargs are forwarded to every step.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Types -->
+    <section class="mb-16">
+      <h2 class="text-2xl font-bold mb-6">Types</h2>
+      <div class="space-y-8">
+        <div id="pattern-result" class="scroll-mt-20">
+          <h3 class="text-xl font-bold mb-3 text-[var(--color-accent)]">PatternResult[T]</h3>
+          <Code code={patternResultCode} lang="python" />
+          <p class="mt-3 text-sm text-[var(--color-text-secondary)]">
+            Immutable result returned by every pattern. str(result) returns str(result.value) for convenience.
+          </p>
+        </div>
+
+        <div id="token-usage" class="scroll-mt-20">
+          <h3 class="text-xl font-bold mb-3 text-[var(--color-accent)]">TokenUsage</h3>
+          <Code code={tokenUsageCode} lang="python" />
+        </div>
+
+        <div id="tool" class="scroll-mt-20">
+          <h3 class="text-xl font-bold mb-3 text-[var(--color-accent)]">Tool</h3>
+          <Code code={toolCode} lang="python" />
+        </div>
+
+        <div id="provider-class" class="scroll-mt-20">
+          <h3 class="text-xl font-bold mb-3 text-[var(--color-accent)]">Provider</h3>
+          <Code code={providerCode} lang="python" />
+          <p class="mt-3 text-sm text-[var(--color-text-secondary)]">
+            Speaks the OpenAI-compatible /chat/completions format. Supports async context manager.
+            __repr__ masks the API key as '***'.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Exceptions -->
+    <section class="mb-16">
+      <h2 class="text-2xl font-bold mb-6">Exceptions</h2>
+      <p class="text-[var(--color-text-secondary)] mb-4">
+        All exceptions carry .cost (TokenUsage) and .metadata (dict).
+      </p>
+      <div class="overflow-x-auto rounded-lg border border-[var(--color-border)]">
+        <table class="w-full text-sm border-collapse">
+          <thead>
+            <tr class="bg-[var(--color-bg-tertiary)] border-b border-[var(--color-border)]">
+              <th class="text-left py-3 px-4 font-semibold text-[var(--color-text-primary)]">Exception</th>
+              <th class="text-left py-3 px-4 font-semibold text-[var(--color-text-primary)]">Parent</th>
+              <th class="text-left py-3 px-4 font-semibold text-[var(--color-text-primary)]">Cause</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-[var(--color-border)]">
+            {[
+              ["ExecutionKitError", "Exception", "Base for all errors"],
+              ["LLMError", "ExecutionKitError", "Provider communication errors"],
+              ["RateLimitError", "LLMError", "HTTP 429; has retry_after"],
+              ["PermanentError", "LLMError", "Non-retryable provider error"],
+              ["ProviderError", "LLMError", "Catch-all retryable HTTP failures"],
+              ["PatternError", "ExecutionKitError", "Pattern logic errors"],
+              ["BudgetExhaustedError", "PatternError", "Token/call budget exceeded"],
+              ["ConsensusFailedError", "PatternError", "Unanimous strategy failed"],
+              ["MaxIterationsError", "PatternError", "Loop hit max_rounds"],
+            ].map(([name, parent, cause]) => (
+              <tr class="hover:bg-[var(--color-bg-secondary)] transition-colors">
+                <td class="py-3 px-4 font-mono text-xs text-[var(--color-accent-blue)]">{name}</td>
+                <td class="py-3 px-4 font-mono text-xs text-[var(--color-text-muted)]">{parent}</td>
+                <td class="py-3 px-4 text-[var(--color-text-secondary)]">{cause}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Engine utilities -->
+    <section>
+      <h2 class="text-2xl font-bold mb-6">Engine Utilities</h2>
+      <div class="space-y-8">
+        <div>
+          <h3 class="text-xl font-bold mb-3 text-[var(--color-accent)]">RetryConfig</h3>
+          <Code code={retryCode} lang="python" />
+          <p class="mt-3 text-sm text-[var(--color-text-secondary)]">
+            DEFAULT_RETRY is the module-level singleton. Full jitter prevents thundering-herd effects.
+          </p>
+        </div>
+        <div>
+          <h3 class="text-xl font-bold mb-3 text-[var(--color-accent)]">extract_json()</h3>
+          <Code code={extractJsonCode} lang="python" />
+          <p class="mt-3 text-sm text-[var(--color-text-secondary)]">
+            Three-strategy extractor: raw parse → markdown fence strip → balanced-brace scan.
+            Returns dict | list. Raises ValueError if no valid JSON found.
+          </p>
+        </div>
+        <div>
+          <h3 class="text-xl font-bold mb-3 text-[var(--color-accent)]">ConvergenceDetector</h3>
+          <Code code={convergenceCode} lang="python" />
+          <p class="mt-3 text-sm text-[var(--color-text-secondary)]">
+            Stateful detector used inside refine_loop. Returns True when score ≥ threshold
+            or delta has been below threshold for patience consecutive iterations.
+          </p>
+        </div>
+      </div>
+    </section>
+  </div>
+</Base>

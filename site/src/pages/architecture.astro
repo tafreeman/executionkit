@@ -1,0 +1,237 @@
+---
+import Base from "../layouts/Base.astro";
+import Mermaid from "../components/Mermaid.astro";
+import { Code } from "astro-expressive-code/components";
+
+const depGraph = `graph TD
+    INIT[__init__] --> KIT[kit]
+    INIT --> COMPOSE[compose]
+    INIT --> PATTERNS[patterns]
+    INIT --> ENGINE[engine]
+    INIT --> PROVIDER[provider]
+    INIT --> TYPES[types]
+    KIT --> PATTERNS
+    KIT --> COMPOSE
+    KIT --> PROVIDER
+    KIT --> TYPES
+    KIT --> COST[cost]
+    COMPOSE --> PROVIDER
+    COMPOSE --> TYPES
+    PATTERNS --> COST
+    PATTERNS --> ENGINE
+    PATTERNS --> PROVIDER
+    PATTERNS --> TYPES
+    PROVIDER --> TYPES
+    COST --> TYPES
+    style INIT fill:#1c2128,stroke:#39d353,color:#e6edf3
+    style PATTERNS fill:#1c2128,stroke:#f0883e,color:#e6edf3
+    style ENGINE fill:#1c2128,stroke:#58a6ff,color:#e6edf3
+    style PROVIDER fill:#1c2128,stroke:#f0883e,color:#e6edf3
+    style TYPES fill:#1c2128,stroke:#8b949e,color:#e6edf3
+    style COST fill:#1c2128,stroke:#8b949e,color:#e6edf3
+    style KIT fill:#1c2128,stroke:#58a6ff,color:#e6edf3
+    style COMPOSE fill:#1c2128,stroke:#58a6ff,color:#e6edf3`;
+
+const dataFlowChart = `sequenceDiagram
+    participant U as User Code
+    participant K as Kit
+    participant P as Pattern
+    participant CT as CostTracker
+    participant R as with_retry
+    participant Prov as Provider
+    participant API as LLM API
+    U->>K: kit.refine prompt
+    K->>P: refine_loop provider prompt
+    P->>CT: new CostTracker
+    P->>R: checked_complete provider msgs
+    R->>Prov: provider.complete messages
+    Prov->>API: HTTP POST /chat/completions
+    API-->>Prov: JSON response
+    Prov-->>R: LLMResponse
+    R-->>P: LLMResponse
+    P->>CT: record tokens
+    P->>P: evaluate and converge
+    P-->>K: PatternResult immutable
+    K->>K: accumulate usage
+    K-->>U: PatternResult`;
+
+const errorChart = `graph TD
+    EKE[ExecutionKitError] --> LLM[LLMError]
+    EKE --> PE[PatternError]
+    LLM --> RLE[RateLimitError]
+    LLM --> PME[PermanentError]
+    LLM --> PRE[ProviderError]
+    PE --> BEE[BudgetExhaustedError]
+    PE --> CFE[ConsensusFailedError]
+    PE --> MIE[MaxIterationsError]
+    style EKE fill:#1c2128,stroke:#f85149,color:#e6edf3
+    style LLM fill:#1c2128,stroke:#f0883e,color:#e6edf3
+    style PE fill:#1c2128,stroke:#f0883e,color:#e6edf3
+    style RLE fill:#1c2128,stroke:#8b949e,color:#e6edf3
+    style PME fill:#1c2128,stroke:#8b949e,color:#e6edf3
+    style PRE fill:#1c2128,stroke:#8b949e,color:#e6edf3
+    style BEE fill:#1c2128,stroke:#8b949e,color:#e6edf3
+    style CFE fill:#1c2128,stroke:#8b949e,color:#e6edf3
+    style MIE fill:#1c2128,stroke:#8b949e,color:#e6edf3`;
+
+const moduleMap = `executionkit/
+├── __init__.py          — public API surface; sync wrappers
+├── types.py             — frozen value types: PatternResult, TokenUsage, Tool
+├── provider.py          — LLMProvider protocol, Provider class, error hierarchy
+├── cost.py              — CostTracker mutable accumulator
+├── compose.py           — pipe() composition helper
+├── kit.py               — Kit session facade
+├── _mock.py             — MockProvider test double
+├── patterns/
+│   ├── base.py          — checked_complete(), validate_score()
+│   ├── consensus.py     — parallel majority/unanimous voting
+│   ├── refine_loop.py   — iterative score-guided refinement
+│   └── react_loop.py    — tool-calling think-act-observe loop
+└── engine/
+    ├── convergence.py   — ConvergenceDetector
+    ├── retry.py         — RetryConfig, with_retry()
+    ├── parallel.py      — gather_strict(), gather_resilient()
+    └── json_extraction.py — extract_json() multi-strategy parser`;
+---
+
+<Base title="Architecture" description="Module map, data flow, error hierarchy, and design principles of ExecutionKit.">
+  <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-20">
+    <h1 class="text-4xl font-bold mb-4">Architecture</h1>
+    <p class="text-lg text-[var(--color-text-secondary)] mb-12">
+      Five design principles shape every decision. Understanding them makes the codebase predictable.
+    </p>
+
+    <!-- Design Principles -->
+    <section class="mb-16">
+      <h2 class="text-2xl font-bold mb-6">Design Principles</h2>
+      <div class="space-y-4">
+        {[
+          { num: "01", title: "Zero runtime dependencies", desc: "dependencies = [] in pyproject.toml. The optional httpx extra is additive — stdlib urllib is always present." },
+          { num: "02", title: "Flat package layout", desc: "All importable names under executionkit/ directly. Sub-packages exist only for organisation." },
+          { num: "03", title: "Frozen value types", desc: "Every object crossing a function boundary is @dataclass(frozen=True, slots=True). Patterns never return mutable state." },
+          { num: "04", title: "Async-first, sync wrappers", desc: "All pattern functions are async. Synchronous wrappers call asyncio.run() with a helpful error in async contexts." },
+          { num: "05", title: "Composable, not opinionated", desc: "Patterns are standalone async functions. pipe() chains them. Kit is optional sugar — nothing requires it." },
+        ].map((p) => (
+          <div class="flex gap-4 items-start p-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
+            <span class="text-[var(--color-accent)] font-mono font-bold text-sm mt-0.5">{p.num}</span>
+            <div>
+              <h3 class="font-semibold text-[var(--color-text-primary)] mb-1">{p.title}</h3>
+              <p class="text-sm text-[var(--color-text-secondary)]">{p.desc}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+
+    <!-- Module Map -->
+    <section class="mb-16">
+      <h2 class="text-2xl font-bold mb-6">Module Map</h2>
+      <Code code={moduleMap} lang="text" />
+      <Mermaid
+        chart={depGraph}
+        caption="Dependency graph — arrows indicate 'imports from'. Flow is strictly downward."
+      />
+    </section>
+
+    <!-- Data Flow -->
+    <section class="mb-16">
+      <h2 class="text-2xl font-bold mb-6">Data Flow</h2>
+      <p class="text-[var(--color-text-secondary)] mb-6">
+        A typical call through the library follows this path:
+      </p>
+      <Mermaid
+        chart={dataFlowChart}
+        caption="Typical data flow through Kit → Pattern → Provider → LLM API"
+      />
+    </section>
+
+    <!-- Error Hierarchy -->
+    <section class="mb-16">
+      <h2 class="text-2xl font-bold mb-6">Error Hierarchy</h2>
+      <p class="text-[var(--color-text-secondary)] mb-6">
+        All exceptions inherit from ExecutionKitError and carry .cost (accumulated TokenUsage)
+        and .metadata fields.
+      </p>
+      <Mermaid
+        chart={errorChart}
+        caption="Error hierarchy — LLMError for provider failures, PatternError for logic failures"
+      />
+      <div class="mt-6 overflow-x-auto">
+        <table class="w-full text-sm border-collapse">
+          <thead>
+            <tr class="border-b border-[var(--color-border)]">
+              <th class="text-left py-3 px-4 font-semibold text-[var(--color-text-primary)]">Exception</th>
+              <th class="text-left py-3 px-4 font-semibold text-[var(--color-text-primary)]">Cause</th>
+              <th class="text-left py-3 px-4 font-semibold text-[var(--color-text-primary)]">Retryable</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-[var(--color-border)]">
+            <tr><td class="py-3 px-4"><code class="text-[var(--color-accent-blue)]">RateLimitError</code></td><td class="py-3 px-4 text-[var(--color-text-secondary)]">HTTP 429</td><td class="py-3 px-4 text-[var(--color-accent)]">✓</td></tr>
+            <tr><td class="py-3 px-4"><code class="text-[var(--color-accent-blue)]">PermanentError</code></td><td class="py-3 px-4 text-[var(--color-text-secondary)]">HTTP 401/403/404</td><td class="py-3 px-4 text-[var(--color-text-muted)]">✗</td></tr>
+            <tr><td class="py-3 px-4"><code class="text-[var(--color-accent-blue)]">ProviderError</code></td><td class="py-3 px-4 text-[var(--color-text-secondary)]">Unexpected HTTP failure</td><td class="py-3 px-4 text-[var(--color-accent)]">✓</td></tr>
+            <tr><td class="py-3 px-4"><code class="text-[var(--color-accent-blue)]">BudgetExhaustedError</code></td><td class="py-3 px-4 text-[var(--color-text-secondary)]">Token/call budget exceeded</td><td class="py-3 px-4 text-[var(--color-text-muted)]">✗</td></tr>
+            <tr><td class="py-3 px-4"><code class="text-[var(--color-accent-blue)]">ConsensusFailedError</code></td><td class="py-3 px-4 text-[var(--color-text-secondary)]">Unanimous strategy failed</td><td class="py-3 px-4 text-[var(--color-text-muted)]">✗</td></tr>
+            <tr><td class="py-3 px-4"><code class="text-[var(--color-accent-blue)]">MaxIterationsError</code></td><td class="py-3 px-4 text-[var(--color-text-secondary)]">Loop hit max_rounds</td><td class="py-3 px-4 text-[var(--color-text-muted)]">✗</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Immutability -->
+    <section class="mb-16">
+      <h2 class="text-2xl font-bold mb-6">Immutability Contract</h2>
+      <p class="text-[var(--color-text-secondary)] mb-6">
+        All value objects use @dataclass(frozen=True, slots=True). PatternResult.metadata
+        is additionally wrapped in MappingProxyType for true read-only access.
+      </p>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm border-collapse">
+          <thead>
+            <tr class="border-b border-[var(--color-border)]">
+              <th class="text-left py-3 px-4 font-semibold text-[var(--color-text-primary)]">Type</th>
+              <th class="text-left py-3 px-4 font-semibold text-[var(--color-text-primary)]">Module</th>
+              <th class="text-left py-3 px-4 font-semibold text-[var(--color-text-primary)]">Frozen</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-[var(--color-border)]">
+            {[
+              ["TokenUsage", "types.py", true],
+              ["PatternResult[T]", "types.py", true],
+              ["Tool", "types.py", true],
+              ["ToolCall", "provider.py", true],
+              ["LLMResponse", "provider.py", true],
+              ["Provider", "provider.py", true],
+              ["RetryConfig", "engine/retry.py", true],
+              ["CostTracker", "cost.py", false],
+            ].map(([type, module, frozen]) => (
+              <tr>
+                <td class="py-3 px-4"><code class="text-[var(--color-accent-blue)]">{type}</code></td>
+                <td class="py-3 px-4 text-[var(--color-text-secondary)] font-mono text-xs">{module}</td>
+                <td class="py-3 px-4">{frozen ? <span class="text-[var(--color-accent)]">✓ frozen</span> : <span class="text-[var(--color-text-muted)]">mutable (internal)</span>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Security -->
+    <section>
+      <h2 class="text-2xl font-bold mb-6">Security Layers</h2>
+      <div class="space-y-4">
+        {[
+          { title: "Credential redaction", desc: "_redact_sensitive() replaces API key patterns with [REDACTED] in all error messages. Provider.__repr__ masks api_key entirely." },
+          { title: "XML sandboxing", desc: "refine_loop's default evaluator wraps content in XML delimiters and instructs the LLM to ignore any instructions inside them." },
+          { title: "Tool argument validation", desc: "react_loop validates tool call arguments against JSON Schema before invoking the tool. Missing required fields and type mismatches are caught." },
+          { title: "No eval or exec", desc: "JSON is parsed with json.loads() only. ExecutionKit never calls eval() or exec() on LLM output." },
+          { title: "Bandit SAST in CI", desc: "bandit runs on every commit. Targeted skips for assert guards, urllib HTTP client, and jitter random." },
+        ].map((s) => (
+          <div class="p-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
+            <h3 class="font-semibold text-[var(--color-text-primary)] mb-1">🛡️ {s.title}</h3>
+            <p class="text-sm text-[var(--color-text-secondary)]">{s.desc}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  </div>
+</Base>

@@ -1,0 +1,150 @@
+---
+import Base from "../layouts/Base.astro";
+import Step from "../components/Step.astro";
+import DependencyTree from "../components/DependencyTree.astro";
+import { Code } from "astro-expressive-code/components";
+
+const base = import.meta.env.BASE_URL;
+
+const installCode = `pip install executionkit`;
+const installHttpx = `pip install executionkit[httpx]`;
+const exportKey = `export OPENAI_API_KEY="sk-..."`;
+
+const providerCode = `import os
+from executionkit import Provider
+
+provider = Provider(
+    base_url="https://api.openai.com/v1",
+    api_key=os.environ["OPENAI_API_KEY"],
+    model="gpt-4o-mini",
+)`;
+
+const ollamaCode = `provider = Provider(
+    base_url="http://localhost:11434/v1",
+    model="llama3.2",
+)`;
+
+const consensusCode = `from executionkit import consensus
+
+result = await consensus(
+    provider,
+    "What is the capital of France?",
+    num_samples=3,
+)
+
+print(result)                              # Paris
+print(result.metadata["agreement_ratio"])  # 1.0
+print(result.cost)                         # TokenUsage(...)`;
+
+const syncCode = `from executionkit import consensus_sync
+
+result = consensus_sync(provider, "What is the capital of France?")
+print(result.value)`;
+
+const pipeCode = `from executionkit import pipe, consensus, refine_loop
+from functools import partial
+
+result = await pipe(
+    provider,
+    "Explain gradient descent in simple terms.",
+    consensus,
+    partial(refine_loop, target_score=0.9),
+)
+
+print(result)       # Final refined value
+print(result.cost)  # Cumulative cost across both steps`;
+---
+
+<Base title="Quick Start" description="Get up and running with ExecutionKit in under 5 minutes.">
+  <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-20">
+    <h1 class="text-4xl font-bold mb-4">Quick Start</h1>
+    <p class="text-lg text-[var(--color-text-secondary)] mb-12">
+      Get from zero to running LLM patterns in under 5 minutes.
+    </p>
+
+    <!-- Prerequisites -->
+    <div class="mb-12">
+      <h2 class="text-2xl font-bold mb-6">Prerequisites</h2>
+      <DependencyTree
+        items={[
+          { name: "Python", version: "≥ 3.11", required: true },
+          { name: "executionkit", version: "0.1.0", required: true },
+          { name: "httpx", version: "≥ 0.27", required: false },
+        ]}
+      />
+    </div>
+
+    <!-- Steps -->
+    <h2 class="text-2xl font-bold mb-8">Setup</h2>
+
+    <div class="space-y-2">
+      <Step number={1} title="Install the package" active>
+        <p>Install from PyPI with pip:</p>
+        <Code code={installCode} lang="bash" />
+        <p>For high-throughput workloads requiring connection pooling:</p>
+        <Code code={installHttpx} lang="bash" />
+      </Step>
+
+      <Step number={2} title="Set your API key">
+        <p>
+          Export your API key as an environment variable.
+          ExecutionKit works with any OpenAI-compatible endpoint.
+        </p>
+        <Code code={exportKey} lang="bash" />
+        <p class="text-sm text-[var(--color-text-muted)]">
+          🔒 Never hardcode API keys in source code.
+          Provider.__repr__ automatically masks credentials.
+        </p>
+      </Step>
+
+      <Step number={3} title="Create a provider">
+        <p>
+          Point Provider at any OpenAI-compatible base URL:
+        </p>
+        <Code code={providerCode} lang="python" />
+        <p>Or use a local model with Ollama (no API key needed):</p>
+        <Code code={ollamaCode} lang="python" />
+      </Step>
+
+      <Step number={4} title="Run your first pattern">
+        <p>
+          Use consensus to run multiple completions and vote on the best answer:
+        </p>
+        <Code code={consensusCode} lang="python" />
+        <p>Or use the synchronous wrapper outside async contexts:</p>
+        <Code code={syncCode} lang="python" />
+      </Step>
+
+      <Step number={5} title="Compose patterns">
+        <p>
+          Chain patterns with pipe() — each result's value becomes the next prompt.
+          Costs accumulate automatically.
+        </p>
+        <Code code={pipeCode} lang="python" />
+      </Step>
+    </div>
+
+    <!-- Next steps -->
+    <div class="mt-16 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-8">
+      <h2 class="text-xl font-bold mb-4">What's next?</h2>
+      <div class="grid sm:grid-cols-2 gap-4">
+        <a href={`${base}patterns/`} class="block p-4 rounded-lg border border-[var(--color-border)] hover:border-[var(--color-accent-dim)] transition-colors">
+          <div class="font-medium text-[var(--color-text-primary)] mb-1">Explore all patterns</div>
+          <div class="text-sm text-[var(--color-text-muted)]">Consensus, Refine Loop, React Loop</div>
+        </a>
+        <a href={`${base}architecture/`} class="block p-4 rounded-lg border border-[var(--color-border)] hover:border-[var(--color-accent-dim)] transition-colors">
+          <div class="font-medium text-[var(--color-text-primary)] mb-1">Understand the architecture</div>
+          <div class="text-sm text-[var(--color-text-muted)]">Module map, data flow, error hierarchy</div>
+        </a>
+        <a href={`${base}api/`} class="block p-4 rounded-lg border border-[var(--color-border)] hover:border-[var(--color-accent-dim)] transition-colors">
+          <div class="font-medium text-[var(--color-text-primary)] mb-1">Full API reference</div>
+          <div class="text-sm text-[var(--color-text-muted)]">Every function, class, and type</div>
+        </a>
+        <a href="https://github.com/tafreeman/executionkit/tree/main/examples" target="_blank" rel="noopener noreferrer" class="block p-4 rounded-lg border border-[var(--color-border)] hover:border-[var(--color-accent-dim)] transition-colors">
+          <div class="font-medium text-[var(--color-text-primary)] mb-1">Browse examples</div>
+          <div class="text-sm text-[var(--color-text-muted)]">Ready-to-run scripts on GitHub</div>
+        </a>
+      </div>
+    </div>
+  </div>
+</Base>
