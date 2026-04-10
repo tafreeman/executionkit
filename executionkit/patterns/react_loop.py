@@ -55,9 +55,7 @@ def _validate_tool_args(
                 # bool is a subclass of int in Python, so isinstance(True, int) is True.
                 # Reject booleans explicitly when an integer or number is expected.
                 if expected_type in ("integer", "number") and isinstance(value, bool):
-                    return (
-                        f"Argument '{key}' expected type '{expected_type}', got bool"
-                    )
+                    return f"Argument '{key}' expected type '{expected_type}', got bool"
                 if not isinstance(value, _JSON_SCHEMA_TYPE_MAP[expected_type]):
                     return (
                         f"Argument '{key}' expected type '{expected_type}', "

@@ -29,6 +29,7 @@ _SAFE_OPS: dict[type, Any] = {
 
 def _safe_eval(expression: str) -> float:
     """Evaluate a math expression safely using AST (no eval/exec)."""
+
     def _eval(node: ast.expr) -> float:
         if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
             return float(node.value)
