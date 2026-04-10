@@ -1,0 +1,33 @@
+---
+export interface Props {
+  items: Array<{
+    name: string;
+    version?: string;
+    required?: boolean;
+  }>;
+}
+
+const { items } = Astro.props;
+---
+
+<div class="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] overflow-hidden">
+  <div class="px-4 py-3 bg-[var(--color-bg-tertiary)] border-b border-[var(--color-border)]">
+    <h4 class="text-sm font-semibold text-[var(--color-text-primary)]">📦 Dependencies</h4>
+  </div>
+  <ul class="divide-y divide-[var(--color-border)]">
+    {items.map((item) => (
+      <li class="flex items-center justify-between px-4 py-3 text-sm">
+        <div class="flex items-center gap-2">
+          <span class={`inline-block w-2 h-2 rounded-full ${item.required ? 'bg-[var(--color-accent)]' : 'bg-[var(--color-text-muted)]'}`} />
+          <code class="text-[var(--color-accent-blue)] font-mono">{item.name}</code>
+        </div>
+        <div class="flex items-center gap-3">
+          {item.version && <span class="text-[var(--color-text-muted)] font-mono text-xs">{item.version}</span>}
+          <span class={`text-xs px-2 py-0.5 rounded-full ${item.required ? 'bg-[var(--color-accent-dim)]/20 text-[var(--color-accent)]' : 'bg-[var(--color-bg-tertiary)] text-[var(--color-text-muted)]'}`}>
+            {item.required ? 'required' : 'optional'}
+          </span>
+        </div>
+      </li>
+    ))}
+  </ul>
+</div>
