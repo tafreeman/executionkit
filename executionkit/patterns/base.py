@@ -14,6 +14,8 @@ from executionkit.engine.retry import DEFAULT_RETRY, RetryConfig, with_retry
 from executionkit.provider import BudgetExhaustedError, LLMProvider, LLMResponse
 from executionkit.types import TokenUsage  # noqa: TC001
 
+BUDGET_EXHAUSTED_SENTINEL = -1
+
 
 def validate_score(score: float) -> float:
     """Validate that an evaluator score is in [0.0, 1.0] and not NaN.
@@ -65,7 +67,7 @@ async def checked_complete(
     if budget is not None:
         current = tracker.to_usage()
         # -1 sentinel: field was limited and fully consumed by a prior pipe() step.
-        if budget.llm_calls == -1:
+        if budget.llm_calls == BUDGET_EXHAUSTED_SENTINEL:
             raise BudgetExhaustedError(
                 "LLM call budget exhausted (forwarded from pipe)",
                 cost=current,
@@ -77,7 +79,7 @@ async def checked_complete(
                 cost=current,
                 metadata={"budget": budget},
             )
-        if budget.input_tokens == -1:
+        if budget.input_tokens == BUDGET_EXHAUSTED_SENTINEL:
             raise BudgetExhaustedError(
                 "Input token budget exhausted (forwarded from pipe)",
                 cost=current,
@@ -89,7 +91,7 @@ async def checked_complete(
                 cost=current,
                 metadata={"budget": budget},
             )
-        if budget.output_tokens == -1:
+        if budget.output_tokens == BUDGET_EXHAUSTED_SENTINEL:
             raise BudgetExhaustedError(
                 "Output token budget exhausted (forwarded from pipe)",
                 cost=current,
@@ -105,7 +107,7 @@ async def checked_complete(
     async def _before_attempt(attempt: int) -> None:
         if attempt > 1 and budget is not None:
             current = tracker.to_usage()
-            if budget.llm_calls == -1:
+            if budget.llm_calls == BUDGET_EXHAUSTED_SENTINEL:
                 raise BudgetExhaustedError(
                     "LLM call budget exhausted before retry (forwarded from pipe)",
                     cost=current,
