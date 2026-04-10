@@ -157,4 +157,7 @@ def structured_sync(
     provider: LLMProvider, prompt: str, **kwargs: Any
 ) -> PatternResult[Any]:
     """Synchronous wrapper for :func:`structured`."""
-    return cast("PatternResult[Any]", _run_sync(structured(provider, prompt, **kwargs)))
+    return cast(
+        "PatternResult[Any]",
+        _run_sync(structured(provider, prompt, **kwargs)),
+    )
