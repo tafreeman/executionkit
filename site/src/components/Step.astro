@@ -1,0 +1,21 @@
+---
+export interface Props {
+  number: number;
+  title: string;
+  active?: boolean;
+}
+
+const { number, title, active = false } = Astro.props;
+---
+
+<div class="flex gap-4 items-start">
+  <div class={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm border-2 ${active ? 'bg-[var(--color-accent)] text-[var(--color-bg-primary)] border-[var(--color-accent)]' : 'border-[var(--color-border)] text-[var(--color-text-secondary)]'}`}>
+    {number}
+  </div>
+  <div class="flex-1 pb-8 border-l-2 border-[var(--color-border)] pl-6 -ml-5 mt-1">
+    <h3 class="text-lg font-semibold text-[var(--color-text-primary)] mb-3">{title}</h3>
+    <div class="text-[var(--color-text-secondary)] space-y-3">
+      <slot />
+    </div>
+  </div>
+</div>

@@ -1,0 +1,217 @@
+---
+import Base from "../layouts/Base.astro";
+import FeatureCard from "../components/FeatureCard.astro";
+import Mermaid from "../components/Mermaid.astro";
+import { Code } from "astro-expressive-code/components";
+
+const base = import.meta.env.BASE_URL;
+
+const pipelineChart = `graph LR
+    A[User Prompt] --> B(consensus)
+    B --> C(refine_loop)
+    C --> D(react_loop)
+    D --> E[PatternResult]
+    style A fill:#1c2128,stroke:#39d353,color:#e6edf3
+    style B fill:#1c2128,stroke:#f0883e,color:#e6edf3
+    style C fill:#1c2128,stroke:#f0883e,color:#e6edf3
+    style D fill:#1c2128,stroke:#f0883e,color:#e6edf3
+    style E fill:#1c2128,stroke:#39d353,color:#e6edf3`;
+
+const quickExample = `import os
+from executionkit import consensus, Provider
+
+provider = Provider(
+    "https://api.openai.com/v1",
+    api_key=os.environ["OPENAI_API_KEY"],
+    model="gpt-4o-mini",
+)
+
+result = await consensus(provider, "Classify this support ticket: ...", num_samples=5)
+print(result)                                # The classification
+print(result.cost)                           # TokenUsage(input_tokens=250, output_tokens=45, llm_calls=5)
+print(result.metadata["agreement_ratio"])    # 0.8 — 4 of 5 agreed`;
+
+const pipeExample = `from executionkit import pipe, consensus, refine_loop
+from functools import partial
+
+result = await pipe(
+    provider,
+    "Explain gradient descent in simple terms.",
+    consensus,
+    partial(refine_loop, target_score=0.9),
+)
+
+print(result)          # Final refined value
+print(result.cost)     # Cumulative cost across both steps`;
+---
+
+<Base title="Home" description="Composable LLM reasoning patterns with budget-aware execution. More power than one-off prompts, less weight than a framework.">
+  <!-- Hero -->
+  <section class="relative overflow-hidden">
+    <div class="absolute inset-0 bg-gradient-to-b from-[var(--color-accent)]/5 to-transparent pointer-events-none"></div>
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 md:py-32 relative">
+      <div class="max-w-3xl">
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-[var(--color-accent-dim)] bg-[var(--color-accent)]/10 text-[var(--color-accent)] text-sm font-medium mb-6">
+          <span class="w-2 h-2 rounded-full bg-[var(--color-accent)] animate-pulse"></span>
+          v0.1.0 — Production Ready
+        </div>
+
+        <h1 class="text-4xl md:text-6xl font-bold tracking-tight leading-tight mb-6">
+          Composable <span class="text-[var(--color-accent)]">LLM reasoning</span> patterns
+        </h1>
+
+        <p class="text-lg md:text-xl text-[var(--color-text-secondary)] mb-8 leading-relaxed max-w-2xl">
+          More power than one-off prompts, less weight than a framework.
+          Budget-aware execution with zero runtime dependencies.
+        </p>
+
+        <div class="flex flex-wrap gap-4">
+          <a
+            href={`${base}quickstart/`}
+            class="inline-flex items-center gap-2 px-6 py-3 bg-[var(--color-accent)] text-[var(--color-bg-primary)] font-semibold rounded-lg hover:opacity-90 transition-opacity"
+          >
+            Get Started
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z"/></svg>
+          </a>
+          <a
+            href={`${base}api/`}
+            class="inline-flex items-center gap-2 px-6 py-3 border border-[var(--color-border)] text-[var(--color-text-primary)] font-semibold rounded-lg hover:border-[var(--color-text-muted)] transition-colors"
+          >
+            API Reference
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Install banner -->
+  <section class="border-y border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+      <div class="flex items-center justify-center gap-4 font-mono text-sm">
+        <span class="text-[var(--color-text-muted)]">$</span>
+        <code class="text-[var(--color-accent)]">pip install executionkit</code>
+        <button
+          id="copy-install"
+          class="text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors cursor-pointer"
+          aria-label="Copy install command"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z"/></svg>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Quick example -->
+  <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-24">
+    <div class="text-center mb-12">
+      <h2 class="text-3xl font-bold mb-4">See it in action</h2>
+      <p class="text-[var(--color-text-secondary)] max-w-xl mx-auto">
+        Run five LLM completions in parallel, get the consensus answer with cost tracking — in three lines.
+      </p>
+    </div>
+    <Code code={quickExample} lang="python" />
+  </section>
+
+  <!-- Features grid -->
+  <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-16 md:pb-24">
+    <div class="text-center mb-12">
+      <h2 class="text-3xl font-bold mb-4">Built for production</h2>
+      <p class="text-[var(--color-text-secondary)] max-w-xl mx-auto">
+        Three composable patterns that handle the hard parts of LLM reasoning.
+      </p>
+    </div>
+    <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <FeatureCard title="Consensus Voting" icon="🗳️">
+        Run N completions in parallel, aggregate via majority or unanimous voting.
+        Whitespace-normalized comparison ensures accuracy.
+      </FeatureCard>
+      <FeatureCard title="Iterative Refinement" icon="🔄">
+        Score-guided improvement loop with convergence detection.
+        Built-in prompt injection defense via XML sandboxing.
+      </FeatureCard>
+      <FeatureCard title="Tool-Calling Loop" icon="🔧">
+        Think-act-observe ReAct loop with JSON Schema validation.
+        Tool errors become observations, never crash the loop.
+      </FeatureCard>
+      <FeatureCard title="Budget Tracking" icon="💰">
+        Per-call and cumulative token usage. Set hard limits with max_cost to prevent runaway spend.
+      </FeatureCard>
+      <FeatureCard title="Zero Dependencies" icon="📦">
+        Pure stdlib. Optional httpx for connection pooling. Works anywhere Python 3.11+ runs.
+      </FeatureCard>
+      <FeatureCard title="Any Provider" icon="🔌">
+        OpenAI, Ollama, Groq, Together AI, GitHub Models — anything speaking the OpenAI-compatible format.
+      </FeatureCard>
+    </div>
+  </section>
+
+  <!-- Pipeline diagram -->
+  <section class="border-t border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-24">
+      <div class="text-center mb-8">
+        <h2 class="text-3xl font-bold mb-4">Compose patterns into pipelines</h2>
+        <p class="text-[var(--color-text-secondary)] max-w-xl mx-auto">
+          Chain consensus → refine_loop with pipe(). Costs accumulate automatically.
+        </p>
+      </div>
+      <Mermaid
+        chart={pipelineChart}
+        caption="Patterns chain via pipe() — each result's value becomes the next prompt"
+      />
+      <div class="mt-8">
+        <Code code={pipeExample} lang="python" />
+      </div>
+    </div>
+  </section>
+
+  <!-- Provider compatibility -->
+  <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-24">
+    <div class="text-center mb-12">
+      <h2 class="text-3xl font-bold mb-4">Works everywhere</h2>
+      <p class="text-[var(--color-text-secondary)] max-w-xl mx-auto">
+        Any OpenAI-compatible endpoint. Zero config change between providers.
+      </p>
+    </div>
+    <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 max-w-4xl mx-auto">
+      {[
+        { name: "OpenAI", url: "api.openai.com" },
+        { name: "Ollama", url: "localhost:11434" },
+        { name: "Groq", url: "api.groq.com" },
+        { name: "Together AI", url: "api.together.xyz" },
+        { name: "GitHub Models", url: "models.inference.ai.azure.com" },
+        { name: "Any OpenAI-compat", url: "your-endpoint.com" },
+      ].map((p) => (
+        <div class="flex items-center gap-3 px-4 py-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
+          <span class="w-2 h-2 rounded-full bg-[var(--color-accent)]"></span>
+          <div>
+            <div class="text-sm font-medium text-[var(--color-text-primary)]">{p.name}</div>
+            <div class="text-xs text-[var(--color-text-muted)] font-mono">{p.url}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  </section>
+
+  <script>
+    document.getElementById('copy-install')?.addEventListener('click', async () => {
+      const btn = document.getElementById('copy-install');
+      if (!btn) return;
+
+      const defaultIcon = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z"/></svg>';
+      const successIcon = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>';
+      const errorIcon = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.5a6.5 6.5 0 110 13 6.5 6.5 0 010-13zm0 1.5a5 5 0 100 10 5 5 0 000-10zm2.03 2.97a.75.75 0 00-1.06 0L8 6.94 7.03 5.97a.75.75 0 10-1.06 1.06L6.94 8l-.97.97a.75.75 0 101.06 1.06L8 9.06l.97.97a.75.75 0 001.06-1.06L9.06 8l.97-.97a.75.75 0 000-1.06z"/></svg>';
+
+      try {
+        await navigator.clipboard.writeText('pip install executionkit');
+        btn.innerHTML = successIcon;
+      } catch (error) {
+        console.error('Failed to copy install command to clipboard.', error);
+        btn.innerHTML = errorIcon;
+      }
+
+      setTimeout(() => {
+        btn.innerHTML = defaultIcon;
+      }, 2000);
+    });
+  </script>
+</Base>
