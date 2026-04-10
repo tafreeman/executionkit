@@ -4,6 +4,11 @@
 > Organised into four tiers: correctness fixes first, then new features,
 > then provider/engine maturity, then ecosystem polish.
 > Each item has a rationale, scope, acceptance criteria, and effort estimate.
+>
+> Status update (2026-04-10): `retry_after` handling, observation truncation
+> enforcement, bool-safe tool-arg validation, README count cleanup, and a
+> proper task-runner Makefile have already shipped. Treat this document as a
+> roadmap input for remaining work, not as a changelog.
 
 ---
 

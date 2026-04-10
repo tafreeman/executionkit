@@ -1,5 +1,11 @@
 # ExecutionKit — Refined Ticket Backlog
 
+> Historical ticket snapshot from 2026-04-06. Several items in this file have
+> already shipped (including prompt-injection hardening, JSON-schema tool arg
+> validation, `httpx` pooling support, Dependabot/Bandit, pydantic removal, and
+> message-trimming metadata). Use `/home/runner/work/executionkit/executionkit/ROADMAP_V2.md`
+> plus the current codebase as the source of truth for remaining work.
+
 > Generated 2026-04-06. All tickets with P0/P1 priority are candidates for the next sprint.
 > Each ticket includes: role, model, persona, scope, and precise instructions.
 

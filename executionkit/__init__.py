@@ -16,6 +16,7 @@ from executionkit.patterns.base import checked_complete, validate_score
 from executionkit.patterns.consensus import consensus
 from executionkit.patterns.react_loop import react_loop
 from executionkit.patterns.refine_loop import refine_loop
+from executionkit.patterns.structured import structured
 from executionkit.provider import (
     BudgetExhaustedError,
     ConsensusFailedError,
@@ -83,6 +84,8 @@ __all__ = [
     "react_loop_sync",
     "refine_loop",
     "refine_loop_sync",
+    "structured",
+    "structured_sync",
     "validate_score",
 ]
 
@@ -148,3 +151,10 @@ def pipe_sync(
     return cast(
         "PatternResult[Any]", _run_sync(pipe(provider, prompt, *steps, **kwargs))
     )
+
+
+def structured_sync(
+    provider: LLMProvider, prompt: str, **kwargs: Any
+) -> PatternResult[Any]:
+    """Synchronous wrapper for :func:`structured`."""
+    return cast("PatternResult[Any]", _run_sync(structured(provider, prompt, **kwargs)))
