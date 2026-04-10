@@ -1,7 +1,7 @@
 ---
 /**
- * Mermaid diagram component — renders at build time via a pre-rendered SVG approach,
- * or at runtime via a small inline script loading mermaid from CDN.
+ * Mermaid diagram component — renders at runtime via a small inline script
+ * that loads Mermaid from a CDN and enhances the embedded diagram source.
  */
 export interface Props {
   chart: string;
@@ -29,33 +29,52 @@ const id = `mermaid-${Math.random().toString(36).slice(2, 9)}`;
 <script>
   async function initMermaid() {
     if (typeof window === 'undefined') return;
+
     // @ts-expect-error - loaded from CDN
-    if (!window.mermaid) {
-      const script = document.createElement('script');
-      script.src = 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js';
-      script.onload = () => {
-        // @ts-expect-error - loaded from CDN
-        window.mermaid.initialize({
-          startOnLoad: true,
-          theme: 'dark',
-          themeVariables: {
-            primaryColor: '#1c2128',
-            primaryTextColor: '#e6edf3',
-            primaryBorderColor: '#30363d',
-            lineColor: '#39d353',
-            secondaryColor: '#161b22',
-            tertiaryColor: '#0d1117',
-            edgeLabelBackground: '#161b22',
-          },
-        });
-        // @ts-expect-error - loaded from CDN
-        window.mermaid.run();
-      };
-      document.head.appendChild(script);
-    } else {
+    if (window.mermaid) {
       // @ts-expect-error - loaded from CDN
       window.mermaid.run();
+      return;
     }
+
+    // Guard against multiple components racing to append the script tag
+    // @ts-expect-error - custom flag
+    if (window.__mermaidLoading) {
+      // Wait for the first loader to finish, then run
+      const check = setInterval(() => {
+        // @ts-expect-error - loaded from CDN
+        if (window.mermaid) {
+          clearInterval(check);
+          // @ts-expect-error - loaded from CDN
+          window.mermaid.run();
+        }
+      }, 50);
+      return;
+    }
+    // @ts-expect-error - custom flag
+    window.__mermaidLoading = true;
+
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js';
+    script.onload = () => {
+      // @ts-expect-error - loaded from CDN
+      window.mermaid.initialize({
+        startOnLoad: true,
+        theme: 'dark',
+        themeVariables: {
+          primaryColor: '#1c2128',
+          primaryTextColor: '#e6edf3',
+          primaryBorderColor: '#30363d',
+          lineColor: '#39d353',
+          secondaryColor: '#161b22',
+          tertiaryColor: '#0d1117',
+          edgeLabelBackground: '#161b22',
+        },
+      });
+      // @ts-expect-error - loaded from CDN
+      window.mermaid.run();
+    };
+    document.head.appendChild(script);
   }
   initMermaid();
 </script>
