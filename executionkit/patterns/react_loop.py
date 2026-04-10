@@ -51,23 +51,30 @@ def _validate_tool_args(
     for key, value in arguments.items():
         if key in props:
             expected_type = props[key].get("type")
-            if (
-                expected_type
-                and expected_type in _JSON_SCHEMA_TYPE_MAP
-                and not isinstance(value, _JSON_SCHEMA_TYPE_MAP[expected_type])
-            ):
-                return (
-                    f"Argument '{key}' expected type '{expected_type}', "
-                    f"got {type(value).__name__}"
-                )
+            if expected_type and expected_type in _JSON_SCHEMA_TYPE_MAP:
+                # bool is a subclass of int in Python, so isinstance(True, int) is True.
+                # Reject booleans explicitly when an integer or number is expected.
+                if expected_type in ("integer", "number") and isinstance(value, bool):
+                    return (
+                        f"Argument '{key}' expected type '{expected_type}', got bool"
+                    )
+                if not isinstance(value, _JSON_SCHEMA_TYPE_MAP[expected_type]):
+                    return (
+                        f"Argument '{key}' expected type '{expected_type}', "
+                        f"got {type(value).__name__}"
+                    )
     return None
 
 
+_TRUNCATION_MARKER = "\n[truncated]"
+
+
 def _truncate(text: str, max_chars: int) -> str:
-    """Truncate text to ``max_chars``, appending a marker if trimmed."""
+    """Truncate text to at most ``max_chars`` chars, appending a marker if trimmed."""
     if len(text) <= max_chars:
         return text
-    return text[:max_chars] + "\n[truncated]"
+    keep = max_chars - len(_TRUNCATION_MARKER)
+    return text[:keep] + _TRUNCATION_MARKER
 
 
 def _trim_messages(
