@@ -39,10 +39,12 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-# Node (not used — prevent accidental commits)
+# Node (not used in root — prevent accidental commits)
 node_modules/
 package.json
 package-lock.json
+!site/package.json
+!site/package-lock.json
 
 # Coverage artifacts
 coverage.json
