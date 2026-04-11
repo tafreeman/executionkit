@@ -37,15 +37,21 @@ shape every design decision:
 executionkit/
 ├── __init__.py          — public API surface; sync wrappers
 ├── types.py             — frozen value types: PatternResult, TokenUsage, Tool, VotingStrategy, Evaluator
+├── errors.py            — 9-class exception hierarchy (F-06: extracted from provider.py)
 ├── provider.py          — LLMProvider protocol, ToolCallingProvider protocol,
-│                          Provider concrete class, LLMResponse, ToolCall,
-│                          and the 9-class error hierarchy
+│                          Provider concrete class, LLMResponse, ToolCall;
+│                          re-exports error classes from errors.py for backwards compatibility;
+│                          _classify_http_error() is the single HTTP status→exception mapping
+│                          point for both urllib and httpx backends (F-02)
 ├── cost.py              — CostTracker mutable accumulator
 ├── compose.py           — pipe() composition helper, PatternStep protocol
 ├── kit.py               — Kit session facade (provider + cumulative usage)
 ├── _mock.py             — MockProvider test double (satisfies both protocols)
 ├── patterns/
-│   ├── base.py          — checked_complete(), validate_score(), _TrackedProvider
+│   ├── base.py          — checked_complete(), validate_score(), _TrackedProvider;
+│   │                      _check_budget() uses getattr() field loop replacing per-field
+│   │                      if-chains (F-05/F-08); _TrackedProvider.supports_tools delegates
+│   │                      to wrapped provider via getattr (F-04)
 │   ├── consensus.py     — parallel majority/unanimous voting
 │   ├── refine_loop.py   — iterative score-guided refinement
 │   └── react_loop.py    — tool-calling think-act-observe loop
@@ -66,7 +72,8 @@ patterns/base    ──► cost, engine/retry, provider, types
 patterns/consensus  ──► cost, engine/parallel, engine/retry, patterns/base, provider, types
 patterns/refine_loop ──► cost, engine/convergence, engine/retry, patterns/base, provider, types
 patterns/react_loop  ──► cost, engine/retry, patterns/base, provider, types
-provider  ──► types
+provider  ──► types, errors  (re-exports all 9 error classes from errors.py)
+errors    ──► types
 cost      ──► types
 engine/*  ──► provider (retry only)
 ```
@@ -172,8 +179,13 @@ directly. Its snapshot is emitted as an immutable `TokenUsage` via `to_usage()`.
 
 ## Error Handling Architecture
 
+The full 9-class exception hierarchy lives in `executionkit/errors.py` (F-06).
+`provider.py` re-exports all nine classes under the same names so that existing
+`from executionkit.provider import XError` imports continue to work without
+modification (PEP 387 backwards compatibility).
+
 ```
-ExecutionKitError
+ExecutionKitError              ← executionkit/errors.py
 ├── LLMError                  ← provider communication failures
 │   ├── RateLimitError        ← HTTP 429; carries retry_after float
 │   ├── PermanentError        ← HTTP 401/403/404; do not retry
@@ -187,6 +199,12 @@ ExecutionKitError
 All errors carry `cost: TokenUsage` so callers can see what was spent before
 the failure. `pipe()` augments errors with the cumulative cross-step cost before
 re-raising.
+
+**HTTP error classification:** `_classify_http_error()` in `provider.py` is the
+single function responsible for mapping HTTP status codes to the correct error
+subclass. Both the `_post_httpx` and `_post_urllib` backends call it, eliminating
+duplicated mapping logic (F-02). This mirrors the pattern used by the Anthropic
+SDK's `_make_status_error()`.
 
 **Retry boundary:** `with_retry()` in `engine/retry.py` only retries
 `RateLimitError` and `ProviderError`. `PermanentError` propagates immediately.
