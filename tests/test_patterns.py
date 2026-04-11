@@ -1568,3 +1568,146 @@ async def test_tool_error_leaks_only_type() -> None:
 
     assert "hunter2" not in observation
     assert "ValueError" in observation
+
+
+# ---------------------------------------------------------------------------
+# _check_budget regression tests (F-05)
+# Ref: field-loop pattern from CPython dataclasses.asdict() eliminates
+# per-field if-chain repetition.
+# ---------------------------------------------------------------------------
+
+
+class TestCheckBudget:
+    """_check_budget raises BudgetExhaustedError on the first exceeded field."""
+
+    def test_no_error_when_all_limits_zero(self) -> None:
+        """0 is the unlimited sentinel — should never raise."""
+        from executionkit.patterns.base import _check_budget
+        from executionkit.types import TokenUsage
+
+        _check_budget(
+            TokenUsage(llm_calls=0, input_tokens=0, output_tokens=0),
+            TokenUsage(llm_calls=999, input_tokens=999, output_tokens=999),
+            ("llm_calls", "input_tokens", "output_tokens"),
+            sentinel_suffix="(pipe)",
+            exceeded_suffix="before dispatch",
+        )
+
+    def test_raises_on_call_limit_hit(self) -> None:
+        from executionkit.errors import BudgetExhaustedError
+        from executionkit.patterns.base import _check_budget
+        from executionkit.types import TokenUsage
+
+        with pytest.raises(BudgetExhaustedError) as exc_info:
+            _check_budget(
+                TokenUsage(llm_calls=3, input_tokens=0, output_tokens=0),
+                TokenUsage(llm_calls=3, input_tokens=100, output_tokens=100),
+                ("llm_calls", "input_tokens", "output_tokens"),
+                sentinel_suffix="(pipe)",
+                exceeded_suffix="before dispatch",
+            )
+        assert "LLM call" in str(exc_info.value)
+        assert "before dispatch" in str(exc_info.value)
+
+    def test_raises_on_sentinel_minus_one(self) -> None:
+        from executionkit.errors import BudgetExhaustedError
+        from executionkit.patterns.base import BUDGET_EXHAUSTED_SENTINEL, _check_budget
+        from executionkit.types import TokenUsage
+
+        with pytest.raises(BudgetExhaustedError) as exc_info:
+            _check_budget(
+                TokenUsage(
+                    llm_calls=BUDGET_EXHAUSTED_SENTINEL,
+                    input_tokens=0,
+                    output_tokens=0,
+                ),
+                TokenUsage(llm_calls=0, input_tokens=0, output_tokens=0),
+                ("llm_calls",),
+                sentinel_suffix="before retry (forwarded from pipe)",
+                exceeded_suffix="before retry dispatch",
+            )
+        assert "forwarded from pipe" in str(exc_info.value)
+
+    def test_raises_on_input_token_limit(self) -> None:
+        from executionkit.errors import BudgetExhaustedError
+        from executionkit.patterns.base import _check_budget
+        from executionkit.types import TokenUsage
+
+        # llm_calls=0 means unlimited; only input_tokens limit is set.
+        # current input_tokens (500) exceeds budget (100) → Input token error.
+        with pytest.raises(BudgetExhaustedError) as exc_info:
+            _check_budget(
+                TokenUsage(llm_calls=0, input_tokens=100, output_tokens=0),
+                TokenUsage(llm_calls=10, input_tokens=500, output_tokens=500),
+                ("llm_calls", "input_tokens", "output_tokens"),
+                sentinel_suffix="(pipe)",
+                exceeded_suffix="before dispatch",
+            )
+        assert "Input token" in str(exc_info.value)
+
+    def test_error_carries_cost_and_budget_metadata(self) -> None:
+        from executionkit.errors import BudgetExhaustedError
+        from executionkit.patterns.base import _check_budget
+        from executionkit.types import TokenUsage
+
+        budget = TokenUsage(llm_calls=1, input_tokens=0, output_tokens=0)
+        current = TokenUsage(llm_calls=1, input_tokens=0, output_tokens=0)
+        with pytest.raises(BudgetExhaustedError) as exc_info:
+            _check_budget(
+                budget,
+                current,
+                ("llm_calls",),
+                sentinel_suffix="(pipe)",
+                exceeded_suffix="before dispatch",
+            )
+        assert exc_info.value.cost == current
+        assert exc_info.value.metadata["budget"] == budget
+
+
+# ---------------------------------------------------------------------------
+# _TrackedProvider.supports_tools delegation tests (F-04)
+# Ref: @runtime_checkable only checks presence, not value — a wrapper must
+# delegate the capability flag to the inner provider.
+# PEP 544: https://peps.python.org/pep-0544/
+# ---------------------------------------------------------------------------
+
+
+class TestTrackedProviderSupportsDelegation:
+    """_TrackedProvider.supports_tools delegates to the wrapped provider."""
+
+    def test_delegates_true_from_tool_capable_provider(self) -> None:
+        from executionkit._mock import MockProvider
+        from executionkit.cost import CostTracker
+        from executionkit.patterns.base import _TrackedProvider
+
+        inner = MockProvider(responses=["ok"])
+        # MockProvider has supports_tools = True
+        tp = _TrackedProvider(
+            inner,
+            CostTracker(),
+            {},
+            budget=None,
+            retry=None,
+            context="test",
+        )
+        assert tp.supports_tools is True
+
+    def test_delegates_false_from_non_tool_provider(self) -> None:
+        """A plain LLMProvider without supports_tools must yield False."""
+        from executionkit.cost import CostTracker
+        from executionkit.patterns.base import _TrackedProvider
+        from executionkit.provider import LLMResponse
+
+        class MinimalProvider:
+            async def complete(self, messages, **kwargs):  # type: ignore[no-untyped-def]
+                return LLMResponse(content="ok")
+
+        tp = _TrackedProvider(
+            MinimalProvider(),  # type: ignore[arg-type]
+            CostTracker(),
+            {},
+            budget=None,
+            retry=None,
+            context="test",
+        )
+        assert tp.supports_tools is False
