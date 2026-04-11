@@ -24,7 +24,16 @@
       "Bash(python -m pytest tests/test_engine.py -q)",
       "Bash(git -C . remote get-url origin)",
       "Bash(grep -n \"^class\" executionkit/**/*.py)",
-      "Bash(grep -h \"^async def\\|^def\" executionkit/**/*.py)"
+      "Bash(grep -h \"^async def\\|^def\" executionkit/**/*.py)",
+      "Bash(pytest:*)",
+      "Bash(mkdocs build:*)",
+      "Bash(git add:*)",
+      "Bash(git restore:*)",
+      "Bash(rm -rf site/)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(gh pr:*)",
+      "Bash(gh api:*)"
     ]
   }
 }
