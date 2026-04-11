@@ -35,15 +35,18 @@
 - **Return Type**: `LLMResponse` - Response from the LLM provider
 - **Raises**: `BudgetExhaustedError` if any budget constraint would be exceeded
 
-#### `_check_budget(tracker: CostTracker, budget: TokenUsage) -> None`
-- **Description**: Validates that the current accumulated cost does not exceed any field of the budget constraint. Replaces 8 per-field `if`-blocks with a single field loop using `getattr()` over `_BUDGET_FIELD_LABELS`. Raises `BudgetExhaustedError` with a descriptive message naming the exceeded field if any constraint is violated.
+#### `_check_budget(budget: TokenUsage, current: TokenUsage, fields: tuple[str, ...], *, sentinel_suffix: str, exceeded_suffix: str) -> None`
+- **Description**: Validates selected `TokenUsage` fields by comparing the configured `budget` against the current accumulated `TokenUsage`. Iterates over the supplied `fields` and raises `BudgetExhaustedError` with a descriptive message if a field has reached a sentinel condition or would exceed its allowed limit.
 - **Location**: `base.py`
-- **Dependencies**: `CostTracker`, `TokenUsage`, `BudgetExhaustedError`, `_BUDGET_FIELD_LABELS`
+- **Dependencies**: `TokenUsage`, `BudgetExhaustedError`, `_BUDGET_FIELD_LABELS`
 - **Parameters**:
-  - `tracker: CostTracker` - Current accumulated cost tracker
   - `budget: TokenUsage` - Maximum allowed token/call counts
+  - `current: TokenUsage` - Current accumulated token/call usage to validate against the budget
+  - `fields: tuple[str, ...]` - Names of the `TokenUsage` fields to check
+  - `sentinel_suffix: str` - Message suffix used when a budget field is already at its sentinel/exhausted value
+  - `exceeded_suffix: str` - Message suffix used when the current usage would exceed the configured budget
 - **Return Type**: `None`
-- **Raises**: `BudgetExhaustedError` naming the exceeded field (e.g., "input_tokens", "llm_calls")
+- **Raises**: `BudgetExhaustedError` naming the field that hit a sentinel condition or exceeded its budget (e.g., "input_tokens", "llm_calls")
 
 #### `_BUDGET_FIELD_LABELS`
 - **Description**: Module-level dict mapping `TokenUsage` field names to human-readable label strings used in `BudgetExhaustedError` messages. Drives the field-loop in `_check_budget`, making it easy to add new budget dimensions without modifying control flow.

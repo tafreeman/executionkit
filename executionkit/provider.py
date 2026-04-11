@@ -171,9 +171,10 @@ class Provider:
     # this attribute verbatim — delegate instead:
     #   @property
     #   def supports_tools(self) -> bool: return self._inner.supports_tools
-    # Hardcoding True in a wrapper causes isinstance(wrapper, ToolCallingProvider)
-    # to return True even when the inner provider cannot handle tools.
-    # Ref: PEP 544 runtime_checkable only checks presence, not value.
+    # For @runtime_checkable protocols, isinstance(wrapper, ToolCallingProvider)
+    # only checks that the required attribute exists, not whether its value is
+    # True. Delegating keeps the wrapper's reported capability aligned with the
+    # inner provider's actual tool support.
     supports_tools: Literal[True] = field(default=True, init=False)
     # Derived state — excluded from repr/eq/hash; initialized only in __post_init__
     _client: Any = field(

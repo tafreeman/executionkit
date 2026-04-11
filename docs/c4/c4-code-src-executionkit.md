@@ -107,7 +107,7 @@
 - **Exports**:
   - `ExecutionKitError` — base exception carrying `cost: TokenUsage` and `metadata: dict`
   - `LLMError` — base for provider/transport failures
-  - `RateLimitError` — HTTP 429; includes `retry_after: float | None`
+  - `RateLimitError` — HTTP 429; includes `retry_after: float`
   - `PermanentError` — non-retryable errors (auth failure, 404)
   - `ProviderError` — retryable errors (5xx, network timeout)
   - `PatternError` — base for pattern-level failures
@@ -431,15 +431,16 @@
 
 #### Helper Functions in `provider.py` (private utilities)
 
-##### `_classify_http_error(status_code: int, payload: dict[str, Any], headers: Any) -> ExecutionKitError`
+##### `_classify_http_error(status: int, raw: dict[str, Any], retry_after: float, *, cause: BaseException) -> NoReturn`
 - **Location**: `executionkit/provider.py`
-- **Description**: Centralizes HTTP status code → exception mapping; converts an HTTP error response into the appropriate typed exception (`RateLimitError` for 429, `PermanentError` for 4xx, `ProviderError` for 5xx). Previously this logic was duplicated inside both `_post_httpx` and `_post_urllib`; extracting it eliminates the duplication and ensures consistent error semantics regardless of which HTTP backend is used.
+- **Description**: Centralizes HTTP status code → exception mapping by raising the appropriate typed exception for an HTTP failure (`RateLimitError` for 429, `PermanentError` for other 4xx responses, `ProviderError` for 5xx responses). This helper is used by the HTTP backends so they share identical error classification behavior, and it preserves the original triggering exception via exception chaining when `cause` is provided.
 - **Parameters**:
-  - `status_code: int` - HTTP response status code
-  - `payload: dict[str, Any]` - Parsed response body
-  - `headers: Any` - Response headers (used to extract `Retry-After` for 429 responses)
-- **Returns**: A typed `ExecutionKitError` subclass instance (never raises)
-- **Dependencies**: `RateLimitError`, `PermanentError`, `ProviderError`, `_format_http_error`, `_parse_retry_after`
+  - `status: int` - HTTP response status code
+  - `raw: dict[str, Any]` - Parsed JSON body from the response (may be empty dict)
+  - `retry_after: float` - Value of the `Retry-After` header in seconds
+  - `cause: BaseException` - Original exception to chain as the raised error's cause
+- **Raises**: Always raises a typed `ExecutionKitError` subclass; does not return
+- **Dependencies**: `RateLimitError`, `PermanentError`, `ProviderError`, `_format_http_error`
 
 ##### `_first_choice(data: dict[str, Any]) -> dict[str, Any]`
 - **Location**: `executionkit/provider.py:195-202`
