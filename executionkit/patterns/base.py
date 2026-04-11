@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import warnings
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -176,8 +176,6 @@ class _TrackedProvider:
     multiple times while sharing a single ``CostTracker`` and metadata dict.
     """
 
-    supports_tools: Literal[True] = True
-
     def __init__(
         self,
         provider: LLMProvider,
@@ -194,6 +192,20 @@ class _TrackedProvider:
         self._budget = budget
         self._retry = retry
         self._context = context
+
+    @property
+    def supports_tools(self) -> bool:
+        """Delegate capability flag to the wrapped provider.
+
+        A wrapper must not unconditionally claim tool support — it should
+        reflect what the inner provider actually supports.
+        Ref F-04: https://github.com/BerriAI/litellm/issues/11370 (real-world
+        failure from hardcoding capability instead of delegating).
+        NOTE (F-01 verified): CostTracker._calls is never accessed directly
+        here. reserve_call() and release_call() are the only public API used.
+        See executionkit/cost.py.
+        """
+        return getattr(self._provider, "supports_tools", False)
 
     async def complete(
         self,

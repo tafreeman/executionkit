@@ -165,6 +165,15 @@ class Provider:
     default_temperature: float = 0.7
     default_max_tokens: int = 4096
     timeout: float = 120.0
+    # supports_tools is Literal[True] for this concrete HTTP client because
+    # it always speaks the OpenAI tool-calling wire format.
+    # WARNING (F-04): If you build a *wrapper* around Provider, do NOT copy
+    # this attribute verbatim — delegate instead:
+    #   @property
+    #   def supports_tools(self) -> bool: return self._inner.supports_tools
+    # Hardcoding True in a wrapper causes isinstance(wrapper, ToolCallingProvider)
+    # to return True even when the inner provider cannot handle tools.
+    # Ref: PEP 544 runtime_checkable only checks presence, not value.
     supports_tools: Literal[True] = field(default=True, init=False)
     # Derived state — excluded from repr/eq/hash; initialized only in __post_init__
     _client: Any = field(
