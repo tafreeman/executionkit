@@ -8,15 +8,17 @@
 | **Type** | Component |
 | **Technology** | Python 3.10+, stdlib `urllib` (HTTP), `typing.Protocol` |
 | **Purpose** | Defines the contract every LLM backend must fulfil, ships a generic OpenAI-compatible HTTP implementation, and declares the full error hierarchy used across the library |
+| **Files** | `provider.py`, `errors.py`, `types.py` |
 
 ## Software Features
 
 - **LLMProvider protocol** — runtime-checkable duck-type interface for any LLM backend; requires only `async complete()`
 - **ToolCallingProvider protocol** — narrows `LLMProvider` to backends that expose function/tool calling (`supports_tools: Literal[True]`)
 - **Provider class** — zero-dependency HTTP client built on `urllib`; handles OpenAI-compatible chat-completions, tool-call parsing, rate-limit detection, and response normalisation
+- **`_classify_http_error()` function** — centralises HTTP status code → exception mapping for all HTTP backends (`_post_httpx` and `_post_urllib`); eliminates previously duplicated branching logic and ensures consistent error semantics regardless of transport
 - **LLMResponse dataclass** — structured, immutable view of one completion: text content, tool calls, finish reason, token usage, and raw provider data
 - **ToolCall dataclass** — single tool invocation (id, name, parsed arguments)
-- **Exception hierarchy** — seven typed exceptions from `ExecutionKitError` root, giving callers precise error semantics for retry decisions, budget accounting, and pattern-level failures
+- **Exception hierarchy** (`errors.py`) — nine typed exceptions from `ExecutionKitError` root, extracted into a dedicated module; `provider.py` re-exports all nine via `Name as Name` for backwards compatibility; gives callers precise error semantics for retry decisions, budget accounting, and pattern-level failures
 
 ## Code Elements
 
@@ -25,17 +27,18 @@
 | `LLMProvider` | Protocol (runtime-checkable) | [c4-code-src-executionkit.md](c4-code-src-executionkit.md) → `provider.py:67-77` |
 | `ToolCallingProvider` | Protocol | [c4-code-src-executionkit.md](c4-code-src-executionkit.md) → `provider.py:80-82` |
 | `Provider` | Dataclass / HTTP client | [c4-code-src-executionkit.md](c4-code-src-executionkit.md) → `provider.py:121-192` |
+| `_classify_http_error` | Private function | [c4-code-src-executionkit.md](c4-code-src-executionkit.md) → `provider.py` |
 | `LLMResponse` | Frozen dataclass | [c4-code-src-executionkit.md](c4-code-src-executionkit.md) → `provider.py:92-118` |
 | `ToolCall` | Frozen dataclass | [c4-code-src-executionkit.md](c4-code-src-executionkit.md) → `provider.py:85-89` |
-| `ExecutionKitError` | Base exception | [c4-code-src-executionkit.md](c4-code-src-executionkit.md) → `provider.py:13-23` |
-| `LLMError` | Exception | [c4-code-src-executionkit.md](c4-code-src-executionkit.md) → `provider.py:26-27` |
-| `RateLimitError` | Exception | [c4-code-src-executionkit.md](c4-code-src-executionkit.md) → `provider.py:30-40` |
-| `PermanentError` | Exception | [c4-code-src-executionkit.md](c4-code-src-executionkit.md) → `provider.py:43-44` |
-| `ProviderError` | Exception | [c4-code-src-executionkit.md](c4-code-src-executionkit.md) → `provider.py:47-48` |
-| `PatternError` | Exception | [c4-code-src-executionkit.md](c4-code-src-executionkit.md) → `provider.py:51-52` |
-| `BudgetExhaustedError` | Exception | [c4-code-src-executionkit.md](c4-code-src-executionkit.md) → `provider.py:55-56` |
-| `ConsensusFailedError` | Exception | [c4-code-src-executionkit.md](c4-code-src-executionkit.md) → `provider.py:59-60` |
-| `MaxIterationsError` | Exception | [c4-code-src-executionkit.md](c4-code-src-executionkit.md) → `provider.py:63-64` |
+| `ExecutionKitError` | Base exception | [c4-code-src-executionkit.md](c4-code-src-executionkit.md) → `errors.py` (re-exported from `provider.py`) |
+| `LLMError` | Exception | [c4-code-src-executionkit.md](c4-code-src-executionkit.md) → `errors.py` (re-exported from `provider.py`) |
+| `RateLimitError` | Exception | [c4-code-src-executionkit.md](c4-code-src-executionkit.md) → `errors.py` (re-exported from `provider.py`) |
+| `PermanentError` | Exception | [c4-code-src-executionkit.md](c4-code-src-executionkit.md) → `errors.py` (re-exported from `provider.py`) |
+| `ProviderError` | Exception | [c4-code-src-executionkit.md](c4-code-src-executionkit.md) → `errors.py` (re-exported from `provider.py`) |
+| `PatternError` | Exception | [c4-code-src-executionkit.md](c4-code-src-executionkit.md) → `errors.py` (re-exported from `provider.py`) |
+| `BudgetExhaustedError` | Exception | [c4-code-src-executionkit.md](c4-code-src-executionkit.md) → `errors.py` (re-exported from `provider.py`) |
+| `ConsensusFailedError` | Exception | [c4-code-src-executionkit.md](c4-code-src-executionkit.md) → `errors.py` (re-exported from `provider.py`) |
+| `MaxIterationsError` | Exception | [c4-code-src-executionkit.md](c4-code-src-executionkit.md) → `errors.py` (re-exported from `provider.py`) |
 | `TokenUsage` | Frozen dataclass | [c4-code-src-executionkit.md](c4-code-src-executionkit.md) → `types.py:14-25` |
 | `VotingStrategy` | StrEnum | [c4-code-src-executionkit.md](c4-code-src-executionkit.md) → `types.py:58-60` |
 | `Tool` | Frozen dataclass | [c4-code-src-executionkit.md](c4-code-src-executionkit.md) → `types.py:39-55` |
@@ -148,7 +151,40 @@ class Tool:
 title: C4 Component — Provider Layer
 ---
 classDiagram
-    namespace ProviderLayer {
+    namespace ErrorsModule {
+        class ExecutionKitError {
+            <<Exception>>
+            +cost: TokenUsage
+            +metadata: dict
+        }
+        class LLMError {
+            <<Exception>>
+        }
+        class RateLimitError {
+            <<Exception>>
+            +retry_after: float | None
+        }
+        class PermanentError {
+            <<Exception>>
+        }
+        class ProviderError {
+            <<Exception>>
+        }
+        class PatternError {
+            <<Exception>>
+        }
+        class BudgetExhaustedError {
+            <<Exception>>
+        }
+        class ConsensusFailedError {
+            <<Exception>>
+        }
+        class MaxIterationsError {
+            <<Exception>>
+        }
+    }
+
+    namespace ProviderModule {
         class LLMProvider {
             <<Protocol, runtime_checkable>>
             +complete(messages, ...) LLMResponse
@@ -185,6 +221,9 @@ classDiagram
             +name: str
             +arguments: dict
         }
+    }
+
+    namespace TypesModule {
         class PatternResult~T~ {
             <<FrozenDataclass>>
             +value: T
@@ -213,42 +252,9 @@ classDiagram
             MAJORITY
             UNANIMOUS
         }
-        class ExecutionKitError {
-            <<Exception>>
-            +cost: TokenUsage
-            +metadata: dict
-        }
-        class LLMError {
-            <<Exception>>
-        }
-        class RateLimitError {
-            <<Exception>>
-            +retry_after: float | None
-        }
-        class PermanentError {
-            <<Exception>>
-        }
-        class ProviderError {
-            <<Exception>>
-        }
-        class PatternError {
-            <<Exception>>
-        }
-        class BudgetExhaustedError {
-            <<Exception>>
-        }
-        class ConsensusFailedError {
-            <<Exception>>
-        }
-        class MaxIterationsError {
-            <<Exception>>
-        }
     }
 
-    ToolCallingProvider --|> LLMProvider : extends
-    Provider ..|> ToolCallingProvider : implements
-    LLMResponse *-- ToolCall : contains
-    PatternResult *-- TokenUsage : contains
+    %% errors.py hierarchy
     ExecutionKitError <|-- LLMError
     ExecutionKitError <|-- PatternError
     LLMError <|-- RateLimitError
@@ -258,4 +264,13 @@ classDiagram
     PatternError <|-- ConsensusFailedError
     PatternError <|-- MaxIterationsError
     ExecutionKitError *-- TokenUsage : carries cost
+
+    %% provider.py re-exports exceptions from errors.py (Name as Name)
+    Provider ..|> ToolCallingProvider : implements
+    ToolCallingProvider --|> LLMProvider : extends
+    LLMResponse *-- ToolCall : contains
+    PatternResult *-- TokenUsage : contains
+
+    %% provider.py imports from errors.py
+    Provider ..> ExecutionKitError : re-exports via Name as Name
 ```

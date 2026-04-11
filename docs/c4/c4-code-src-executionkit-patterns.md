@@ -22,9 +22,9 @@
 - **Raises**: `ValueError` if score is NaN or outside [0.0, 1.0] range
 
 #### `checked_complete(provider: LLMProvider, messages: Sequence[dict[str, Any]], tracker: CostTracker, budget: TokenUsage | None, retry: RetryConfig | None, **kwargs: Any) -> LLMResponse`
-- **Description**: Makes a budget-aware LLM API call with retry logic. Checks token and LLM call budgets before dispatching and records usage in the cost tracker.
+- **Description**: Makes a budget-aware LLM API call with retry logic. Checks token and LLM call budgets before dispatching (via `_check_budget`) and records usage in the cost tracker.
 - **Location**: `base.py:24-55`
-- **Dependencies**: `LLMProvider`, `CostTracker`, `BudgetExhaustedError`, `with_retry`, `DEFAULT_RETRY`, `TokenUsage`, `RetryConfig`, `LLMResponse`
+- **Dependencies**: `LLMProvider`, `CostTracker`, `BudgetExhaustedError`, `with_retry`, `DEFAULT_RETRY`, `TokenUsage`, `RetryConfig`, `LLMResponse`, `_check_budget`, `_BUDGET_FIELD_LABELS`
 - **Parameters**:
   - `provider: LLMProvider` - The LLM provider to use
   - `messages: Sequence[dict[str, Any]]` - Messages to send to the LLM
@@ -34,6 +34,23 @@
   - `**kwargs: Any` - Additional parameters to pass to provider.complete()
 - **Return Type**: `LLMResponse` - Response from the LLM provider
 - **Raises**: `BudgetExhaustedError` if any budget constraint would be exceeded
+
+#### `_check_budget(tracker: CostTracker, budget: TokenUsage) -> None`
+- **Description**: Validates that the current accumulated cost does not exceed any field of the budget constraint. Replaces 8 per-field `if`-blocks with a single field loop using `getattr()` over `_BUDGET_FIELD_LABELS`. Raises `BudgetExhaustedError` with a descriptive message naming the exceeded field if any constraint is violated.
+- **Location**: `base.py`
+- **Dependencies**: `CostTracker`, `TokenUsage`, `BudgetExhaustedError`, `_BUDGET_FIELD_LABELS`
+- **Parameters**:
+  - `tracker: CostTracker` - Current accumulated cost tracker
+  - `budget: TokenUsage` - Maximum allowed token/call counts
+- **Return Type**: `None`
+- **Raises**: `BudgetExhaustedError` naming the exceeded field (e.g., "input_tokens", "llm_calls")
+
+#### `_BUDGET_FIELD_LABELS`
+- **Description**: Module-level dict mapping `TokenUsage` field names to human-readable label strings used in `BudgetExhaustedError` messages. Drives the field-loop in `_check_budget`, making it easy to add new budget dimensions without modifying control flow.
+- **Location**: `base.py`
+- **Type**: `dict[str, str]`
+- **Example entries**: `{"input_tokens": "input tokens", "output_tokens": "output tokens", "llm_calls": "LLM calls"}`
+- **Dependencies**: None
 
 #### `_note_truncation(response: LLMResponse, metadata: dict[str, Any], context: str) -> None`
 - **Description**: Logs a warning and increments truncation counter in metadata if the LLM response was truncated (finish_reason indicates truncation).
@@ -185,7 +202,8 @@
   - `_budget: TokenUsage | None` - Optional token budget constraints
   - `_retry: RetryConfig | None` - Retry configuration
   - `_context: str` - Context string for error messages
-  - `supports_tools: bool = True` - Class attribute indicating tool support capability
+- **Properties**:
+  - `supports_tools: bool` - Delegates to the wrapped provider's `supports_tools` attribute rather than hardcoding `Literal[True]`; this allows `_TrackedProvider` to accurately reflect the capabilities of the underlying provider at runtime
 - **Methods**:
   - `__init__(provider: LLMProvider, tracker: CostTracker, metadata: dict[str, Any], *, budget: TokenUsage | None, retry: RetryConfig | None, context: str) -> None` - Initializes the wrapper with dependencies
   - `complete(messages: Sequence[dict[str, Any]], *, temperature: float | None = None, max_tokens: int | None = None, tools: Sequence[dict[str, Any]] | None = None, **kwargs: Any) -> LLMResponse` - Wraps provider.complete() with budget and truncation checks
@@ -228,6 +246,7 @@ None - executionkit has zero external runtime dependencies as specified in `pypr
 ### Standard Library Dependencies
 
 - `asyncio` - For async/await support and task management (react_loop)
+- `logging` - Module-level import in `react_loop.py` for structured diagnostic logging
 - `collections.Counter` - For vote counting in consensus
 - `json` - For serializing tool arguments (react_loop)
 - `math` - For NaN checking in score validation
@@ -270,7 +289,7 @@ classDiagram
         
         class TrackedProvider {
             <<class>>
-            +supports_tools: bool
+            +supports_tools: bool (property, delegates to _provider)
             -_provider: LLMProvider
             -_tracker: CostTracker
             -_metadata: dict
@@ -285,6 +304,8 @@ classDiagram
             <<module>>
             +validate_score(score) float
             +checked_complete(provider, messages, ...) LLMResponse
+            -_check_budget(tracker, budget) None
+            -_BUDGET_FIELD_LABELS dict
             -_note_truncation(response, metadata, context) void
             -_TrackedProvider TrackedProvider
         }

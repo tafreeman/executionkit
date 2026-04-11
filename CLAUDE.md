@@ -37,10 +37,11 @@ ExecutionKit is a minimal library for LLM reasoning patterns — it fills the ga
 
 | Module | Role |
 |--------|------|
-| `provider.py` | `LLMProvider` protocol, `Provider` HTTP client, `LLMResponse`, 9-class error hierarchy |
+| `errors.py` | 9-class exception hierarchy (`ExecutionKitError` → `LLMError`, `PatternError` subtrees); extracted from `provider.py` (F-06) |
+| `provider.py` | `LLMProvider` protocol, `Provider` HTTP client, `LLMResponse`; re-exports error classes from `errors.py` for backwards compatibility; `_classify_http_error()` is the single HTTP status→exception mapping point shared by both backends (F-02) |
 | `types.py` | Frozen value types: `TokenUsage`, `PatternResult[T]`, `Tool`, `VotingStrategy`, `Evaluator` |
 | `cost.py` | `CostTracker` — mutable accumulator with two-phase accounting (`reserve_call` + `record_without_call`) |
-| `patterns/base.py` | `checked_complete()` — shared budget guard + retry entry point for all patterns |
+| `patterns/base.py` | `checked_complete()` — shared budget guard + retry entry point; `_check_budget()` helper uses `getattr()` field loop replacing per-field if-chains (F-05/F-08); `_TrackedProvider.supports_tools` delegates to wrapped provider via `getattr` instead of hardcoding `Literal[True]` (F-04) |
 | `patterns/consensus.py` | Parallel sampling, majority/unanimous voting, agreement metadata |
 | `patterns/refine_loop.py` | Iterative improvement with `ConvergenceDetector`; default evaluator uses XML sandboxing |
 | `patterns/react_loop.py` | Think-act-observe loop; validates tool args against JSON Schema; caps context via `max_history_messages` |
@@ -55,7 +56,9 @@ ExecutionKit is a minimal library for LLM reasoning patterns — it fills the ga
 
 **Two-phase cost accounting** — `reserve_call()` pre-increments the call counter before `await` (TOCTOU-safe for concurrent patterns); `record_without_call(response)` adds token counts after success.
 
-**Budget guards** — `checked_complete()` in `patterns/base.py` checks token/call budget before every LLM call and raises `BudgetExhaustedError` (with accumulated cost snapshot) if exceeded.
+**Budget guards** — `checked_complete()` in `patterns/base.py` checks token/call budget before every LLM call and raises `BudgetExhaustedError` (with accumulated cost snapshot) if exceeded. The internal `_check_budget()` helper iterates over field names using `getattr()` rather than repeating an if-block per field (F-05/F-08).
+
+**Centralised HTTP error mapping** — `_classify_http_error()` in `provider.py` is the single function that converts HTTP status codes to the appropriate error subclass. Both the `_post_httpx` and `_post_urllib` backends call it, eliminating the duplicated mapping logic that previously existed in each (F-02).
 
 **Structural typing** — `LLMProvider` and `ToolCallingProvider` are `@runtime_checkable` protocols, not base classes. Any object matching the interface works.
 
