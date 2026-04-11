@@ -1,4 +1,6 @@
 site_name: ExecutionKit
+docs_dir: docs
+site_dir: mkdocs_site
 site_description: Composable LLM reasoning patterns with budget-aware execution
 repo_url: https://github.com/tafreeman/executionkit
 repo_name: tafreeman/executionkit
