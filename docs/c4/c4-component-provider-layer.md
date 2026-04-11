@@ -162,7 +162,7 @@ classDiagram
         }
         class RateLimitError {
             <<Exception>>
-            +retry_after: float | None
+            +retry_after: float
         }
         class PermanentError {
             <<Exception>>
