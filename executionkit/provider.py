@@ -15,13 +15,25 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Literal, NoReturn, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
     from types import TracebackType
 
-from executionkit.types import TokenUsage
+# Re-export the error hierarchy from errors.py using the `Name as Name` idiom
+# so ruff/mypy recognise these as intentional public re-exports.
+# Existing `from executionkit.provider import XError` imports continue to work.
+# Ref: PEP 387 backwards-compat — https://peps.python.org/pep-0387/
+from executionkit.errors import BudgetExhaustedError as BudgetExhaustedError
+from executionkit.errors import ConsensusFailedError as ConsensusFailedError
+from executionkit.errors import ExecutionKitError as ExecutionKitError
+from executionkit.errors import LLMError as LLMError
+from executionkit.errors import MaxIterationsError as MaxIterationsError
+from executionkit.errors import PatternError as PatternError
+from executionkit.errors import PermanentError as PermanentError
+from executionkit.errors import ProviderError as ProviderError
+from executionkit.errors import RateLimitError as RateLimitError
 
 # ---------------------------------------------------------------------------
 # httpx availability probe (done once at import time)
@@ -36,67 +48,10 @@ except ImportError:
     _HTTPX_AVAILABLE = False
 
 # ---------------------------------------------------------------------------
-# Error hierarchy (9 classes)
+# Error hierarchy — defined in errors.py; re-exported here so that existing
+# `from executionkit.provider import XError` imports continue to work.
+# PEP 387 backwards-compatibility: https://peps.python.org/pep-0387/
 # ---------------------------------------------------------------------------
-
-
-class ExecutionKitError(Exception):
-    """Base exception for all ExecutionKit errors."""
-
-    def __init__(
-        self,
-        message: str,
-        *,
-        cost: TokenUsage | None = None,
-        metadata: dict[str, Any] | None = None,
-    ) -> None:
-        super().__init__(message)
-        self.cost: TokenUsage = cost if cost is not None else TokenUsage()
-        self.metadata: dict[str, Any] = metadata if metadata is not None else {}
-
-
-class LLMError(ExecutionKitError):
-    """Errors originating from LLM provider communication."""
-
-
-class RateLimitError(LLMError):
-    """Provider returned HTTP 429 — retryable after ``retry_after`` seconds."""
-
-    def __init__(
-        self,
-        message: str,
-        *,
-        retry_after: float = 1.0,
-        cost: TokenUsage | None = None,
-        metadata: dict[str, Any] | None = None,
-    ) -> None:
-        super().__init__(message, cost=cost, metadata=metadata)
-        self.retry_after: float = retry_after
-
-
-class PermanentError(LLMError):
-    """Non-retryable provider error (e.g. 401 authentication failure)."""
-
-
-class ProviderError(LLMError):
-    """Catch-all retryable provider error for unexpected HTTP failures."""
-
-
-class PatternError(ExecutionKitError):
-    """Errors raised by reasoning pattern logic."""
-
-
-class BudgetExhaustedError(PatternError):
-    """Token or call budget exceeded."""
-
-
-class ConsensusFailedError(PatternError):
-    """Consensus pattern could not reach agreement."""
-
-
-class MaxIterationsError(PatternError):
-    """Loop pattern exceeded its iteration limit."""
-
 
 # ---------------------------------------------------------------------------
 # Value types
@@ -317,15 +272,8 @@ class Provider:
                     raw = {}
             except Exception:
                 raw = {}
-            if status == 429:
-                retry_after = float(exc.response.headers.get("retry-after", "1"))
-                raise RateLimitError(
-                    "Rate limited (HTTP 429)",
-                    retry_after=retry_after,
-                ) from exc
-            if status in {401, 403, 404}:
-                raise PermanentError(_format_http_error(status, raw)) from exc
-            raise ProviderError(_format_http_error(status, raw)) from exc
+            retry_after = float(exc.response.headers.get("retry-after", "1"))
+            _classify_http_error(status, raw, retry_after, cause=exc)
         except _httpx.TransportError as exc:
             raise ProviderError(f"Transport failure: {exc}") from exc
 
@@ -358,17 +306,10 @@ class Provider:
                 except ProviderError:
                     raw = {}
                 status = exc.code
-                if status == 429:
-                    retry_after = float(
-                        exc.headers.get("retry-after", "1") if exc.headers else 1
-                    )
-                    raise RateLimitError(
-                        "Rate limited (HTTP 429)",
-                        retry_after=retry_after,
-                    ) from exc
-                if status in {401, 403, 404}:
-                    raise PermanentError(_format_http_error(status, raw)) from exc
-                raise ProviderError(_format_http_error(status, raw)) from exc
+                retry_after = float(
+                    exc.headers.get("retry-after", "1") if exc.headers else 1
+                )
+                _classify_http_error(status, raw, retry_after, cause=exc)
             except urllib.error.URLError as exc:
                 raise ProviderError(f"Transport failure: {exc.reason}") from exc
 
@@ -496,6 +437,42 @@ def _redact_sensitive(text: str) -> str:
         "[REDACTED]",
         text,
     )
+
+
+def _classify_http_error(
+    status: int,
+    raw: dict[str, Any],
+    retry_after: float,
+    *,
+    cause: BaseException,
+) -> NoReturn:
+    """Raise the correct LLM error subclass for a failed HTTP response.
+
+    Extracted to eliminate duplication between the urllib and httpx backends.
+    Both backends call this single function — the exact pattern used by the
+    Anthropic SDK's ``_make_status_error()`` method.
+
+    Ref: https://github.com/anthropics/anthropic-sdk-python/blob/main/src/anthropic/_client.py
+
+    Args:
+        status: HTTP status code from the failed response.
+        raw: Parsed JSON body from the response (may be empty dict).
+        retry_after: Value of the ``Retry-After`` header in seconds.
+        cause: The original exception, chained via ``raise ... from cause``.
+
+    Raises:
+        RateLimitError: For HTTP 429.
+        PermanentError: For HTTP 401, 403, 404.
+        ProviderError: For all other non-2xx status codes.
+    """
+    if status == 429:
+        raise RateLimitError(
+            "Rate limited (HTTP 429)",
+            retry_after=retry_after,
+        ) from cause
+    if status in {401, 403, 404}:
+        raise PermanentError(_format_http_error(status, raw)) from cause
+    raise ProviderError(_format_http_error(status, raw)) from cause
 
 
 def _format_http_error(status_code: int, payload: dict[str, Any]) -> str:
