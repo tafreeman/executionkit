@@ -31,6 +31,9 @@ async def consensus(
     max_tokens: int = 4096,
     max_concurrency: int = 5,
     retry: RetryConfig | None = None,
+    # NOTE (F-03 verified): max_cost is implemented and forwarded to every
+    # checked_complete() call below, enabling budget-aware pipe() chains.
+    # See executionkit/compose.py _filter_kwargs() for propagation logic.
     max_cost: TokenUsage | None = None,
 ) -> PatternResult[str]:
     """Run parallel LLM samples and aggregate via voting.
