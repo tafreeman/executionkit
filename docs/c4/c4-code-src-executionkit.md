@@ -98,7 +98,26 @@
   - `async complete(messages: Sequence[dict[str, Any]], *, temperature: float | None = None, max_tokens: int | None = None, tools: Sequence[dict[str, Any]] | None = None, **kwargs: Any) -> LLMResponse` - Sends request to provider and parses response
   - `async _post(endpoint: str, payload: dict[str, Any]) -> dict[str, Any]` - Low-level HTTP POST with error handling
   - `_parse_response(data: dict[str, Any]) -> LLMResponse` - Parses provider response into LLMResponse
-- **Dependencies**: `LLMResponse`, `ToolCall`, `RateLimitError`, `PermanentError`, `ProviderError`
+- **Dependencies**: `LLMResponse`, `ToolCall`, `RateLimitError`, `PermanentError`, `ProviderError` (all exception types now imported from `errors.py`; also uses `_classify_http_error` internally to map HTTP status codes to exceptions)
+
+### Module: `errors.py`
+
+- **Location**: `executionkit/errors.py`
+- **Purpose**: Exception hierarchy for all ExecutionKit errors, extracted from `provider.py` to give errors a dedicated module with a single responsibility
+- **Exports**:
+  - `ExecutionKitError` — base exception carrying `cost: TokenUsage` and `metadata: dict`
+  - `LLMError` — base for provider/transport failures
+  - `RateLimitError` — HTTP 429; includes `retry_after: float`
+  - `PermanentError` — non-retryable errors (auth failure, 404)
+  - `ProviderError` — retryable errors (5xx, network timeout)
+  - `PatternError` — base for pattern-level failures
+  - `BudgetExhaustedError` — token/call budget exceeded before next dispatch
+  - `ConsensusFailedError` — voting strategy could not be satisfied
+  - `MaxIterationsError` — iterative pattern hit iteration limit without converging
+- **Dependencies**: `types.py` (`TokenUsage`)
+- **Backwards compatibility**: `provider.py` re-exports all nine names using the `Name as Name` idiom so existing imports from `executionkit.provider` continue to work without change
+
+---
 
 #### `CostTracker`
 - **Type**: Regular class
@@ -211,9 +230,11 @@
 
 ### Exception Classes
 
+> **Note on module location**: All nine exception classes were extracted from `provider.py` into `executionkit/errors.py`. `provider.py` re-exports all of them using the `Name as Name` idiom (e.g., `from executionkit.errors import ExecutionKitError as ExecutionKitError`) to preserve backwards compatibility. Import paths through `provider.py` or directly from `errors.py` are both supported.
+
 #### `ExecutionKitError`
 - **Type**: Exception subclass
-- **Location**: `executionkit/provider.py:13-23`
+- **Location**: `executionkit/errors.py` (re-exported from `executionkit/provider.py` for backwards compatibility)
 - **Description**: Base exception for all ExecutionKit errors; carries cost and metadata
 - **Attributes**:
   - `cost: TokenUsage` - Token cost of failed operation (default: empty TokenUsage)
@@ -224,14 +245,14 @@
 
 #### `LLMError`
 - **Type**: Exception subclass
-- **Location**: `executionkit/provider.py:26-27`
+- **Location**: `executionkit/errors.py` (re-exported from `executionkit/provider.py` for backwards compatibility)
 - **Description**: Base class for provider and transport failures (network, protocol, auth)
 - **Parent**: `ExecutionKitError`
 - **Dependencies**: `ExecutionKitError`
 
 #### `RateLimitError`
 - **Type**: Exception subclass
-- **Location**: `executionkit/provider.py:30-40`
+- **Location**: `executionkit/errors.py` (re-exported from `executionkit/provider.py` for backwards compatibility)
 - **Description**: Raised for HTTP 429 rate limit responses; includes retry timing info
 - **Attributes**:
   - `retry_after: float | None` - Seconds to wait before retry
@@ -242,42 +263,42 @@
 
 #### `PermanentError`
 - **Type**: Exception subclass
-- **Location**: `executionkit/provider.py:43-44`
+- **Location**: `executionkit/errors.py` (re-exported from `executionkit/provider.py` for backwards compatibility)
 - **Description**: Non-retryable provider error (authentication failure, 404, etc.)
 - **Parent**: `LLMError`
 - **Dependencies**: `LLMError`
 
 #### `ProviderError`
 - **Type**: Exception subclass
-- **Location**: `executionkit/provider.py:47-48`
+- **Location**: `executionkit/errors.py` (re-exported from `executionkit/provider.py` for backwards compatibility)
 - **Description**: Retryable provider or transport error (5xx, network timeout, etc.)
 - **Parent**: `LLMError`
 - **Dependencies**: `LLMError`
 
 #### `PatternError`
 - **Type**: Exception subclass
-- **Location**: `executionkit/provider.py:51-52`
+- **Location**: `executionkit/errors.py` (re-exported from `executionkit/provider.py` for backwards compatibility)
 - **Description**: Base class for pattern-level execution failures (e.g., convergence issues)
 - **Parent**: `ExecutionKitError`
 - **Dependencies**: `ExecutionKitError`
 
 #### `BudgetExhaustedError`
 - **Type**: Exception subclass
-- **Location**: `executionkit/provider.py:55-56`
+- **Location**: `executionkit/errors.py` (re-exported from `executionkit/provider.py` for backwards compatibility)
 - **Description**: Raised when remaining token budget is insufficient for next dispatch
 - **Parent**: `PatternError`
 - **Dependencies**: `PatternError`
 
 #### `ConsensusFailedError`
 - **Type**: Exception subclass
-- **Location**: `executionkit/provider.py:59-60`
+- **Location**: `executionkit/errors.py` (re-exported from `executionkit/provider.py` for backwards compatibility)
 - **Description**: Raised when consensus cannot be established among LLM outputs
 - **Parent**: `PatternError`
 - **Dependencies**: `PatternError`
 
 #### `MaxIterationsError`
 - **Type**: Exception subclass
-- **Location**: `executionkit/provider.py:63-64`
+- **Location**: `executionkit/errors.py` (re-exported from `executionkit/provider.py` for backwards compatibility)
 - **Description**: Raised when iterative pattern (e.g., refine_loop) fails to converge within iteration limit
 - **Parent**: `PatternError`
 - **Dependencies**: `PatternError`
@@ -410,6 +431,17 @@
 
 #### Helper Functions in `provider.py` (private utilities)
 
+##### `_classify_http_error(status: int, raw: dict[str, Any], retry_after: float, *, cause: BaseException) -> NoReturn`
+- **Location**: `executionkit/provider.py`
+- **Description**: Centralizes HTTP status code → exception mapping by raising the appropriate typed exception for an HTTP failure (`RateLimitError` for 429, `PermanentError` for other 4xx responses, `ProviderError` for 5xx responses). This helper is used by the HTTP backends so they share identical error classification behavior, and it preserves the original triggering exception via exception chaining when `cause` is provided.
+- **Parameters**:
+  - `status: int` - HTTP response status code
+  - `raw: dict[str, Any]` - Parsed JSON body from the response (may be empty dict)
+  - `retry_after: float` - Value of the `Retry-After` header in seconds
+  - `cause: BaseException` - Original exception to chain as the raised error's cause
+- **Raises**: Always raises a typed `ExecutionKitError` subclass; does not return
+- **Dependencies**: `RateLimitError`, `PermanentError`, `ProviderError`, `_format_http_error`
+
 ##### `_first_choice(data: dict[str, Any]) -> dict[str, Any]`
 - **Location**: `executionkit/provider.py:195-202`
 - **Description**: Extracts first choice from provider response dict
@@ -448,7 +480,8 @@
 ### Internal Dependencies
 
 - **From other executionkit modules**:
-  - `executionkit.provider`: `LLMProvider`, `ToolCallingProvider`, `ExecutionKitError`, `LLMError`, `LLMResponse`, `RateLimitError`, `PermanentError`, `ProviderError`, `PatternError`, `BudgetExhaustedError`, `ConsensusFailedError`, `MaxIterationsError`, `ToolCall`, `Provider`
+  - `executionkit.errors`: `ExecutionKitError`, `LLMError`, `RateLimitError`, `PermanentError`, `ProviderError`, `PatternError`, `BudgetExhaustedError`, `ConsensusFailedError`, `MaxIterationsError` (canonical source; `provider.py` re-exports all of these via `Name as Name`)
+  - `executionkit.provider`: `LLMProvider`, `ToolCallingProvider`, `LLMResponse`, `ToolCall`, `Provider` (exception names also importable here for backwards compatibility)
   - `executionkit.types`: `TokenUsage`, `PatternResult`, `Tool`, `VotingStrategy`, `Evaluator`
   - `executionkit.compose`: `PatternStep`, `pipe`
   - `executionkit.cost`: `CostTracker`
@@ -496,13 +529,8 @@ classDiagram
     }
 
     namespace ProviderAbstraction {
-        class provider {
+        class errors {
             <<module>>
-            +LLMProvider Protocol
-            +ToolCallingProvider Protocol
-            +LLMResponse
-            +ToolCall
-            +Provider Class
             +ExecutionKitError Exception
             +LLMError Exception
             +RateLimitError Exception
@@ -512,6 +540,16 @@ classDiagram
             +BudgetExhaustedError Exception
             +ConsensusFailedError Exception
             +MaxIterationsError Exception
+        }
+        class provider {
+            <<module>>
+            +LLMProvider Protocol
+            +ToolCallingProvider Protocol
+            +LLMResponse
+            +ToolCall
+            +Provider Class
+            +_classify_http_error Function
+            ~re-exports errors via Name as Name
         }
     }
 
@@ -561,14 +599,18 @@ classDiagram
         }
     }
 
-    %% Provider depends on types
+    %% errors depends on types (TokenUsage used by ExecutionKitError)
+    errors --> types: imports TokenUsage
+
+    %% Provider depends on types and errors
     provider --> types: imports TokenUsage
+    provider --> errors: imports exception hierarchy (re-exports via Name as Name)
 
     %% Cost depends on types and provider
     cost --> types: imports TokenUsage
     cost --> provider: imports LLMResponse
     
-    %% Compose depends on types and provider
+    %% Compose depends on types and provider/errors
     compose --> types: imports PatternResult, TokenUsage
     compose --> provider: imports LLMProvider, ExecutionKitError
     
