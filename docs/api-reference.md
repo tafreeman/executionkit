@@ -1089,9 +1089,52 @@ Validate that an evaluator score is in [0.0, 1.0] and not NaN.
 
 ---
 
+### `_check_budget()` (internal)
+
+```python
+def _check_budget(
+    budget: TokenUsage,
+    current: TokenUsage,
+    fields: tuple[str, ...],
+    *,
+    sentinel_suffix: str,
+    exceeded_suffix: str,
+) -> None
+```
+
+Internal helper used by `checked_complete()` (F-05/F-08). Iterates over the named `TokenUsage` fields using `getattr()` and raises `BudgetExhaustedError` on the first field that is either sentinel-exhausted (value `-1`, set by `pipe()` propagation) or over its limit. This replaces the previous per-field if-block repetition and follows the same pattern as CPython's `dataclasses.asdict()`.
+
+**Location:** `executionkit/patterns/base.py`
+
+**Raises:** `BudgetExhaustedError` on the first exhausted field.
+
+---
+
+### `_classify_http_error()` (internal)
+
+```python
+def _classify_http_error(
+    status: int,
+    raw: dict[str, Any],
+    retry_after: float,
+    *,
+    cause: BaseException,
+) -> NoReturn
+```
+
+Internal helper in `provider.py` (F-02). Centralises the HTTP status code → exception mapping that is shared by both the `_post_httpx` and `_post_urllib` backends. Raises the correct typed exception — `RateLimitError` for HTTP 429, `PermanentError` for 401/403/404, `ProviderError` for all other non-2xx codes — and chains `cause` as the original exception. Both HTTP backends call this single function rather than duplicating the mapping logic.
+
+**Location:** `executionkit/provider.py`
+
+**Raises:** `RateLimitError`, `PermanentError`, or `ProviderError` (always raises; return type is `NoReturn`).
+
+---
+
 ## Error Hierarchy
 
 All exceptions carry `cost: TokenUsage` and `metadata: dict[str, Any]` attributes set at raise time.
+
+> **Module location (F-06):** The full 9-class hierarchy is defined in `executionkit/errors.py`. `provider.py` re-exports every class under the same name so that `from executionkit.provider import XError` imports remain valid.
 
 ```
 ExecutionKitError

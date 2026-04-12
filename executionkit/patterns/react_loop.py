@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from itertools import chain
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
@@ -351,8 +352,6 @@ async def _execute_tool_call(
     except TimeoutError:
         return f"Tool execution timed out after {timeout}s"
     except Exception as exc:
-        import logging
-
         logging.getLogger(__name__).debug(
             "Tool '%s' raised %s", tc_name, type(exc).__name__, exc_info=True
         )

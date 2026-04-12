@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import warnings
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -15,6 +15,58 @@ from executionkit.provider import BudgetExhaustedError, LLMProvider, LLMResponse
 from executionkit.types import TokenUsage  # noqa: TC001
 
 BUDGET_EXHAUSTED_SENTINEL = -1
+
+# Maps TokenUsage field names to human-readable labels for error messages.
+# Iterating over this dict with getattr() replaces per-field if-chains —
+# the same pattern CPython's dataclasses.asdict() uses internally.
+# Ref: https://github.com/python/cpython/blob/main/Lib/dataclasses.py
+_BUDGET_FIELD_LABELS: dict[str, str] = {
+    "llm_calls": "LLM call",
+    "input_tokens": "Input token",
+    "output_tokens": "Output token",
+}
+
+
+def _check_budget(
+    budget: TokenUsage,
+    current: TokenUsage,
+    fields: tuple[str, ...],
+    *,
+    sentinel_suffix: str,
+    exceeded_suffix: str,
+) -> None:
+    """Raise :exc:`BudgetExhaustedError` if any tracked field hits its limit.
+
+    Uses ``getattr()`` over named field checks — same pattern as CPython's
+    ``dataclasses.asdict()`` — to avoid repeating the check triplet per field.
+    A value of ``BUDGET_EXHAUSTED_SENTINEL`` (-1) means the field was fully
+    consumed by a prior ``pipe()`` step.
+
+    Args:
+        budget: The budget to check against.
+        current: Current usage snapshot from :class:`CostTracker`.
+        fields: Tuple of :class:`TokenUsage` field names to check.
+        sentinel_suffix: Appended to the error message when sentinel found.
+        exceeded_suffix: Appended to the error message when limit exceeded.
+
+    Raises:
+        BudgetExhaustedError: On the first field that is over budget.
+    """
+    for field_name in fields:
+        label = _BUDGET_FIELD_LABELS[field_name]
+        limit = getattr(budget, field_name)
+        if limit == BUDGET_EXHAUSTED_SENTINEL:
+            raise BudgetExhaustedError(
+                f"{label} budget exhausted {sentinel_suffix}",
+                cost=current,
+                metadata={"budget": budget},
+            )
+        if limit > 0 and getattr(current, field_name) >= limit:
+            raise BudgetExhaustedError(
+                f"{label} budget exhausted {exceeded_suffix}",
+                cost=current,
+                metadata={"budget": budget},
+            )
 
 
 def validate_score(score: float) -> float:
@@ -66,59 +118,24 @@ async def checked_complete(
     """
     if budget is not None:
         current = tracker.to_usage()
-        # -1 sentinel: field was limited and fully consumed by a prior pipe() step.
-        if budget.llm_calls == BUDGET_EXHAUSTED_SENTINEL:
-            raise BudgetExhaustedError(
-                "LLM call budget exhausted (forwarded from pipe)",
-                cost=current,
-                metadata={"budget": budget},
-            )
-        if budget.llm_calls > 0 and current.llm_calls >= budget.llm_calls:
-            raise BudgetExhaustedError(
-                "LLM call budget exhausted before dispatch",
-                cost=current,
-                metadata={"budget": budget},
-            )
-        if budget.input_tokens == BUDGET_EXHAUSTED_SENTINEL:
-            raise BudgetExhaustedError(
-                "Input token budget exhausted (forwarded from pipe)",
-                cost=current,
-                metadata={"budget": budget},
-            )
-        if budget.input_tokens > 0 and current.input_tokens >= budget.input_tokens:
-            raise BudgetExhaustedError(
-                "Input token budget exhausted before dispatch",
-                cost=current,
-                metadata={"budget": budget},
-            )
-        if budget.output_tokens == BUDGET_EXHAUSTED_SENTINEL:
-            raise BudgetExhaustedError(
-                "Output token budget exhausted (forwarded from pipe)",
-                cost=current,
-                metadata={"budget": budget},
-            )
-        if budget.output_tokens > 0 and current.output_tokens >= budget.output_tokens:
-            raise BudgetExhaustedError(
-                "Output token budget exhausted before dispatch",
-                cost=current,
-                metadata={"budget": budget},
-            )
+        _check_budget(
+            budget,
+            current,
+            tuple(_BUDGET_FIELD_LABELS),
+            sentinel_suffix="(forwarded from pipe)",
+            exceeded_suffix="before dispatch",
+        )
 
     async def _before_attempt(attempt: int) -> None:
         if attempt > 1 and budget is not None:
             current = tracker.to_usage()
-            if budget.llm_calls == BUDGET_EXHAUSTED_SENTINEL:
-                raise BudgetExhaustedError(
-                    "LLM call budget exhausted before retry (forwarded from pipe)",
-                    cost=current,
-                    metadata={"budget": budget},
-                )
-            if budget.llm_calls > 0 and current.llm_calls >= budget.llm_calls:
-                raise BudgetExhaustedError(
-                    "LLM call budget exhausted before retry dispatch",
-                    cost=current,
-                    metadata={"budget": budget},
-                )
+            _check_budget(
+                budget,
+                current,
+                ("llm_calls",),
+                sentinel_suffix="before retry (forwarded from pipe)",
+                exceeded_suffix="before retry dispatch",
+            )
         tracker.reserve_call()
 
     response = await with_retry(
@@ -159,8 +176,6 @@ class _TrackedProvider:
     multiple times while sharing a single ``CostTracker`` and metadata dict.
     """
 
-    supports_tools: Literal[True] = True
-
     def __init__(
         self,
         provider: LLMProvider,
@@ -177,6 +192,20 @@ class _TrackedProvider:
         self._budget = budget
         self._retry = retry
         self._context = context
+
+    @property
+    def supports_tools(self) -> bool:
+        """Delegate capability flag to the wrapped provider.
+
+        A wrapper must not unconditionally claim tool support — it should
+        reflect what the inner provider actually supports.
+        Ref F-04: https://github.com/BerriAI/litellm/issues/11370 (real-world
+        failure from hardcoding capability instead of delegating).
+        NOTE (F-01 verified): CostTracker._calls is never accessed directly
+        here. reserve_call() and release_call() are the only public API used.
+        See executionkit/cost.py.
+        """
+        return getattr(self._provider, "supports_tools", False)
 
     async def complete(
         self,

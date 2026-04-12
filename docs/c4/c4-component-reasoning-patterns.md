@@ -14,7 +14,7 @@
 - **Consensus pattern** (`consensus.py`) — generates `num_samples` parallel LLM completions at high temperature, then applies `MAJORITY` or `UNANIMOUS` voting to select the winner; reports agreement ratio in metadata
 - **Refine loop pattern** (`refine_loop.py`) — wraps the provider in `_TrackedProvider` for per-call budget enforcement, iterates generate → score → refine until quality target is met, `ConvergenceDetector` provides patience-based early stopping, default evaluator uses an LLM to score on 0–10 scale
 - **ReAct loop pattern** (`react_loop.py`) — maintains a growing message history, dispatches tool calls with timeout enforcement, truncates observations to fit context window, returns the first response that contains no tool calls as the final answer
-- **Base utilities** (`base.py`) — `checked_complete` performs pre-call budget validation then records usage; `_TrackedProvider` wraps any `LLMProvider` with budget+retry+truncation-warning logic; `validate_score` guards against NaN and out-of-range scores
+- **Base utilities** (`base.py`) — `checked_complete` performs pre-call budget validation (via `_check_budget`) then records usage; `_check_budget` iterates `_BUDGET_FIELD_LABELS` with `getattr()` to validate all budget fields in a single loop, replacing 8 per-field `if`-blocks; `_TrackedProvider` wraps any `LLMProvider` with budget+retry+truncation-warning logic and exposes `supports_tools` as a property delegating to the wrapped provider rather than a hardcoded `Literal[True]`; `validate_score` guards against NaN and out-of-range scores
 
 ## Code Elements
 
@@ -24,7 +24,9 @@
 | `refine_loop` | Async function | [c4-code-src-executionkit-patterns.md](c4-code-src-executionkit-patterns.md) → `refine_loop.py:18-95` |
 | `react_loop` | Async function | [c4-code-src-executionkit-patterns.md](c4-code-src-executionkit-patterns.md) → `react_loop.py:16-88` |
 | `checked_complete` | Async function | [c4-code-src-executionkit-patterns.md](c4-code-src-executionkit-patterns.md) → `base.py:24-55` |
-| `_TrackedProvider` | Class | [c4-code-src-executionkit-patterns.md](c4-code-src-executionkit-patterns.md) → `base.py:69-110` |
+| `_check_budget` | Private function | [c4-code-src-executionkit-patterns.md](c4-code-src-executionkit-patterns.md) → `base.py` |
+| `_BUDGET_FIELD_LABELS` | Module-level dict | [c4-code-src-executionkit-patterns.md](c4-code-src-executionkit-patterns.md) → `base.py` |
+| `_TrackedProvider` | Class (`supports_tools` now a property) | [c4-code-src-executionkit-patterns.md](c4-code-src-executionkit-patterns.md) → `base.py:69-110` |
 | `validate_score` | Function | [c4-code-src-executionkit-patterns.md](c4-code-src-executionkit-patterns.md) → `base.py:18-21` |
 | `_default_evaluator` | Private async function | [c4-code-src-executionkit-patterns.md](c4-code-src-executionkit-patterns.md) → `refine_loop.py:98-116` |
 | `_parse_score` | Private function | [c4-code-src-executionkit-patterns.md](c4-code-src-executionkit-patterns.md) → `refine_loop.py:119-135` |
@@ -117,7 +119,7 @@ title: C4 Component — Reasoning Patterns
 ---
 flowchart TB
     subgraph ReasoningPatterns["Reasoning Patterns Component"]
-        BASE["base.py\nchecked_complete()\n_TrackedProvider\nvalidate_score()"]
+        BASE["base.py\nchecked_complete()\n_check_budget() / _BUDGET_FIELD_LABELS\n_TrackedProvider (supports_tools: property)\nvalidate_score()"]
         CONS["consensus.py\nconsensus()"]
         REFINE["refine_loop.py\nrefine_loop()\n_default_evaluator()\n_parse_score()\n_build_refinement_prompt()"]
         REACT["react_loop.py\nreact_loop()\n_execute_tool_call()\n_truncate()"]
