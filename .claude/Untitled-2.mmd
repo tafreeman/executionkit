@@ -1,0 +1,44 @@
+---
+title: ExecutionKit — C4 Component Relationships
+---
+flowchart TB
+    subgraph EK["ExecutionKit"]
+        direction TB
+
+        subgraph PL["Provider Layer"]
+            PLcore["LLMProvider / ToolCallingProvider\nProvider (HTTP client)\nLLMResponse / ToolCall\nPatternResult / TokenUsage / Tool\nVotingStrategy / Evaluator\nException hierarchy"]
+        end
+
+        subgraph EE["Execution Engine"]
+            EEcore["RetryConfig / with_retry / DEFAULT_RETRY\ngather_resilient / gather_strict\nConvergenceDetector\nextract_json / user_message / assistant_message"]
+        end
+
+        subgraph RP["Reasoning Patterns"]
+            RPcore["consensus()\nrefine_loop()\nreact_loop()\nchecked_complete / _TrackedProvider"]
+        end
+
+        subgraph CS["Composition & Session"]
+            CScore["pipe() / PatternStep\nKit\nCostTracker\n*_sync wrappers"]
+        end
+
+        subgraph TDU["Test & Dev Utilities"]
+            TDUcore["MockProvider\nExample scripts"]
+        end
+    end
+
+    %% Execution Engine depends on Provider Layer for exception types
+    EE -->|ProviderError, RateLimitError| PL
+
+    %% Reasoning Patterns depends on Provider Layer and Execution Engine
+    RP -->|LLMProvider, ToolCallingProvider, LLMResponse, PatternResult, TokenUsage, exceptions| PL
+    RP -->|with_retry, gather_strict, ConvergenceDetector, extract_json, user_message, assistant_message| EE
+    RP -->|CostTracker| CS
+
+    %% Composition & Session depends on Provider Layer and Reasoning Patterns
+    CS -->|LLMProvider, PatternResult, TokenUsage, ExecutionKitError| PL
+    CS -->|consensus, refine_loop, react_loop, pipe| RP
+
+    %% Test & Dev Utilities depends on Provider Layer, Reasoning Patterns, and Composition & Session
+    TDU -->|LLMResponse and LLMProvider contract| PL
+    TDU -->|consensus, refine_loop, react_loop| RP
+    TDU -->|Kit, pipe, *_sync wrappers| CS
