@@ -1,0 +1,58 @@
+---
+title: C4 Component — Test & Dev Utilities
+---
+flowchart TB
+    subgraph TestDevUtilities["Test & Dev Utilities Component"]
+        MOCK["MockProvider\n(_mock.py)"]
+        EX_OAI["quickstart_openai.py"]
+        EX_OLL["quickstart_ollama.py"]
+        EX_CON["consensus_mock.py"]
+        EX_REF["refine_loop_mock.py"]
+        EX_RPK["react_pipe_kit.py"]
+    end
+
+    subgraph ProviderLayer["Provider Layer"]
+        LLMP["LLMProvider\n(protocol)"]
+        RESP["LLMResponse"]
+        PROV["Provider\n(HTTP)"]
+    end
+
+    subgraph ReasoningPatterns["Reasoning Patterns"]
+        CONS["consensus()"]
+        REFINE["refine_loop()"]
+        REACT["react_loop()"]
+    end
+
+    subgraph CompositionSession["Composition & Session"]
+        KIT["Kit"]
+        PIPE["pipe()"]
+        SYNC["*_sync wrappers"]
+    end
+
+    subgraph External["External Services"]
+        OPENAI["OpenAI API"]
+        OLLAMA["Ollama (local)"]
+    end
+
+    MOCK -.->|implements| LLMP
+    MOCK -->|builds / returns| RESP
+
+    EX_OAI --> PROV
+    EX_OAI --> CONS
+    EX_OAI --> SYNC
+    EX_OLL --> PROV
+    EX_OLL --> CONS
+    EX_OLL --> SYNC
+    EX_CON --> MOCK
+    EX_CON --> CONS
+    EX_CON --> SYNC
+    EX_REF --> MOCK
+    EX_REF --> REFINE
+    EX_REF --> SYNC
+    EX_RPK --> MOCK
+    EX_RPK --> REACT
+    EX_RPK --> KIT
+    EX_RPK --> PIPE
+
+    PROV -->|HTTP| OPENAI
+    PROV -->|HTTP| OLLAMA

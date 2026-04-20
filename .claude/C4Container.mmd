@@ -1,0 +1,20 @@
+C4Container
+    title ExecutionKit — C4 Container Diagram
+
+    Person(caller, "Application / Developer", "Python code that imports and calls executionkit patterns")
+
+    System_Boundary(ek, "ExecutionKit System") {
+        Container(pkg, "executionkit Python Package", "Python 3.11–3.13 / stdlib only", "Composable LLM reasoning patterns: consensus, refine_loop, react_loop; pipeline composition via pipe/Kit; retry, concurrency, convergence utilities; scripted mock provider")
+
+        Container(ci, "CI Pipeline", "GitHub Actions (ubuntu + windows / Python 3.11–3.13)", "Matrix: lint (ruff), type-check (mypy --strict), tests (pytest, 80% coverage), build verification on every push and PR")
+    }
+
+    System_Ext(pypi, "PyPI Registry", "Python Package Index — hosts executionkit wheel and sdist; trusted OIDC publishing via pypa/gh-action-pypi-publish")
+
+    System_Ext(llm, "OpenAI-Compatible Provider", "Any HTTP endpoint implementing OpenAI chat-completions schema — e.g. OpenAI api.openai.com, Azure OpenAI, Ollama localhost:11434")
+
+    Rel(caller, pkg, "Imports and calls", "Python import / pip install")
+    Rel(pkg, llm, "HTTP POST /v1/chat/completions", "urllib HTTPS, JSON, Bearer token")
+    Rel(ci, pkg, "Installs, lints, type-checks, tests, builds", "pip install -e .[dev]")
+    Rel(ci, pypi, "Publishes wheel + sdist on v* tag", "OIDC trusted publish")
+    Rel(caller, pypi, "Downloads package", "pip install executionkit")
