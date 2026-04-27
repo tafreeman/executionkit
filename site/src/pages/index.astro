@@ -53,7 +53,7 @@ print(result.cost)     # Cumulative cost across both steps`;
       <div class="max-w-3xl">
         <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-[var(--color-accent-dim)] bg-[var(--color-accent)]/10 text-[var(--color-accent)] text-sm font-medium mb-6">
           <span class="w-2 h-2 rounded-full bg-[var(--color-accent)] animate-pulse"></span>
-          v0.1.0 — Production Ready
+          v0.1.0 — Stable Release
         </div>
 
         <h1 class="text-4xl md:text-6xl font-bold tracking-tight leading-tight mb-6">
@@ -117,7 +117,7 @@ print(result.cost)     # Cumulative cost across both steps`;
     <div class="text-center mb-12">
       <h2 class="text-3xl font-bold mb-4">Built for production</h2>
       <p class="text-[var(--color-text-secondary)] max-w-xl mx-auto">
-        Three composable patterns that handle the hard parts of LLM reasoning.
+        Four composable patterns that handle the hard parts of LLM reasoning.
       </p>
     </div>
     <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -133,11 +133,11 @@ print(result.cost)     # Cumulative cost across both steps`;
         Think-act-observe ReAct loop with JSON Schema validation.
         Tool errors become observations, never crash the loop.
       </FeatureCard>
+      <FeatureCard title="Structured Output" icon="📦">
+        Extract validated JSON with automatic repair. Validators can reject and trigger fix loops.
+      </FeatureCard>
       <FeatureCard title="Budget Tracking" icon="💰">
         Per-call and cumulative token usage. Set hard limits with max_cost to prevent runaway spend.
-      </FeatureCard>
-      <FeatureCard title="Zero Dependencies" icon="📦">
-        Pure stdlib. Optional httpx for connection pooling. Works anywhere Python 3.11+ runs.
       </FeatureCard>
       <FeatureCard title="Any Provider" icon="🔌">
         OpenAI, Ollama, Groq, Together AI, GitHub Models — anything speaking the OpenAI-compatible format.
