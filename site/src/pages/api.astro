@@ -53,6 +53,18 @@ const pipeSig = `async def pipe(
     **shared_kwargs: Any,
 ) -> PatternResult[Any]`;
 
+const structuredSig = `async def structured(
+    provider: LLMProvider,
+    prompt: str,
+    *,
+    validator: StructuredValidator | None = None,
+    max_retries: int = 3,
+    temperature: float = 0.0,
+    max_tokens: int = 4096,
+    max_cost: TokenUsage | None = None,
+    retry: RetryConfig | None = None,
+) -> PatternResult[StructuredValue]`;
+
 const patternResultCode = `@dataclass(frozen=True, slots=True)
 class PatternResult(Generic[T]):
     value: T
@@ -123,6 +135,7 @@ const convergenceCode = `class ConvergenceDetector:
               ["consensus()", "function", "Parallel sampling with majority or unanimous voting"],
               ["refine_loop()", "function", "Iterative refinement with convergence detection"],
               ["react_loop()", "function", "Think-act-observe tool-calling loop"],
+              ["structured()", "function", "Extract validated JSON with automatic repair"],
               ["pipe()", "function", "Chain patterns, threading output as next prompt"],
               ["Kit", "class", "Session wrapper tracking cumulative usage"],
               ["Provider", "class", "Universal OpenAI-compatible HTTP provider"],
@@ -180,6 +193,16 @@ const convergenceCode = `class ConvergenceDetector:
             <strong>Metadata keys:</strong> rounds, tool_calls_made, truncated_responses,
             truncated_observations, messages_trimmed.
             Raises MaxIterationsError when max_rounds is exhausted.
+          </p>
+        </div>
+
+        <div id="structured" class="scroll-mt-20">
+          <h3 class="text-xl font-bold mb-3 text-[var(--color-accent)]">structured()</h3>
+          <Code code={structuredSig} lang="python" />
+          <p class="mt-3 text-sm text-[var(--color-text-secondary)]">
+            Requests JSON output, parses it, and optionally repairs invalid responses.
+            Validators return None/True/"" for success; any other value triggers repair.
+            <strong>Metadata keys:</strong> parse_attempts, repair_attempts, validated.
           </p>
         </div>
 
