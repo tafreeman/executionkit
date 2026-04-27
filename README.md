@@ -346,10 +346,9 @@ lightweight LLM prompt for development use. Supply a custom `evaluator=` for pro
 
 Full documentation is published at **https://tafreeman.github.io/executionkit/**.
 
-- [Quick Start](https://tafreeman.github.io/executionkit/quickstart/)
-- [Patterns reference](https://tafreeman.github.io/executionkit/patterns/)
-- [API reference](https://tafreeman.github.io/executionkit/api/)
-- [Architecture](https://tafreeman.github.io/executionkit/architecture/)
+- Architecture and invariants: `docs/architecture.md`
+- API reference: `docs/api-reference.md`
+- C4 diagrams and component guides: `docs/c4/`
 - Contributor workflow and security policy: `CONTRIBUTING.md`, `SECURITY.md`
 
 ## Development
