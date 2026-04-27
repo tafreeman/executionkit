@@ -160,13 +160,47 @@ result = await react_loop(provider, "What is 17 * 83?", tools=[calc_tool])
 print(result)                              # 1411
 print(result.metadata["tool_calls_made"])  # 1
 print(result.metadata["rounds"])           # 2`;
+
+const structuredSig = `async def structured(
+    provider: LLMProvider,
+    prompt: str,
+    *,
+    validator: StructuredValidator | None = None,
+    max_retries: int = 3,
+    temperature: float = 0.0,
+    max_tokens: int = 4096,
+    max_cost: TokenUsage | None = None,
+    retry: RetryConfig | None = None,
+) -> PatternResult[StructuredValue]`;
+
+const structuredExample = `from executionkit import structured
+
+result = await structured(
+    provider,
+    "Return a JSON object with keys 'summary' and 'confidence' (0-1).",
+)
+
+print(result.value["summary"])             # Extracted summary text
+print(result.value["confidence"])          # 0.95
+print(result.metadata["parse_attempts"])   # 1`;
+
+const structuredValidatorExample = `def validate_confidence(value):
+    if value.get("confidence", 0) < 0.8:
+        return "confidence must be at least 0.8"
+    return None  # Accept
+
+result = await structured(
+    provider,
+    "Return a confident classification.",
+    validator=validate_confidence,
+)`;
 ---
 
-<Base title="Patterns" description="ExecutionKit's three composable LLM reasoning patterns: consensus, refine_loop, and react_loop.">
+<Base title="Patterns" description="ExecutionKit's four composable LLM reasoning patterns: consensus, refine_loop, react_loop, and structured.">
   <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-20">
     <h1 class="text-4xl font-bold mb-4">Patterns</h1>
     <p class="text-lg text-[var(--color-text-secondary)] mb-12">
-      Three composable async functions that handle the hard parts of LLM reasoning.
+      Four composable async functions that handle the hard parts of LLM reasoning.
       Each returns an immutable PatternResult with the answer, score, cost, and metadata.
     </p>
 
@@ -280,6 +314,39 @@ print(result.metadata["rounds"])           # 2`;
           <strong class="text-[var(--color-accent-orange)]">⚠️ Security note:</strong> Never use Python's eval()
           with untrusted LLM output. Tool arguments are validated against their JSON Schema before execution.
         </p>
+      </div>
+    </section>
+
+    <!-- Structured -->
+    <section id="structured" class="mt-20 scroll-mt-20">
+      <div class="flex items-center gap-3 mb-6">
+        <span class="text-3xl">📦</span>
+        <h2 class="text-3xl font-bold">structured</h2>
+      </div>
+      <p class="text-[var(--color-text-secondary)] mb-6 leading-relaxed">
+        Request structured JSON output from the LLM. Automatically extracts JSON from
+        the response, with optional validation and repair. If a validator rejects the
+        output, the pattern asks the LLM to fix it (up to max_retries).
+      </p>
+      <div class="mb-6">
+        <h3 class="text-lg font-semibold mb-3">Signature</h3>
+        <Code code={structuredSig} lang="python" />
+      </div>
+      <div class="mb-6">
+        <h3 class="text-lg font-semibold mb-3">Basic example</h3>
+        <Code code={structuredExample} lang="python" />
+      </div>
+      <div class="mb-6">
+        <h3 class="text-lg font-semibold mb-3">With validation</h3>
+        <Code code={structuredValidatorExample} lang="python" />
+      </div>
+      <div class="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4">
+        <h4 class="text-sm font-semibold text-[var(--color-text-primary)] mb-2">Metadata keys</h4>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
+          <div><code class="text-[var(--color-accent-blue)]">parse_attempts</code> <span class="text-[var(--color-text-muted)]">— extraction tries</span></div>
+          <div><code class="text-[var(--color-accent-blue)]">repair_attempts</code> <span class="text-[var(--color-text-muted)]">— repair rounds</span></div>
+          <div><code class="text-[var(--color-accent-blue)]">validated</code> <span class="text-[var(--color-text-muted)]">— passed validator</span></div>
+        </div>
       </div>
     </section>
   </div>

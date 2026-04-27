@@ -25,6 +25,8 @@ async def gather_resilient(
     Returns:
         List of results or exception objects, preserving input order.
     """
+    if max_concurrency < 1:
+        raise ValueError(f"max_concurrency must be >= 1, got {max_concurrency}")
     semaphore = asyncio.Semaphore(max_concurrency)
 
     async def _run(coro: Coroutine[Any, Any, Any]) -> Any:
@@ -57,6 +59,8 @@ async def gather_strict(
         Exception: The single unwrapped exception when exactly one task fails.
         ExceptionGroup: When multiple tasks fail simultaneously.
     """
+    if max_concurrency < 1:
+        raise ValueError(f"max_concurrency must be >= 1, got {max_concurrency}")
     semaphore = asyncio.Semaphore(max_concurrency)
     results: list[Any] = [None] * len(coros)
 

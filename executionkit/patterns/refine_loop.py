@@ -104,6 +104,19 @@ async def refine_loop(
         score_history (list[float]): Score at each iteration including initial
             generation.
     """
+    if not (0.0 <= target_score <= 1.0):
+        raise ValueError(f"target_score must be in [0.0, 1.0], got {target_score}")
+    if max_iterations < 0:
+        raise ValueError(f"max_iterations must be >= 0, got {max_iterations}")
+    if patience < 1:
+        raise ValueError(f"patience must be >= 1, got {patience}")
+    if delta_threshold < 0.0:
+        raise ValueError(f"delta_threshold must be >= 0.0, got {delta_threshold}")
+    if max_tokens < 1:
+        raise ValueError(f"max_tokens must be >= 1, got {max_tokens}")
+    if max_eval_chars < 1:
+        raise ValueError(f"max_eval_chars must be >= 1, got {max_eval_chars}")
+
     tracker = CostTracker()
     convergence = ConvergenceDetector(
         delta_threshold=delta_threshold,

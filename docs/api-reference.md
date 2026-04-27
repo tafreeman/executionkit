@@ -14,6 +14,8 @@ Version: **0.1.0** | Requires Python 3.11+
 | `refine_loop_sync()` | function | Synchronous wrapper for `refine_loop()` |
 | `react_loop()` | function | Think-act-observe tool-calling loop |
 | `react_loop_sync()` | function | Synchronous wrapper for `react_loop()` |
+| `structured()` | function | JSON extraction, repair, and validation pattern |
+| `structured_sync()` | function | Synchronous wrapper for `structured()` |
 | `pipe()` | function | Chain patterns, threading output as next prompt |
 | `pipe_sync()` | function | Synchronous wrapper for `pipe()` |
 | `Kit` | class | Session wrapper holding a provider and tracking cumulative usage |
@@ -343,6 +345,45 @@ def react_loop_sync(
 ```
 
 Synchronous wrapper for `react_loop()`. Accepts all the same keyword arguments.
+
+Raises `RuntimeError` if called from within an already-running event loop.
+
+---
+
+### `structured()`
+
+```python
+async def structured(
+    provider: LLMProvider,
+    prompt: str,
+    *,
+    validator: Callable[[dict[str, Any] | list[Any]], str | None | bool] | None = None,
+    max_retries: int = 3,
+    temperature: float = 0.0,
+    max_tokens: int = 4096,
+    max_cost: TokenUsage | None = None,
+    retry: RetryConfig | None = None,
+) -> PatternResult[dict[str, Any] | list[Any]]
+```
+
+Requests JSON output, parses it with `extract_json()`, and optionally retries
+with a repair prompt when parsing or validation fails.
+
+Metadata keys: `parse_attempts`, `repair_attempts`, `validated`.
+
+---
+
+### `structured_sync()`
+
+```python
+def structured_sync(
+    provider: LLMProvider,
+    prompt: str,
+    **kwargs: Any,
+) -> PatternResult[dict[str, Any] | list[Any]]
+```
+
+Synchronous wrapper for `structured()`. Accepts all the same keyword arguments.
 
 Raises `RuntimeError` if called from within an already-running event loop.
 
@@ -1048,9 +1089,52 @@ Validate that an evaluator score is in [0.0, 1.0] and not NaN.
 
 ---
 
+### `_check_budget()` (internal)
+
+```python
+def _check_budget(
+    budget: TokenUsage,
+    current: TokenUsage,
+    fields: tuple[str, ...],
+    *,
+    sentinel_suffix: str,
+    exceeded_suffix: str,
+) -> None
+```
+
+Internal helper used by `checked_complete()` (F-05/F-08). Iterates over the named `TokenUsage` fields using `getattr()` and raises `BudgetExhaustedError` on the first field that is either sentinel-exhausted (value `-1`, set by `pipe()` propagation) or over its limit. This replaces the previous per-field if-block repetition and follows the same pattern as CPython's `dataclasses.asdict()`.
+
+**Location:** `executionkit/patterns/base.py`
+
+**Raises:** `BudgetExhaustedError` on the first exhausted field.
+
+---
+
+### `_classify_http_error()` (internal)
+
+```python
+def _classify_http_error(
+    status: int,
+    raw: dict[str, Any],
+    retry_after: float,
+    *,
+    cause: BaseException,
+) -> NoReturn
+```
+
+Internal helper in `provider.py` (F-02). Centralises the HTTP status code → exception mapping that is shared by both the `_post_httpx` and `_post_urllib` backends. Raises the correct typed exception — `RateLimitError` for HTTP 429, `PermanentError` for 401/403/404, `ProviderError` for all other non-2xx codes — and chains `cause` as the original exception. Both HTTP backends call this single function rather than duplicating the mapping logic.
+
+**Location:** `executionkit/provider.py`
+
+**Raises:** `RateLimitError`, `PermanentError`, or `ProviderError` (always raises; return type is `NoReturn`).
+
+---
+
 ## Error Hierarchy
 
 All exceptions carry `cost: TokenUsage` and `metadata: dict[str, Any]` attributes set at raise time.
+
+> **Module location (F-06):** The full 9-class hierarchy is defined in `executionkit/errors.py`. `provider.py` re-exports every class under the same name so that `from executionkit.provider import XError` imports remain valid.
 
 ```
 ExecutionKitError
