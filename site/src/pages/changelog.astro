@@ -1,15 +1,34 @@
 ---
 import Base from "../layouts/Base.astro";
+const base = import.meta.env.BASE_URL;
 ---
 
 <Base title="Changelog" description="All notable changes to ExecutionKit, following Keep a Changelog format.">
   <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-20">
     <h1 class="text-4xl font-bold mb-4">Changelog</h1>
-    <p class="text-lg text-[var(--color-text-secondary)] mb-12">
+    <p class="text-lg text-[var(--color-text-secondary)] mb-4">
       All notable changes. Format follows
       <a href="https://keepachangelog.com/en/1.1.0/" target="_blank" rel="noopener noreferrer" class="text-[var(--color-accent-blue)] hover:underline">Keep a Changelog</a>.
       Versioning follows <a href="https://semver.org/" target="_blank" rel="noopener noreferrer" class="text-[var(--color-accent-blue)] hover:underline">Semantic Versioning</a>.
     </p>
+    <p class="text-sm text-[var(--color-text-muted)] mb-12">
+      Full history is also in <a href="https://github.com/tafreeman/executionkit/blob/main/CHANGELOG.md" target="_blank" rel="noopener noreferrer" class="hover:text-[var(--color-text-secondary)] underline">CHANGELOG.md</a> on GitHub.
+    </p>
+
+    <!-- Unreleased -->
+    <section class="mb-12">
+      <div class="flex items-center gap-3 mb-6">
+        <h2 class="text-2xl font-bold">Unreleased</h2>
+        <span class="text-sm px-3 py-1 rounded-full bg-[var(--color-text-muted)]/10 text-[var(--color-text-muted)] border border-[var(--color-border)]">
+          upcoming
+        </span>
+      </div>
+      <p class="text-sm text-[var(--color-text-muted)]">
+        No unreleased changes yet. Follow the
+        <a href="https://github.com/tafreeman/executionkit" target="_blank" rel="noopener noreferrer" class="text-[var(--color-accent-blue)] hover:underline">GitHub repository</a>
+        for upcoming features and fixes.
+      </p>
+    </section>
 
     <!-- v0.1.0 -->
     <section class="mb-12">
@@ -77,5 +96,28 @@ import Base from "../layouts/Base.astro";
         </ul>
       </div>
     </section>
+
+    <!-- Navigation -->
+    <div class="mt-16 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-8">
+      <h2 class="text-xl font-bold mb-4">Explore more</h2>
+      <div class="grid sm:grid-cols-2 gap-4">
+        <a href={`${base}quickstart/`} class="block p-4 rounded-lg border border-[var(--color-border)] hover:border-[var(--color-accent-dim)] transition-colors">
+          <div class="font-medium text-[var(--color-text-primary)] mb-1">Quick Start</div>
+          <div class="text-sm text-[var(--color-text-muted)]">Get running in under 5 minutes</div>
+        </a>
+        <a href={`${base}api/`} class="block p-4 rounded-lg border border-[var(--color-border)] hover:border-[var(--color-accent-dim)] transition-colors">
+          <div class="font-medium text-[var(--color-text-primary)] mb-1">API Reference</div>
+          <div class="text-sm text-[var(--color-text-muted)]">Every function, class, and type</div>
+        </a>
+        <a href={`${base}patterns/`} class="block p-4 rounded-lg border border-[var(--color-border)] hover:border-[var(--color-accent-dim)] transition-colors">
+          <div class="font-medium text-[var(--color-text-primary)] mb-1">Patterns</div>
+          <div class="text-sm text-[var(--color-text-muted)]">Consensus, Refine Loop, ReAct Loop</div>
+        </a>
+        <a href="https://github.com/tafreeman/executionkit/releases" target="_blank" rel="noopener noreferrer" class="block p-4 rounded-lg border border-[var(--color-border)] hover:border-[var(--color-accent-dim)] transition-colors">
+          <div class="font-medium text-[var(--color-text-primary)] mb-1">GitHub Releases</div>
+          <div class="text-sm text-[var(--color-text-muted)]">Download and release notes on GitHub</div>
+        </a>
+      </div>
+    </div>
   </div>
 </Base>
