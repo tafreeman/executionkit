@@ -1,30 +1,71 @@
+<div align="center">
+
 # ExecutionKit
 
-[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://python.org)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Coverage: 83%](https://img.shields.io/badge/coverage-83%25-brightgreen)](pyproject.toml)
-[![CI](https://img.shields.io/badge/CI-passing-brightgreen)](https://github.com/tafreeman/executionkit/actions)
+**Composable LLM reasoning patterns — consensus voting, iterative refinement, ReAct tool loops. Works with any OpenAI-compatible endpoint. Zero SDK dependencies.**
 
-Composable LLM reasoning patterns with budget-aware execution.
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Linting: ruff](https://img.shields.io/badge/linting-ruff-261230.svg)](https://github.com/astral-sh/ruff)
+[![Type checked: mypy](https://img.shields.io/badge/type%20checked-mypy-blue.svg)](http://mypy-lang.org/)
+
+</div>
+
+---
 
 ExecutionKit fills the gap between raw chat calls and full orchestration stacks — more
 power than one-off prompts, less weight than a framework.
 
-## Quick Example
+## What's in the box
 
-```python
-import os
-from executionkit import consensus, Provider
+| Pattern | What it does |
+|---------|-------------|
+| `consensus` | Runs N completions in parallel and aggregates via majority or unanimous voting |
+| `refine_loop` | Iteratively improves a response against a quality score until a target or convergence |
+| `react_loop` | Think-act-observe loop with structured tool calling and JSON Schema argument validation |
+| `structured` | Extracts a validated JSON object from a completion with automatic retry on parse failure |
+| `pipe` | Chains any patterns in sequence, threading results and accumulating costs |
+| `Kit` | Session object that tracks cumulative token usage across multiple pattern calls |
 
-provider = Provider("https://api.openai.com/v1", api_key=os.environ["OPENAI_API_KEY"], model="gpt-4o-mini")
+## Quick Start
 
-result = await consensus(provider, "Classify this support ticket: ...", num_samples=5)
-print(result)                                # The classification
-print(result.cost)                           # TokenUsage(input_tokens=250, output_tokens=45, llm_calls=5)
-print(result.metadata["agreement_ratio"])    # 0.8 = 4 of 5 agreed
+```bash
+pip install executionkit
 ```
 
-Works with ANY OpenAI-compatible endpoint — zero config change:
+```python
+import os, asyncio
+from executionkit import Provider, consensus, refine_loop, react_loop, Tool
+
+provider = Provider(
+    base_url="https://api.openai.com/v1",
+    api_key=os.environ["OPENAI_API_KEY"],
+    model="gpt-4o-mini",
+)
+
+# Majority-vote across 5 completions
+result = await consensus(provider, "Classify this support ticket: ...", num_samples=5)
+print(result)                              # The winning classification
+print(result.metadata["agreement_ratio"]) # 0.8 — 4 of 5 agreed
+print(result.cost)                         # TokenUsage(input_tokens=250, output_tokens=45, llm_calls=5)
+
+# Iterative refinement until quality >= 0.85
+draft = await refine_loop(provider, "Summarise the Turing test.", target_score=0.85)
+print(draft.score)                         # 0.91
+print(draft.metadata["iterations"])        # 2
+
+# ReAct tool loop
+calc = Tool(
+    name="calculator",
+    description="Evaluate a math expression and return the result.",
+    parameters={"type": "object", "properties": {"expression": {"type": "string"}}, "required": ["expression"]},
+    execute=safe_eval,  # use a safe AST evaluator — never eval() untrusted LLM output
+)
+answer = await react_loop(provider, "What is 17 * 83?", tools=[calc])
+print(answer)                              # 1411
+```
+
+Works with **any OpenAI-compatible endpoint** — swap the provider, change nothing else:
 
 ```python
 ollama   = Provider("http://localhost:11434/v1", model="llama3.2")
@@ -33,12 +74,28 @@ together = Provider("https://api.together.xyz/v1", api_key=TOGETHER_KEY, model="
 groq     = Provider("https://api.groq.com/openai/v1", api_key=GROQ_KEY, model="llama-3.3-70b")
 ```
 
+## Relationship to agentic-runtimes
+
+ExecutionKit and [agentic-runtimes](https://github.com/tafreeman/agentic-runtimes) occupy different layers of the same stack:
+
+| | ExecutionKit | agentic-runtimes |
+|---|---|---|
+| **Role** | Pattern library | Orchestration runtime |
+| **Scope** | Single LLM call patterns with cost tracking | Multi-agent DAG workflows with tiered model routing |
+| **Workflow authoring** | Python functions | Declarative YAML |
+| **Dependencies** | Zero (stdlib only; httpx optional) | FastAPI, LangGraph, Pydantic, provider SDKs |
+| **Use when** | You need a reasoning primitive — vote, refine, tool loop | You need to orchestrate many agents with scheduling, retries, and evaluation |
+
+**agentic-runtimes uses ExecutionKit patterns internally** as the execution primitive for each agent step. If you are building atop agentic-runtimes you get ExecutionKit automatically; if you want just the patterns without the orchestration overhead, install ExecutionKit on its own.
+
+---
+
 ## Features
 
-- Composable reasoning patterns: consensus, refine_loop, react_loop, structured
-- Budget-aware execution with per-call cost tracking
-- Works with any OpenAI-compatible endpoint — zero config change
-- Zero runtime dependencies (stdlib only; httpx optional for connection pooling)
+- Composable reasoning patterns: `consensus`, `refine_loop`, `react_loop`, `structured`, `pipe`
+- Budget-aware execution with per-call and session-level cost tracking
+- Works with any OpenAI-compatible endpoint — zero config change to switch providers
+- Zero runtime dependencies (stdlib only; `httpx` optional for connection pooling)
 - Type-safe with full `mypy --strict` support
 - Prompt injection defense in default evaluator (XML delimiter sandboxing)
 - API key masked in `Provider.__repr__`; credentials redacted from error messages
@@ -60,90 +117,6 @@ The `[httpx]` extra adds `httpx` as the HTTP backend. Without it, the stdlib
 
 Requires Python 3.11+.
 
-## Quick Start
-
-### Provider setup
-
-```python
-import os
-from executionkit import Provider
-
-provider = Provider(
-    base_url="https://api.openai.com/v1",
-    api_key=os.environ["OPENAI_API_KEY"],
-    model="gpt-4o-mini",
-)
-```
-
-### Consensus
-
-```python
-from executionkit import consensus
-
-result = await consensus(provider, "What is the capital of France?", num_samples=3)
-print(result)                                     # Paris
-print(result.metadata["agreement_ratio"])         # 1.0
-print(result.cost)                                # TokenUsage(...)
-```
-
-### Refine loop
-
-```python
-from executionkit import refine_loop
-
-result = await refine_loop(
-    provider,
-    "Write a one-paragraph summary of the Turing test.",
-    target_score=0.85,
-    max_iterations=4,
-)
-print(result)                                     # Best response found
-print(result.score)                               # 0.91
-print(result.metadata["iterations"])              # 2
-```
-
-### React loop (tool calling)
-
-```python
-from executionkit import react_loop, Tool
-
-async def _calculator(expression: str) -> str:
-    # Use a safe AST-based evaluator — never eval() untrusted input
-    ...
-
-calc_tool = Tool(
-    name="calculator",
-    description="Evaluate a math expression and return the result.",
-    parameters={
-        "type": "object",
-        "properties": {"expression": {"type": "string"}},
-        "required": ["expression"],
-    },
-    execute=_calculator,
-)
-
-result = await react_loop(provider, "What is 17 * 83?", tools=[calc_tool])
-print(result)                                     # 1411
-print(result.metadata["tool_calls_made"])         # 1
-```
-
-> **Security note:** Never use Python's `eval()` with untrusted LLM output. The
-> example above uses a safe AST-based evaluator. See `examples/react_tool_use.py`
-> for the full implementation.
-
-### Structured output
-
-```python
-from executionkit import structured
-
-result = await structured(
-    provider,
-    "Return a JSON object with keys 'summary' and 'confidence'.",
-)
-print(result.value["summary"])
-print(result.metadata["parse_attempts"])
-```
-
 ## Provider Setup
 
 `Provider` speaks the OpenAI-compatible `/chat/completions` format. By default
@@ -163,45 +136,6 @@ async with Provider(
     result = await consensus(provider, "...")
 ```
 
-Calling `await provider.aclose()` manually is equivalent when a context manager
-is not used.
-
-```python
-# OpenAI
-provider = Provider(
-    base_url="https://api.openai.com/v1",
-    api_key=os.environ["OPENAI_API_KEY"],
-    model="gpt-4o-mini",
-)
-
-# Ollama (local — no API key needed)
-provider = Provider(
-    base_url="http://localhost:11434/v1",
-    model="llama3.2",
-)
-
-# GitHub Models
-provider = Provider(
-    base_url="https://models.inference.ai.azure.com",
-    api_key=os.environ["GITHUB_TOKEN"],
-    model="gpt-4o-mini",
-)
-
-# Together AI
-provider = Provider(
-    base_url="https://api.together.xyz/v1",
-    api_key=os.environ["TOGETHER_API_KEY"],
-    model="meta-llama/Llama-3-70b",
-)
-
-# Groq
-provider = Provider(
-    base_url="https://api.groq.com/openai/v1",
-    api_key=os.environ["GROQ_API_KEY"],
-    model="llama-3.3-70b",
-)
-```
-
 Optional `Provider` parameters:
 
 | Parameter | Default | Description |
@@ -218,8 +152,7 @@ leakage in logs and debug output.
 ### `consensus(provider, prompt, *, ...)`
 
 Run `num_samples` completions in parallel and aggregate via voting.
-Whitespace and trailing newlines are normalized before comparison, so
-two responses that differ only in whitespace are counted as identical.
+Whitespace and trailing newlines are normalized before comparison.
 
 ```python
 async def consensus(
@@ -246,9 +179,6 @@ Iteratively improve a response until a score target or convergence.
 The default evaluator wraps the text in XML delimiters to prevent
 adversarial content inside the response from overriding the scoring
 instruction. Supply a custom `evaluator=` for production use.
-
-`_parse_score` validates the 0-10 range and raises `ValueError` if
-the evaluator returns a score outside that range.
 
 ```python
 async def refine_loop(
@@ -293,10 +223,8 @@ async def react_loop(
 ```
 
 `max_history_messages` caps the message history sent to the LLM on each
-round. When set, the first message (original prompt) is always preserved,
-and only the most recent `max_history_messages - 1` messages are kept.
-This bounds memory growth for long-running loops. `None` (default)
-disables trimming.
+round, preserving the original prompt and keeping only the most recent
+messages. `None` (default) disables trimming.
 
 Metadata keys: `rounds`, `tool_calls_made`, `truncated_responses`,
 `truncated_observations`, `messages_trimmed`.
@@ -339,6 +267,19 @@ r2 = await kit.refine("Summarise: ...")
 print(kit.usage)   # TokenUsage across all calls
 ```
 
+## Synchronous Usage
+
+All patterns are async. Synchronous convenience wrappers are provided for
+use outside of async contexts (raises `RuntimeError` inside a running event
+loop — use `await` instead):
+
+```python
+from executionkit import Provider, consensus_sync, refine_loop_sync, react_loop_sync, pipe_sync
+
+result = consensus_sync(provider, "What is 2+2?")
+print(result.value)
+```
+
 ## Custom Providers
 
 Any object with a matching `complete` method satisfies the `LLMProvider`
@@ -349,50 +290,14 @@ from executionkit.provider import LLMResponse
 
 class MyProvider:
     async def complete(
-        self,
-        messages,
-        *,
-        temperature=None,
-        max_tokens=None,
-        tools=None,
-        **kwargs,
+        self, messages, *, temperature=None, max_tokens=None, tools=None, **kwargs
     ) -> LLMResponse:
-        # call your API here
         return LLMResponse(content="Hello", usage={})
-```
-
-Pass any conforming provider to `Kit`, `consensus`, `refine_loop`, or
-`react_loop`. The built-in `Provider` class is one implementation; you can
-swap in any other without changing pattern code.
-
-## Synchronous Usage
-
-All patterns are async. Synchronous convenience wrappers are provided for
-use outside of async contexts (raises `RuntimeError` inside a running event
-loop — use `await` instead):
-
-```python
-from executionkit import Provider, consensus_sync, refine_loop_sync, react_loop_sync, pipe_sync
-
-provider = Provider(base_url="https://api.openai.com/v1", model="gpt-4o", api_key="...")
-
-result = consensus_sync(provider, "What is 2+2?")
-print(result.value)
-```
-
-Using `asyncio.run()` directly is also fine:
-
-```python
-import asyncio
-from executionkit import Provider, consensus
-
-result = asyncio.run(consensus(provider, "What is 2+2?"))
 ```
 
 ## Error Hierarchy
 
-All exceptions inherit from `ExecutionKitError` and carry `.cost` (accumulated
-`TokenUsage`) and `.metadata` fields.
+All exceptions inherit from `ExecutionKitError` and carry `.cost` and `.metadata` fields.
 
 | Exception | Cause |
 |-----------|-------|
@@ -405,72 +310,48 @@ All exceptions inherit from `ExecutionKitError` and carry `.cost` (accumulated
 | `ConsensusFailedError` | Unanimous strategy could not agree |
 | `MaxIterationsError` | Loop hit `max_rounds` / `max_iterations` |
 
-Error messages containing credential-like substrings (patterns matching
-`sk...`, `key...`, `token...`, `secret...`, `bearer...`, `auth...`) are
-automatically redacted to `[REDACTED]`.
+Error messages containing credential-like substrings are automatically redacted to `[REDACTED]`.
 
 ## Security
 
 **Prompt injection defense.** The default `refine_loop` evaluator wraps the
 text being scored in `<response_to_rate>` XML delimiters and instructs the
-LLM to ignore any instructions inside them. This mitigates prompt injection
-attacks where adversarial content in a generated response attempts to
-override the scoring instruction.
+LLM to ignore any instructions inside them.
 
-**API key masking.** `Provider.__repr__` always shows `api_key='***'`
-regardless of the actual key length or prefix. Keys are never written to
-repr output, log lines, or exception messages.
-
-**Credential redaction in errors.** HTTP error messages returned by
-providers are scanned for credential-shaped substrings before being
-included in exception messages. Matching patterns are replaced with
-`[REDACTED]`.
-
-**SAST scanning.** Bandit is run in CI on every commit. Configuration is
-in `pyproject.toml` under `[tool.bandit]`.
+**API key masking.** `Provider.__repr__` always shows `api_key='***'`.
+Keys are never written to repr output, log lines, or exception messages.
 
 **Tool argument validation.** `react_loop` validates tool call arguments
-against each tool's JSON Schema (`required` fields, `additionalProperties`,
-and primitive type checks) before invoking the tool execute function.
+against each tool's JSON Schema before invoking the execute function.
+
+**SAST scanning.** Bandit is run in CI on every commit.
+
+> **Security note:** Never use Python's `eval()` with untrusted LLM output in
+> `react_loop` tools. See `examples/react_tool_use.py` for a safe AST-based evaluator.
 
 ## Known Limitations
 
-**No connection pooling (stdlib backend).**
-The default HTTP backend opens a new TCP+TLS connection per LLM call. For
-high-throughput workloads (e.g. `consensus` with many samples or long
-`react_loop` chains), install `executionkit[httpx]` to enable the `httpx`
-connection-pool backend.
+**No connection pooling (stdlib backend).** The default HTTP backend opens a new
+TCP+TLS connection per LLM call. Install `executionkit[httpx]` for high-throughput workloads.
 
-**`react_loop` context growth.**
-The message history grows with every tool call round. For loops exceeding ~20
-rounds or with large tool outputs per round, set `max_history_messages` to
-avoid hitting the model's context window limit. The parameter preserves the
-original prompt and keeps only the most recent messages.
+**`react_loop` context growth.** The message history grows with every tool call
+round. Set `max_history_messages` to bound memory for long-running loops.
 
-**Default evaluator in `refine_loop`.**
-The built-in quality scorer is a lightweight LLM prompt intended for
-development use. Supply a custom `evaluator=` function for production
-workloads or when input may contain adversarial content.
+**Default evaluator in `refine_loop`.** The built-in quality scorer is a
+lightweight LLM prompt for development use. Supply a custom `evaluator=` for production.
 
-**No streaming support.**
-All completions are batch requests. Streaming responses are not currently
-supported.
+**No streaming support.** All completions are batch requests.
 
 ## Documentation
 
 - Architecture and invariants: `docs/architecture.md`
 - API reference: `docs/api-reference.md`
 - C4 diagrams and component guides: `docs/c4/`
-- Agent configuration overview: `AGENTS.md`
-- Deep review playbooks: `.full-review/README.md`
-- Agent coordination and drift tracking: `_analysis/CLAIMS.md`, `_analysis/DRIFT_REPORT.md`, `_analysis/SUBPROJECT_LIST.md`
 - Contributor workflow and security policy: `CONTRIBUTING.md`, `SECURITY.md`
 
 ## Development
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, code style, and PR process.
-
-Run checks locally with:
 
 ```bash
 ruff check .
