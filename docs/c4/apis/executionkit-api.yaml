@@ -1,0 +1,837 @@
+##############################################################################
+# ExecutionKit Public API Specification
+#
+# Format: OpenAPI-style YAML adapted for a Python library (no HTTP paths).
+# Sections: info, components (schemas, errors), modules (public API surface).
+##############################################################################
+
+openapi: "3.1.0-python-library"  # adapted marker — not an HTTP service spec
+
+info:
+  title: ExecutionKit Python Library API
+  version: "0.1.0"
+  description: >
+    Composable, budget-aware LLM reasoning patterns for any OpenAI-compatible
+    API. Zero runtime dependencies (Python stdlib only). Async-native with
+    sync convenience wrappers. Protocol-based provider abstraction.
+  license:
+    name: MIT
+  contact:
+    name: ExecutionKit contributors
+  x-python-requires: ">=3.11"
+  x-distribution: pip install executionkit
+  x-package: executionkit
+  x-source: executionkit/
+
+##############################################################################
+# DATA TYPES / SCHEMAS
+##############################################################################
+
+components:
+  schemas:
+
+    TokenUsage:
+      description: >
+        Immutable token-consumption snapshot. Supports addition via __add__.
+        Carried on every PatternResult and all ExecutionKitError subclasses.
+      type: frozen_dataclass
+      x-module: executionkit.types
+      properties:
+        input_tokens:
+          type: int
+          description: Tokens sent to the LLM (prompt)
+        output_tokens:
+          type: int
+          description: Tokens returned by the LLM (completion)
+        llm_calls:
+          type: int
+          description: Number of LLM completions recorded in this snapshot
+      methods:
+        __add__:
+          signature: "(self, other: TokenUsage) -> TokenUsage"
+          description: Returns a new TokenUsage with summed fields
+
+    PatternResult:
+      description: >
+        Immutable generic result returned by every pattern function. T is
+        str for all three built-in patterns.
+      type: frozen_dataclass
+      x-module: executionkit.types
+      x-generic: "PatternResult[T]"
+      properties:
+        value:
+          type: T
+          description: The final output produced by the pattern
+        score:
+          type: "float | None"
+          description: Quality score (0.0–1.0) if computed by the pattern, else None
+        cost:
+          $ref: "#/components/schemas/TokenUsage"
+          description: Total token consumption across all LLM calls in this pattern run
+        metadata:
+          type: "MappingProxyType[str, Any]"
+          description: Pattern-specific extra data (e.g. agreement_ratio, iterations, rounds)
+
+    LLMResponse:
+      description: >
+        Immutable structured view of a single LLM completion, normalised
+        from the raw provider response.
+      type: frozen_dataclass
+      x-module: executionkit.provider
+      properties:
+        content:
+          type: str
+          description: Text content of the completion
+        tool_calls:
+          type: "tuple[ToolCall, ...]"
+          description: Parsed tool/function call invocations (empty tuple if none)
+        finish_reason:
+          type: str
+          description: Provider finish reason (e.g. stop, tool_calls, length)
+        usage:
+          type: "MappingProxyType[str, Any]"
+          description: Immutable view of the raw usage mapping from the provider response
+        raw:
+          type: Any
+          description: Full unmodified provider response payload
+      computed_properties:
+        input_tokens:
+          type: int
+        output_tokens:
+          type: int
+        total_tokens:
+          type: int
+        has_tool_calls:
+          type: bool
+          description: True when tool_calls is non-empty
+        was_truncated:
+          type: bool
+          description: True when finish_reason == "length"
+
+    ToolCall:
+      description: A single tool/function invocation parsed from an LLM response.
+      type: frozen_dataclass
+      x-module: executionkit.provider
+      properties:
+        id:
+          type: str
+          description: Provider-assigned call identifier
+        name:
+          type: str
+          description: Tool function name
+        arguments:
+          type: "dict[str, Any]"
+          description: Parsed JSON arguments
+
+    Tool:
+      description: >
+        Definition of a callable tool available to the react_loop agent.
+        The execute callable is invoked by the library when the LLM requests
+        the tool.
+      type: frozen_dataclass
+      x-module: executionkit.types
+      properties:
+        name:
+          type: str
+        description:
+          type: str
+        parameters:
+          type: "dict[str, Any]"
+          description: JSON Schema dict describing the tool's input parameters
+        execute:
+          type: "Callable[..., Awaitable[str]]"
+          description: Async function invoked with parsed arguments; returns str observation
+        timeout:
+          type: float
+          default: 30.0
+          description: Per-call timeout in seconds
+      methods:
+        to_schema:
+          signature: "(self) -> dict[str, Any]"
+          description: Returns OpenAI function-calling schema dict for this tool
+
+    VotingStrategy:
+      description: Strategy used by consensus() to select the winning response.
+      type: StrEnum
+      x-module: executionkit.types
+      values:
+        MAJORITY: Most common response wins (requires >50% agreement)
+        UNANIMOUS: All samples must agree
+
+    RetryConfig:
+      description: >
+        Immutable configuration for exponential-backoff retry. Passed to
+        all pattern functions via the retry= keyword. The DEFAULT_RETRY
+        constant provides ready-to-use defaults.
+      type: frozen_dataclass
+      x-slots: true
+      x-module: executionkit.engine.retry
+      properties:
+        max_retries:
+          type: int
+          default: 3
+        base_delay:
+          type: float
+          default: 1.0
+          description: Initial delay in seconds before first retry
+        max_delay:
+          type: float
+          default: 60.0
+          description: Maximum delay cap in seconds
+        exponential_base:
+          type: float
+          default: 2.0
+        retryable:
+          type: "tuple[type[Exception], ...]"
+          default: "(RateLimitError, ProviderError)"
+          description: Exception types that trigger a retry
+      methods:
+        should_retry:
+          signature: "(self, exc: Exception) -> bool"
+        get_delay:
+          signature: "(self, attempt: int) -> float"
+          description: Returns capped exponential delay for the given attempt index
+
+    ConvergenceDetector:
+      description: >
+        Stateful convergence tracker used by refine_loop. One instance per
+        pattern run. Declares convergence when score delta is below
+        delta_threshold for patience consecutive steps, or when score
+        crosses score_threshold.
+      type: dataclass
+      x-slots: true
+      x-module: executionkit.engine.convergence
+      properties:
+        delta_threshold:
+          type: float
+          default: 0.01
+        patience:
+          type: int
+          default: 3
+        score_threshold:
+          type: "float | None"
+          default: null
+      methods:
+        should_stop:
+          signature: "(self, score: float) -> bool"
+          description: Update internal state with score; return True if converged
+
+    CostTracker:
+      description: >
+        Mutable accumulator called by checked_complete after every LLM call
+        within a pattern run. Convert to an immutable snapshot via to_usage().
+      type: class
+      x-module: executionkit.cost
+      properties:
+        input_tokens:
+          type: int
+          description: Running total of input tokens
+        output_tokens:
+          type: int
+          description: Running total of output tokens
+        llm_calls:
+          type: int
+          description: Running count of LLM completions
+        total_tokens:
+          type: int
+          description: input_tokens + output_tokens
+      methods:
+        record:
+          signature: "(self, response: LLMResponse) -> None"
+          description: Accumulates token counts from one LLM response
+        to_usage:
+          signature: "(self) -> TokenUsage"
+          description: Returns an immutable TokenUsage snapshot of current totals
+
+    Provider:
+      description: >
+        Zero-dependency HTTP client for any OpenAI-compatible
+        /v1/chat/completions endpoint. Implements both LLMProvider and
+        ToolCallingProvider protocols.
+      type: dataclass
+      x-module: executionkit.provider
+      properties:
+        base_url:
+          type: str
+          description: Full URL to the API endpoint (e.g. https://api.openai.com/v1)
+        model:
+          type: str
+          description: Model identifier (e.g. gpt-4o, llama3)
+        api_key:
+          type: str
+          default: '""'
+          description: Bearer token; empty string for keyless endpoints (Ollama)
+        default_temperature:
+          type: float
+          default: 0.7
+        default_max_tokens:
+          type: int
+          default: 4096
+        timeout:
+          type: float
+          default: 120.0
+        supports_tools:
+          type: "Literal[True]"
+          default: "True"
+      methods:
+        complete:
+          signature: >
+            async (self, messages: Sequence[dict[str, Any]], *,
+                   temperature: float | None = None,
+                   max_tokens: int | None = None,
+                   tools: Sequence[dict[str, Any]] | None = None,
+                   **kwargs: Any) -> LLMResponse
+          description: Send a chat-completion request; normalise and return LLMResponse
+
+    MockProvider:
+      description: >
+        Deterministic scripted mock provider for unit and integration tests.
+        Implements LLMProvider (and optionally ToolCallingProvider when
+        supports_tools=True). Responses are dequeued in order; when the queue
+        is empty, default_response is returned.
+      type: dataclass
+      x-module: executionkit._mock
+      properties:
+        responses:
+          type: "Sequence[ScriptedResponse]"
+          default: "()"
+          description: Initial response queue; dequeued FIFO
+        supports_tools:
+          type: bool
+          default: true
+        default_response:
+          type: LLMResponse
+          description: Fallback returned when queue is empty
+        calls:
+          type: "list[dict[str, Any]]"
+          description: Record of every complete() invocation; use for assertions
+      methods:
+        complete:
+          signature: >
+            async (self, messages: Sequence[dict[str, Any]], *,
+                   temperature: float | None = None,
+                   max_tokens: int | None = None,
+                   tools: Sequence[dict[str, Any]] | None = None,
+                   **kwargs: Any) -> LLMResponse
+        enqueue:
+          signature: "(self, *responses: ScriptedResponse) -> None"
+          description: Append one or more scripted responses to the queue at runtime
+
+    PatternStep:
+      description: >
+        Protocol satisfied by any async callable with signature
+        (provider, prompt, **kwargs) -> PatternResult[Any]. All three
+        built-in pattern functions satisfy this protocol and can be passed
+        to pipe() directly.
+      type: Protocol
+      x-module: executionkit.compose
+      methods:
+        __call__:
+          signature: >
+            async (self, provider: LLMProvider, prompt: str,
+                   **kwargs: Any) -> PatternResult[Any]
+
+    Kit:
+      description: >
+        Session-level configuration container. Stores a provider and shared
+        defaults (temperature, max_tokens, retry, max_budget) and delegates
+        to all four public pattern entry-points with those defaults merged in.
+      type: dataclass
+      x-module: executionkit.kit
+      properties:
+        provider:
+          type: LLMProvider
+        temperature:
+          type: "float | None"
+          default: null
+        max_tokens:
+          type: "int | None"
+          default: null
+        retry:
+          type: "RetryConfig | None"
+          default: null
+        max_budget:
+          type: "TokenUsage | None"
+          default: null
+      methods:
+        consensus:
+          signature: "async (self, prompt: str, **kwargs: Any) -> PatternResult[str]"
+        refine_loop:
+          signature: "async (self, prompt: str, **kwargs: Any) -> PatternResult[str]"
+        react_loop:
+          signature: >
+            async (self, prompt: str, tools: Sequence[Tool],
+                   **kwargs: Any) -> PatternResult[str]
+          notes: Raises TypeError if provider does not support tools
+        pipe:
+          signature: >
+            async (self, prompt: str, *steps: PatternStep,
+                   **kwargs: Any) -> PatternResult[Any]
+
+  ##############################################################################
+  # TYPE ALIASES
+  ##############################################################################
+
+  typeAliases:
+
+    Evaluator:
+      description: >
+        Async callable used by refine_loop to score each generated response.
+        Receives (text: str, provider: LLMProvider) and returns a float in [0.0, 1.0].
+        When not supplied, the library uses an LLM-based default evaluator that asks
+        the provider to score the text on a 0-10 scale and normalises to 0.0-1.0.
+      signature: "Callable[[str, LLMProvider], Awaitable[float]]"
+      x-module: executionkit.types
+
+    ResponseFactory:
+      description: >
+        Sync or async callable that produces a ScriptedResponse. Used in
+        MockProvider queues for dynamic or stateful mock scenarios.
+      signature: "Callable[..., LLMResponse | Exception | Awaitable[LLMResponse | Exception]]"
+      x-module: executionkit._mock
+
+    ScriptedResponse:
+      description: >
+        Union of the three response forms accepted by MockProvider: a direct
+        LLMResponse, an exception instance to raise, or a ResponseFactory
+        callable.
+      signature: "LLMResponse | Exception | ResponseFactory"
+      x-module: executionkit._mock
+
+  ##############################################################################
+  # PROTOCOLS (structural interfaces)
+  ##############################################################################
+
+  protocols:
+
+    LLMProvider:
+      description: >
+        Runtime-checkable structural interface. Any object with a matching
+        async complete() method satisfies this protocol — no inheritance
+        required. Provider and MockProvider both satisfy it.
+      x-module: executionkit.provider
+      x-runtime-checkable: true
+      methods:
+        complete:
+          signature: >
+            async (self, messages: Sequence[dict[str, Any]], *,
+                   temperature: float | None = None,
+                   max_tokens: int | None = None,
+                   tools: Sequence[dict[str, Any]] | None = None,
+                   **kwargs: Any) -> LLMResponse
+
+    ToolCallingProvider:
+      description: >
+        Narrowed LLMProvider that additionally declares supports_tools=True.
+        Required by react_loop. Provider (with supports_tools: Literal[True])
+        and MockProvider (with supports_tools=True) both satisfy it.
+      x-module: executionkit.provider
+      extends: LLMProvider
+      properties:
+        supports_tools:
+          type: "Literal[True]"
+
+  ##############################################################################
+  # ERROR HIERARCHY
+  ##############################################################################
+
+  errors:
+
+    ExecutionKitError:
+      description: >
+        Base exception for the entire library. Carries cost (TokenUsage) so
+        callers can account for tokens consumed before the failure, and
+        metadata for pattern-specific context.
+      x-module: executionkit.provider
+      base: Exception
+      properties:
+        cost:
+          $ref: "#/components/schemas/TokenUsage"
+          description: Tokens consumed up to the point of failure
+        metadata:
+          type: "dict[str, Any]"
+      subclasses:
+        - LLMError
+        - PatternError
+
+    LLMError:
+      description: >
+        Raised when the LLM provider returns an error response or the
+        HTTP call fails. Parent of transport/rate-limit errors.
+      base: ExecutionKitError
+      subclasses:
+        - RateLimitError
+        - PermanentError
+        - ProviderError
+
+    RateLimitError:
+      description: >
+        Provider responded with HTTP 429 or rate-limit signal. Retried by
+        default (included in RetryConfig.retryable).
+      base: LLMError
+      properties:
+        retry_after:
+          type: "float | None"
+          description: Seconds to wait before retrying, if provided by the API
+
+    PermanentError:
+      description: >
+        Non-retryable LLM error (e.g. invalid request, authentication
+        failure). Not included in RetryConfig.retryable by default.
+      base: LLMError
+
+    ProviderError:
+      description: >
+        Recoverable HTTP or network-level error from the provider.
+        Retried by default (included in RetryConfig.retryable).
+      base: LLMError
+
+    PatternError:
+      description: Pattern-level failure; the LLM calls may have succeeded.
+      base: ExecutionKitError
+      subclasses:
+        - BudgetExhaustedError
+        - ConsensusFailedError
+        - MaxIterationsError
+
+    BudgetExhaustedError:
+      description: >
+        Raised when a pattern would exceed the max_cost TokenUsage budget
+        before beginning its next LLM call.
+      base: PatternError
+
+    ConsensusFailedError:
+      description: >
+        Raised by consensus() when UNANIMOUS strategy is used and not all
+        samples agree, or when MAJORITY cannot produce a winner.
+      base: PatternError
+
+    MaxIterationsError:
+      description: >
+        Raised by refine_loop() or react_loop() when the maximum iteration
+        or round count is reached without meeting the exit criterion.
+      base: PatternError
+
+##############################################################################
+# PUBLIC PATTERN FUNCTIONS
+##############################################################################
+
+modules:
+
+  executionkit:
+    description: Top-level public API. All symbols listed here are importable from `executionkit`.
+
+    functions:
+
+      consensus:
+        description: >
+          Generates num_samples parallel LLM completions then selects the
+          winner by MAJORITY or UNANIMOUS vote. Reports agreement_ratio in
+          PatternResult.metadata.
+        x-module: executionkit.patterns.consensus
+        async: true
+        signature: >
+          async consensus(
+              provider: LLMProvider,
+              prompt: str,
+              *,
+              num_samples: int = 5,
+              strategy: VotingStrategy | str = VotingStrategy.MAJORITY,
+              temperature: float = 0.9,
+              max_tokens: int = 4096,
+              max_concurrency: int = 5,
+              retry: RetryConfig | None = None,
+              **_: Any,
+          ) -> PatternResult[str]
+        raises:
+          - ConsensusFailedError: No consensus reached under UNANIMOUS strategy
+          - BudgetExhaustedError: Budget exceeded before generating all samples
+          - RateLimitError: Rate-limited by provider (after retries exhausted)
+          - ProviderError: Provider returned a recoverable error
+        metadata_keys:
+          agreement_ratio:
+            type: float
+            description: Fraction of samples matching the winning response
+
+      consensus_sync:
+        description: Synchronous wrapper for consensus(); uses asyncio.run().
+        async: false
+        signature: >
+          consensus_sync(
+              provider: LLMProvider,
+              prompt: str,
+              **kwargs: Any,
+          ) -> PatternResult[str]
+        raises:
+          - RuntimeError: If called inside an existing event loop
+
+      refine_loop:
+        description: >
+          Iterative quality-refinement loop. Generates a candidate, scores it
+          via evaluator (default: LLM-based 0–10 scale), refines until
+          target_score is reached or convergence/max_iterations is triggered.
+        x-module: executionkit.patterns.refine_loop
+        async: true
+        signature: >
+          async refine_loop(
+              provider: LLMProvider,
+              prompt: str,
+              *,
+              evaluator: Evaluator | None = None,
+              target_score: float = 0.9,
+              max_iterations: int = 5,
+              patience: int = 3,
+              delta_threshold: float = 0.01,
+              temperature: float = 0.7,
+              max_tokens: int = 4096,
+              max_cost: TokenUsage | None = None,
+              retry: RetryConfig | None = None,
+              **_: Any,
+          ) -> PatternResult[str]
+        raises:
+          - MaxIterationsError: max_iterations reached without meeting target_score
+          - BudgetExhaustedError: max_cost budget exceeded
+        metadata_keys:
+          iterations:
+            type: int
+          final_score:
+            type: float
+          converged:
+            type: bool
+
+      refine_loop_sync:
+        description: Synchronous wrapper for refine_loop(); uses asyncio.run().
+        async: false
+        signature: >
+          refine_loop_sync(
+              provider: LLMProvider,
+              prompt: str,
+              **kwargs: Any,
+          ) -> PatternResult[str]
+        raises:
+          - RuntimeError: If called inside an existing event loop
+
+      react_loop:
+        description: >
+          Tool-calling ReAct (Reason + Act) agent loop. Maintains a growing
+          message history, dispatches tool calls with timeout enforcement,
+          truncates tool observations to fit context. Returns the first
+          tool-call-free response as the final answer.
+        x-module: executionkit.patterns.react_loop
+        async: true
+        signature: >
+          async react_loop(
+              provider: ToolCallingProvider,
+              prompt: str,
+              tools: Sequence[Tool],
+              *,
+              max_rounds: int = 8,
+              max_observation_chars: int = 12000,
+              tool_timeout: float | None = None,
+              temperature: float = 0.3,
+              max_tokens: int = 4096,
+              max_cost: TokenUsage | None = None,
+              retry: RetryConfig | None = None,
+              **_: Any,
+          ) -> PatternResult[str]
+        raises:
+          - MaxIterationsError: max_rounds reached without a final non-tool response
+          - BudgetExhaustedError: max_cost budget exceeded
+          - TypeError: provider does not satisfy ToolCallingProvider protocol
+        metadata_keys:
+          rounds:
+            type: int
+          tool_calls_made:
+            type: int
+
+      react_loop_sync:
+        description: Synchronous wrapper for react_loop(); uses asyncio.run().
+        async: false
+        signature: >
+          react_loop_sync(
+              provider: ToolCallingProvider,
+              prompt: str,
+              tools: Sequence[Tool],
+              **kwargs: Any,
+          ) -> PatternResult[str]
+        raises:
+          - RuntimeError: If called inside an existing event loop
+
+      pipe:
+        description: >
+          Sequential pipeline composition. Chains PatternStep callables;
+          passes each step's PatternResult.value as the next step's prompt.
+          Filters kwargs per step signature to prevent unexpected-keyword
+          errors. Reduces max_budget dynamically after each step.
+        x-module: executionkit.compose
+        async: true
+        signature: >
+          async pipe(
+              provider: LLMProvider,
+              prompt: str,
+              *steps: PatternStep,
+              max_budget: TokenUsage | None = None,
+              **shared_kwargs: Any,
+          ) -> PatternResult[Any]
+        raises:
+          - BudgetExhaustedError: Cumulative cost exceeds max_budget mid-pipeline
+        metadata_keys:
+          steps:
+            type: "list[dict]"
+            description: Per-step value, score, cost, and metadata
+
+      pipe_sync:
+        description: Synchronous wrapper for pipe(); uses asyncio.run().
+        async: false
+        signature: >
+          pipe_sync(
+              provider: LLMProvider,
+              prompt: str,
+              *steps: PatternStep,
+              **kwargs: Any,
+          ) -> PatternResult[Any]
+        raises:
+          - RuntimeError: If called inside an existing event loop
+
+  executionkit.engine.retry:
+    description: Retry and backoff utilities.
+    constants:
+      DEFAULT_RETRY:
+        type: RetryConfig
+        description: RetryConfig() with all default values; ready-to-use constant
+    functions:
+      with_retry:
+        description: >
+          Wraps any async callable with exponential-backoff retry.
+          Propagates asyncio.CancelledError without retry. Thread- and
+          concurrency-safe.
+        async: true
+        signature: >
+          async with_retry(
+              fn: Callable[..., Awaitable[T]],
+              config: RetryConfig,
+              *args: object,
+              **kwargs: object,
+          ) -> T
+
+  executionkit.engine.parallel:
+    description: Bounded-concurrency async execution utilities.
+    functions:
+      gather_resilient:
+        description: >
+          Runs all coroutines concurrently up to max_concurrency; returns
+          mixed list of results and exceptions (does not raise on individual
+          failures). Use for fault-tolerant batch jobs.
+        async: true
+        signature: >
+          async gather_resilient(
+              coros: Sequence[Awaitable[T]],
+              max_concurrency: int = 10,
+          ) -> list[T | BaseException]
+
+      gather_strict:
+        description: >
+          Runs all coroutines concurrently up to max_concurrency via
+          asyncio.TaskGroup; cancels all tasks and raises immediately if any
+          task raises. Use for all-or-nothing workloads.
+        async: true
+        signature: >
+          async gather_strict(
+              coros: Sequence[Awaitable[T]],
+              max_concurrency: int = 10,
+          ) -> list[T]
+
+  executionkit.engine.json_extraction:
+    description: JSON extraction helpers for parsing LLM text output.
+    functions:
+      extract_json_fragment:
+        description: >
+          Scans text for the first balanced {…} block (handles nested objects
+          and escaped strings). Returns the raw JSON substring.
+        async: false
+        signature: "extract_json_fragment(text: str) -> str"
+        raises:
+          - ValueError: No balanced JSON object found in text
+
+      extract_json_object:
+        description: >
+          Calls extract_json_fragment then json.loads; validates result is a dict.
+        async: false
+        signature: "extract_json_object(text: str) -> dict[str, Any]"
+        raises:
+          - ValueError: No valid JSON object found or top-level value is not a dict
+
+##############################################################################
+# EXAMPLE USAGE PATTERNS
+##############################################################################
+
+x-examples:
+
+  minimal_consensus:
+    description: Single-call consensus with live OpenAI provider
+    language: python
+    code: |
+      from executionkit import Provider, consensus_sync
+
+      provider = Provider(
+          base_url="https://api.openai.com/v1",
+          model="gpt-4o",
+          api_key="sk-...",
+      )
+      result = consensus_sync(provider, "Summarise quantum entanglement in one sentence.")
+      print(result.value)
+      print(f"Cost: {result.cost.total_tokens} tokens in {result.cost.llm_calls} calls")
+
+  mock_testing:
+    description: Unit test with MockProvider — no network required
+    language: python
+    code: |
+      from executionkit import MockProvider, LLMResponse, TokenUsage, consensus_sync
+
+      mock = MockProvider(
+          responses=[
+              LLMResponse("Paris", [], "stop", {"prompt_tokens": 10, "completion_tokens": 5}, {}),
+              LLMResponse("Paris", [], "stop", {"prompt_tokens": 10, "completion_tokens": 5}, {}),
+              LLMResponse("London", [], "stop", {"prompt_tokens": 10, "completion_tokens": 5}, {}),
+          ]
+      )
+      result = consensus_sync(mock, "What is the capital of France?", num_samples=3)
+      assert result.value == "Paris"
+      assert len(mock.calls) == 3
+
+  kit_pipeline:
+    description: Multi-step pipeline with session defaults via Kit
+    language: python
+    code: |
+      import asyncio
+      from executionkit import Provider, Kit, consensus, refine_loop, TokenUsage
+
+      async def main() -> None:
+          provider = Provider(base_url="https://api.openai.com/v1", model="gpt-4o", api_key="sk-...")
+          kit = Kit(
+              provider=provider,
+              temperature=0.7,
+              max_budget=TokenUsage(input_tokens=5000, output_tokens=5000, llm_calls=20),
+          )
+          result = await kit.pipe(
+              "Write a blog post about async Python.",
+              consensus,
+              refine_loop,
+          )
+          print(result.value)
+
+      asyncio.run(main())
+
+  budget_enforcement:
+    description: Hard token budget that raises BudgetExhaustedError on overflow
+    language: python
+    code: |
+      from executionkit import Provider, refine_loop_sync, TokenUsage, BudgetExhaustedError
+
+      provider = Provider(base_url="https://api.openai.com/v1", model="gpt-4o", api_key="sk-...")
+      budget = TokenUsage(input_tokens=1000, output_tokens=500, llm_calls=3)
+
+      try:
+          result = refine_loop_sync(provider, "Write an essay.", max_cost=budget)
+      except BudgetExhaustedError as exc:
+          print(f"Budget exceeded. Consumed before failure: {exc.cost.total_tokens} tokens")

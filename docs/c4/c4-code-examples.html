@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>c4-code-examples.md</title>
+<meta http-equiv="Content-type" content="text/html;charset=UTF-8">
+
+<style>
+/* https://github.com/microsoft/vscode/blob/master/extensions/markdown-language-features/media/markdown.css */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+body {
+	font-family: var(--vscode-markdown-font-family, -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif);
+	font-size: var(--vscode-markdown-font-size, 14px);
+	padding: 0 26px;
+	line-height: var(--vscode-markdown-line-height, 22px);
+	word-wrap: break-word;
+}
+
+#code-csp-warning {
+	position: fixed;
+	top: 0;
+	right: 0;
+	color: white;
+	margin: 16px;
+	text-align: center;
+	font-size: 12px;
+	font-family: sans-serif;
+	background-color:#444444;
+	cursor: pointer;
+	padding: 6px;
+	box-shadow: 1px 1px 1px rgba(0,0,0,.25);
+}
+
+#code-csp-warning:hover {
+	text-decoration: none;
+	background-color:#007acc;
+	box-shadow: 2px 2px 2px rgba(0,0,0,.25);
+}
+
+body.scrollBeyondLastLine {
+	margin-bottom: calc(100vh - 22px);
+}
+
+body.showEditorSelection .code-line {
+	position: relative;
+}
+
+body.showEditorSelection .code-active-line:before,
+body.showEditorSelection .code-line:hover:before {
+	content: "";
+	display: block;
+	position: absolute;
+	top: 0;
+	left: -12px;
+	height: 100%;
+}
+
+body.showEditorSelection li.code-active-line:before,
+body.showEditorSelection li.code-line:hover:before {
+	left: -30px;
+}
+
+.vscode-light.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.15);
+}
+
+.vscode-light.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.40);
+}
+
+.vscode-light.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-dark.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.4);
+}
+
+.vscode-dark.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.60);
+}
+
+.vscode-dark.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-high-contrast.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 160, 0, 0.7);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 160, 0, 1);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+img {
+	max-width: 100%;
+	max-height: 100%;
+}
+
+a {
+	text-decoration: none;
+}
+
+a:hover {
+	text-decoration: underline;
+}
+
+a:focus,
+input:focus,
+select:focus,
+textarea:focus {
+	outline: 1px solid -webkit-focus-ring-color;
+	outline-offset: -1px;
+}
+
+hr {
+	border: 0;
+	height: 2px;
+	border-bottom: 2px solid;
+}
+
+h1 {
+	padding-bottom: 0.3em;
+	line-height: 1.2;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+}
+
+h1, h2, h3 {
+	font-weight: normal;
+}
+
+table {
+	border-collapse: collapse;
+}
+
+table > thead > tr > th {
+	text-align: left;
+	border-bottom: 1px solid;
+}
+
+table > thead > tr > th,
+table > thead > tr > td,
+table > tbody > tr > th,
+table > tbody > tr > td {
+	padding: 5px 10px;
+}
+
+table > tbody > tr + tr > td {
+	border-top: 1px solid;
+}
+
+blockquote {
+	margin: 0 7px 0 5px;
+	padding: 0 16px 0 10px;
+	border-left-width: 5px;
+	border-left-style: solid;
+}
+
+code {
+	font-family: Menlo, Monaco, Consolas, "Droid Sans Mono", "Courier New", monospace, "Droid Sans Fallback";
+	font-size: 1em;
+	line-height: 1.357em;
+}
+
+body.wordWrap pre {
+	white-space: pre-wrap;
+}
+
+pre:not(.hljs),
+pre.hljs code > div {
+	padding: 16px;
+	border-radius: 3px;
+	overflow: auto;
+}
+
+pre code {
+	color: var(--vscode-editor-foreground);
+	tab-size: 4;
+}
+
+/** Theming */
+
+.vscode-light pre {
+	background-color: rgba(220, 220, 220, 0.4);
+}
+
+.vscode-dark pre {
+	background-color: rgba(10, 10, 10, 0.4);
+}
+
+.vscode-high-contrast pre {
+	background-color: rgb(0, 0, 0);
+}
+
+.vscode-high-contrast h1 {
+	border-color: rgb(0, 0, 0);
+}
+
+.vscode-light table > thead > tr > th {
+	border-color: rgba(0, 0, 0, 0.69);
+}
+
+.vscode-dark table > thead > tr > th {
+	border-color: rgba(255, 255, 255, 0.69);
+}
+
+.vscode-light h1,
+.vscode-light hr,
+.vscode-light table > tbody > tr + tr > td {
+	border-color: rgba(0, 0, 0, 0.18);
+}
+
+.vscode-dark h1,
+.vscode-dark hr,
+.vscode-dark table > tbody > tr + tr > td {
+	border-color: rgba(255, 255, 255, 0.18);
+}
+
+</style>
+
+<style>
+/* Tomorrow Theme */
+/* http://jmblog.github.com/color-themes-for-google-code-highlightjs */
+/* Original theme - https://github.com/chriskempson/tomorrow-theme */
+
+/* Tomorrow Comment */
+.hljs-comment,
+.hljs-quote {
+	color: #8e908c;
+}
+
+/* Tomorrow Red */
+.hljs-variable,
+.hljs-template-variable,
+.hljs-tag,
+.hljs-name,
+.hljs-selector-id,
+.hljs-selector-class,
+.hljs-regexp,
+.hljs-deletion {
+	color: #c82829;
+}
+
+/* Tomorrow Orange */
+.hljs-number,
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-literal,
+.hljs-type,
+.hljs-params,
+.hljs-meta,
+.hljs-link {
+	color: #f5871f;
+}
+
+/* Tomorrow Yellow */
+.hljs-attribute {
+	color: #eab700;
+}
+
+/* Tomorrow Green */
+.hljs-string,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-addition {
+	color: #718c00;
+}
+
+/* Tomorrow Blue */
+.hljs-title,
+.hljs-section {
+	color: #4271ae;
+}
+
+/* Tomorrow Purple */
+.hljs-keyword,
+.hljs-selector-tag {
+	color: #8959a8;
+}
+
+.hljs {
+	display: block;
+	overflow-x: auto;
+	color: #4d4d4c;
+	padding: 0.5em;
+}
+
+.hljs-emphasis {
+	font-style: italic;
+}
+
+.hljs-strong {
+	font-weight: bold;
+}
+</style>
+
+<style>
+/*
+ * Markdown PDF CSS
+ */
+
+ body {
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif, "Meiryo";
+	padding: 0 12px;
+}
+
+pre {
+	background-color: #f8f8f8;
+	border: 1px solid #cccccc;
+	border-radius: 3px;
+	overflow-x: auto;
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+}
+
+pre:not(.hljs) {
+	padding: 23px;
+	line-height: 19px;
+}
+
+blockquote {
+	background: rgba(127, 127, 127, 0.1);
+	border-color: rgba(0, 122, 204, 0.5);
+}
+
+.emoji {
+	height: 1.4em;
+}
+
+code {
+	font-size: 14px;
+	line-height: 19px;
+}
+
+/* for inline code */
+:not(pre):not(.hljs) > code {
+	color: #C9AE75; /* Change the old color so it seems less like an error */
+	font-size: inherit;
+}
+
+/* Page Break : use <div class="page"/> to insert page break
+-------------------------------------------------------- */
+.page {
+	page-break-after: always;
+}
+
+</style>
+
+<script src="https://unpkg.com/mermaid/dist/mermaid.min.js"></script>
+</head>
+<body>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: document.body.classList.contains('vscode-dark') || document.body.classList.contains('vscode-high-contrast')
+          ? 'dark'
+          : 'default'
+    });
+  </script>
+<h1 id="c4-code-level-examples-directory">C4 Code Level: Examples Directory</h1>
+<h2 id="overview">Overview</h2>
+<ul>
+<li><strong>Name</strong>: ExecutionKit Examples</li>
+<li><strong>Description</strong>: Example scripts demonstrating how to use the ExecutionKit library for composable LLM reasoning patterns with both live providers (OpenAI, Ollama) and mock providers</li>
+<li><strong>Location</strong>: [<code>examples/</code>](file:///C:/Users/tandf/source/patternmesh/examples)</li>
+<li><strong>Language</strong>: Python 3.10+</li>
+<li><strong>Purpose</strong>: Educational and reference implementations showing practical usage of ExecutionKit's reasoning patterns (consensus, refine_loop, react_loop) and composition capabilities</li>
+</ul>
+<h2 id="code-elements">Code Elements</h2>
+<h3 id="scripts">Scripts</h3>
+<h4 id="quickstartopenaipy"><code>quickstart_openai.py</code></h4>
+<p><strong>Location</strong>: [<code>examples/quickstart_openai.py</code>](file:///C:/Users/tandf/source/patternmesh/examples/quickstart_openai.py)</p>
+<p><strong>Purpose</strong>: Demonstrates consensus pattern with live OpenAI API provider. Shows basic setup and error handling.</p>
+<p><strong>Main Function</strong>:</p>
+<ul>
+<li><code>main() -&gt; None</code>
+<ul>
+<li>Reads <code>OPENAI_API_KEY</code> from environment (exits if not set)</li>
+<li>Creates a <code>Provider</code> instance pointing to OpenAI API endpoint</li>
+<li>Executes <code>consensus_sync()</code> with a ticket classification prompt</li>
+<li>Handles <code>ProviderError</code> and <code>ExceptionGroup</code> errors gracefully</li>
+<li>Prints consensus result and token cost</li>
+</ul>
+</li>
+</ul>
+<p><strong>Key Patterns Demonstrated</strong>:</p>
+<ul>
+<li>Live provider initialization with API key and model configuration</li>
+<li>Consensus pattern for multi-sample agreement on classification task</li>
+<li>Environment-based configuration (API key, model name)</li>
+<li>Error handling for external provider failures</li>
+<li>Metrics access (result value and cost tracking)</li>
+</ul>
+<p><strong>Configuration Parameters</strong>:</p>
+<ul>
+<li><code>OPENAI_API_KEY</code>: Required API key</li>
+<li><code>OPENAI_MODEL</code>: Optional, defaults to &quot;gpt-4o-mini&quot;</li>
+<li>Consensus parameters: <code>num_samples=3</code>, <code>temperature=0.2</code></li>
+</ul>
+<hr>
+<h4 id="quickstartollamapy"><code>quickstart_ollama.py</code></h4>
+<p><strong>Location</strong>: [<code>examples/quickstart_ollama.py</code>](file:///C:/Users/tandf/source/patternmesh/examples/quickstart_ollama.py)</p>
+<p><strong>Purpose</strong>: Demonstrates consensus pattern with local Ollama provider. Shows integration with self-hosted LLM.</p>
+<p><strong>Main Function</strong>:</p>
+<ul>
+<li><code>main() -&gt; None</code>
+<ul>
+<li>Creates a <code>Provider</code> instance pointing to local Ollama endpoint (http://localhost:11434/v1)</li>
+<li>Executes <code>consensus_sync()</code> with a ticket summarization prompt</li>
+<li>Gracefully handles connection failures or missing Ollama instance</li>
+<li>Returns early if Ollama is not running (skips rather than fails)</li>
+<li>Prints consensus result and token cost</li>
+</ul>
+</li>
+</ul>
+<p><strong>Key Patterns Demonstrated</strong>:</p>
+<ul>
+<li>Local/self-hosted LLM provider configuration</li>
+<li>Consensus pattern for multi-sample agreement on summarization task</li>
+<li>Graceful degradation (skips execution if provider unavailable)</li>
+<li>Same error handling approach as OpenAI example for consistency</li>
+</ul>
+<p><strong>Configuration Parameters</strong>:</p>
+<ul>
+<li>Ollama endpoint: <code>http://localhost:11434/v1</code> (hardcoded, expects local server)</li>
+<li><code>OLLAMA_MODEL</code>: Optional, defaults to &quot;llama3.2&quot;</li>
+<li>Consensus parameters: <code>num_samples=3</code>, <code>temperature=0.2</code></li>
+</ul>
+<hr>
+<h4 id="consensusmockpy"><code>consensus_mock.py</code></h4>
+<p><strong>Location</strong>: [<code>examples/consensus_mock.py</code>](file:///C:/Users/tandf/source/patternmesh/examples/consensus_mock.py)</p>
+<p><strong>Purpose</strong>: Demonstrates consensus pattern with mock provider. Simplest example for testing and CI/CD.</p>
+<p><strong>Main Function</strong>:</p>
+<ul>
+<li><code>main() -&gt; None</code>
+<ul>
+<li>Creates a <code>MockProvider</code> with pre-configured responses (3 LLMResponse objects)</li>
+<li>Two responses return &quot;billing&quot; (agreement), one returns &quot;support&quot; (disagreement)</li>
+<li>Executes <code>consensus_sync()</code> with a ticket classification prompt</li>
+<li>Prints consensus result and agreement ratio metadata</li>
+<li>Demonstrates how consensus handles partial agreement (2 out of 3)</li>
+</ul>
+</li>
+</ul>
+<p><strong>Key Patterns Demonstrated</strong>:</p>
+<ul>
+<li>Mock provider setup with predetermined responses</li>
+<li>Consensus pattern with disagreement/voting (majority wins)</li>
+<li>Token usage simulation in mock responses</li>
+<li>Metadata extraction (agreement_ratio shows 66.7% agreement)</li>
+<li>Deterministic testing without external API calls</li>
+</ul>
+<p><strong>Mock Configuration</strong>:</p>
+<ul>
+<li>3 responses: 2x &quot;billing&quot;, 1x &quot;support&quot;</li>
+<li>Token counts: input=4, output=1 per response</li>
+<li>Consensus result: &quot;billing&quot; (majority vote)</li>
+<li>Agreement ratio: 0.666... (2 out of 3 agree)</li>
+</ul>
+<hr>
+<h4 id="refineloopmockpy"><code>refine_loop_mock.py</code></h4>
+<p><strong>Location</strong>: [<code>examples/refine_loop_mock.py</code>](file:///C:/Users/tandf/source/patternmesh/examples/refine_loop_mock.py)</p>
+<p><strong>Purpose</strong>: Demonstrates refine_loop pattern with mock provider. Shows iterative quality improvement.</p>
+<p><strong>Main Function</strong>:</p>
+<ul>
+<li><code>main() -&gt; None</code>
+<ul>
+<li>Creates a <code>MockProvider</code> with 2 pre-configured responses:
+<ul>
+<li>First: Initial draft response (&quot;Draft answer&quot;)</li>
+<li>Second: Quality score as JSON (<code>{&quot;score&quot;: 9}</code>)</li>
+</ul>
+</li>
+<li>Executes <code>refine_loop_sync()</code> with a prompt asking to explain deployment failure</li>
+<li>Sets quality target: <code>target_score=0.9</code> (score of 9 out of 10)</li>
+<li>Prints final answer and quality score</li>
+<li>Demonstrates quality-driven iteration</li>
+</ul>
+</li>
+</ul>
+<p><strong>Key Patterns Demonstrated</strong>:</p>
+<ul>
+<li>Refine_loop pattern for iterative quality improvement</li>
+<li>Two-phase execution: generation followed by scoring</li>
+<li>JSON parsing of quality scores in mock responses</li>
+<li>Target-based loop termination (stops when score &gt;= target)</li>
+<li>Token accounting across multiple LLM calls</li>
+</ul>
+<p><strong>Mock Configuration</strong>:</p>
+<ul>
+<li>Response 1 (generation): &quot;Draft answer&quot; with 8 input, 5 output tokens</li>
+<li>Response 2 (scoring): <code>{&quot;score&quot;: 9}</code> with 6 input, 1 output token</li>
+<li>Target score: 0.9 (9/10 in decimal)</li>
+<li>Result: Quality threshold met on first iteration</li>
+</ul>
+<hr>
+<h4 id="reactpipekitpy"><code>react_pipe_kit.py</code></h4>
+<p><strong>Location</strong>: [<code>examples/react_pipe_kit.py</code>](file:///C:/Users/tandf/source/patternmesh/examples/react_pipe_kit.py)</p>
+<p><strong>Purpose</strong>: Demonstrates advanced patterns - react_loop for tool use and Kit.pipe() for pattern composition.</p>
+<p><strong>Main Functions</strong>:</p>
+<p><strong><code>run_react_demo() -&gt; None</code></strong> (Async)</p>
+<ul>
+<li>Creates a weather lookup tool (Tool dataclass with schema and async executor)</li>
+<li>Tool schema: object with required &quot;city&quot; string parameter</li>
+<li>Mock provider configured with 2 responses:
+<ul>
+<li>Response 1: Tool call to &quot;weather&quot; with {&quot;city&quot;: &quot;Austin&quot;}</li>
+<li>Response 2: Final answer using tool result</li>
+</ul>
+</li>
+<li>Executes <code>react_loop()</code> with &quot;What should I wear in Austin today?&quot; prompt</li>
+<li>Demonstrates ReAct pattern: Think → Act (call tool) → Observe → Respond</li>
+<li>Prints final result</li>
+</ul>
+<p><strong><code>run_pipe_demo() -&gt; None</code></strong> (Async)</p>
+<ul>
+<li>Creates <code>Kit</code> instance with configured defaults:
+<ul>
+<li><code>temperature=0.2</code> (deterministic)</li>
+<li><code>max_tokens=256</code></li>
+<li><code>max_budget=TokenUsage(llm_calls=6)</code> (limits total calls)</li>
+</ul>
+</li>
+<li>Chains patterns using <code>Kit.pipe()</code>:
+<ol>
+<li>Consensus with <code>num_samples=2</code> (classify ticket)</li>
+<li>Refine_loop with <code>target_score=0.9</code> (turn classification into action)</li>
+</ol>
+</li>
+<li>Mock provider configured with 4 responses for the pipeline</li>
+<li>Prints pipe result, value, and total cost</li>
+<li>Demonstrates composition and cost tracking across pattern steps</li>
+</ul>
+<p><strong><code>main() -&gt; None</code></strong> (Async)</p>
+<ul>
+<li>Entry point that runs both demos sequentially</li>
+<li>Uses <code>asyncio.run()</code> to execute async code</li>
+</ul>
+<p><strong>Key Patterns Demonstrated</strong>:</p>
+<ul>
+<li>Tool-using agent (ReAct pattern with tool calls and tool results)</li>
+<li>Tool dataclass: name, description, schema (JSON Schema), async executor</li>
+<li>Kit configuration for centralized defaults (temperature, max_tokens, budget)</li>
+<li>Pattern composition: pipe() chains multiple reasoning patterns</li>
+<li>Budget enforcement: Kit's max_budget limits total LLM calls (6 calls max)</li>
+<li>Async/await for concurrent execution support</li>
+<li>Partial function application for pattern configuration in pipe()</li>
+<li>Mock responses simulating tool calls, final answers, and scoring</li>
+<li>Cost tracking across composite patterns</li>
+</ul>
+<p><strong>Configuration Details</strong>:</p>
+<ul>
+<li>Kit settings: temperature=0.2, max_tokens=256, max_budget=6 calls</li>
+<li>Tool: weather lookup with city parameter</li>
+<li>Pattern 1 (consensus): 2 samples per step</li>
+<li>Pattern 2 (refine_loop): target score 0.9</li>
+<li>Total mock responses: 4 (simulates 4 LLM API calls)</li>
+</ul>
+<hr>
+<h2 id="dependencies">Dependencies</h2>
+<h3 id="internal-dependencies-executionkit-apis">Internal Dependencies (ExecutionKit APIs)</h3>
+<p><strong>Core Provider Classes</strong>:</p>
+<ul>
+<li><code>Provider</code> - OpenAI-compatible API wrapper (quickstart_openai.py, quickstart_ollama.py)</li>
+<li><code>MockProvider</code> - Deterministic response simulation (consensus_mock.py, refine_loop_mock.py, react_pipe_kit.py)</li>
+<li><code>ProviderError</code> - Exception for provider-level failures</li>
+<li><code>LLMProvider</code> - Base protocol/interface for all providers</li>
+<li><code>ToolCallingProvider</code> - Extended interface for tool use support</li>
+</ul>
+<p><strong>Reasoning Patterns</strong> (Async and Sync variants):</p>
+<ul>
+<li><code>consensus()</code> / <code>consensus_sync()</code> - Multi-sample agreement pattern</li>
+<li><code>refine_loop()</code> / <code>refine_loop_sync()</code> - Iterative quality improvement pattern</li>
+<li><code>react_loop()</code> / <code>react_loop_sync()</code> - Tool-using agent pattern (ReAct)</li>
+<li><code>pipe()</code> / <code>pipe_sync()</code> - Pattern composition and chaining</li>
+</ul>
+<p><strong>Type System</strong>:</p>
+<ul>
+<li><code>LLMResponse</code> - Response object with content, tool_calls, usage, finish_reason</li>
+<li><code>ToolCall</code> - Individual tool invocation (id, name, arguments)</li>
+<li><code>Tool</code> - Tool definition (name, description, parameters schema, async executor)</li>
+<li><code>PatternResult[T]</code> - Generic result wrapper (value, score, cost, metadata)</li>
+<li><code>TokenUsage</code> - Token accounting (input_tokens, output_tokens, llm_calls)</li>
+<li><code>VotingStrategy</code> - Enum for consensus voting (MAJORITY, UNANIMOUS)</li>
+</ul>
+<p><strong>Composition &amp; Configuration</strong>:</p>
+<ul>
+<li><code>Kit</code> - Configuration container for common pattern defaults</li>
+<li><code>PatternStep</code> - Type alias for composable pattern functions</li>
+<li><code>ConvergenceDetector</code> - Quality/convergence detection engine</li>
+<li><code>RetryConfig</code> - Retry behavior configuration</li>
+<li><code>CostTracker</code> - Token usage and cost aggregation</li>
+</ul>
+<p><strong>Error Handling</strong>:</p>
+<ul>
+<li><code>ExecutionKitError</code> - Base exception class</li>
+<li><code>ProviderError</code> - Provider-level failures</li>
+<li><code>LLMError</code> - LLM response errors</li>
+<li><code>PatternError</code> - Pattern execution errors</li>
+<li><code>ConsensusFailedError</code> - Consensus voting didn't achieve threshold</li>
+<li><code>MaxIterationsError</code> - Loop exceeded iteration limit</li>
+<li><code>BudgetExhaustedError</code> - Token budget exceeded</li>
+<li><code>RateLimitError</code> - Provider rate limit hit</li>
+<li><code>PermanentError</code> - Non-retryable error</li>
+</ul>
+<h3 id="external-dependencies">External Dependencies</h3>
+<p><strong>Live Provider Dependencies</strong>:</p>
+<ul>
+<li><strong>OpenAI API</strong> (<code>quickstart_openai.py</code>): Requires <code>OPENAI_API_KEY</code> and network access to <code>api.openai.com/v1</code></li>
+<li><strong>Ollama</strong> (<code>quickstart_ollama.py</code>): Requires local Ollama instance running on <code>localhost:11434</code></li>
+</ul>
+<p><strong>Python Standard Library</strong>:</p>
+<ul>
+<li><code>asyncio</code> - Async runtime (react_pipe_kit.py)</li>
+<li><code>os</code> - Environment variable access (quickstart_openai.py, quickstart_ollama.py)</li>
+<li><code>functools.partial</code> - Function partial application (react_pipe_kit.py)</li>
+</ul>
+<p><strong>Project Dependencies</strong> (from pyproject.toml):</p>
+<ul>
+<li><code>executionkit</code> - Main library package (imported from src/)</li>
+<li>Python 3.10+ for pattern matching and other language features</li>
+</ul>
+<hr>
+<h2 id="relationships">Relationships</h2>
+<p>The examples demonstrate how the different ExecutionKit APIs and patterns interact. Below is a code-level architecture diagram showing the relationships between example scripts and ExecutionKit components.</p>
+<pre><code class="language-mermaid"><div class="mermaid">---
+title: ExecutionKit Examples - Component Relationships
+---
+flowchart TB
+    subgraph Examples["Example Scripts"]
+        Q_OAI["quickstart_openai.py<br/>Live OpenAI"]
+        Q_OLL["quickstart_ollama.py<br/>Live Ollama"]
+        CON_M["consensus_mock.py<br/>Mock Consensus"]
+        REF_M["refine_loop_mock.py<br/>Mock Refine"]
+        RPK["react_pipe_kit.py<br/>Advanced Patterns"]
+    end
+
+    subgraph Providers["Provider Layer"]
+        PROVIDER["Provider<br/>(OpenAI-compatible)"]
+        MOCK["MockProvider<br/>(Deterministic)"]
+        PBASE["LLMProvider<br/>(Interface)"]
+    end
+
+    subgraph Patterns["Reasoning Patterns"]
+        CONS["consensus()"]
+        REFINE["refine_loop()"]
+        REACT["react_loop()"]
+        PIPE["pipe()"]
+        KIT["Kit<br/>(Configuration)"]
+    end
+
+    subgraph Types["Types & Utilities"]
+        RESPONSE["LLMResponse"]
+        RESULT["PatternResult[T]"]
+        TOOL["Tool"]
+        TOOLCALL["ToolCall"]
+        TOKUSAGE["TokenUsage"]
+    end
+
+    Q_OAI -->|uses| PROVIDER
+    Q_OAI -->|calls| CONS
+    
+    Q_OLL -->|uses| PROVIDER
+    Q_OLL -->|calls| CONS
+    
+    CON_M -->|uses| MOCK
+    CON_M -->|calls| CONS
+    
+    REF_M -->|uses| MOCK
+    REF_M -->|calls| REFINE
+    
+    RPK -->|uses| MOCK
+    RPK -->|calls| REACT
+    RPK -->|calls| CONS
+    RPK -->|calls| REFINE
+    RPK -->|uses| PIPE
+    RPK -->|uses| KIT
+    RPK -->|uses| TOOL
+    
+    PROVIDER -->|implements| PBASE
+    MOCK -->|implements| PBASE
+    
+    CONS -->|returns| RESULT
+    REFINE -->|returns| RESULT
+    REACT -->|returns| RESULT
+    PIPE -->|chains| CONS
+    PIPE -->|chains| REFINE
+    PIPE -->|returns| RESULT
+    
+    RESPONSE -->|used by| MOCK
+    TOOLCALL -->|part of| RESPONSE
+    TOOL -->|used by| REACT
+    RESULT -->|contains| TOKUSAGE
+</div></code></pre>
+<h3 id="pattern-usage-matrix">Pattern Usage Matrix</h3>
+<table>
+<thead>
+<tr>
+<th>Pattern</th>
+<th>Script</th>
+<th>Use Case</th>
+<th>Provider Type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>consensus()</code></td>
+<td>quickstart_openai.py</td>
+<td>Ticket classification with agreement</td>
+<td>Live (OpenAI)</td>
+</tr>
+<tr>
+<td><code>consensus()</code></td>
+<td>quickstart_ollama.py</td>
+<td>Ticket summarization with agreement</td>
+<td>Live (Ollama)</td>
+</tr>
+<tr>
+<td><code>consensus()</code></td>
+<td>consensus_mock.py</td>
+<td>Multi-sample voting demo</td>
+<td>Mock</td>
+</tr>
+<tr>
+<td><code>refine_loop()</code></td>
+<td>refine_loop_mock.py</td>
+<td>Iterative quality improvement</td>
+<td>Mock</td>
+</tr>
+<tr>
+<td><code>react_loop()</code></td>
+<td>react_pipe_kit.py</td>
+<td>Tool-using agent (weather lookup)</td>
+<td>Mock</td>
+</tr>
+<tr>
+<td><code>pipe()</code></td>
+<td>react_pipe_kit.py</td>
+<td>Chained patterns (consensus → refine)</td>
+<td>Mock</td>
+</tr>
+<tr>
+<td><code>Kit</code></td>
+<td>react_pipe_kit.py</td>
+<td>Configuration container for all patterns</td>
+<td>Mock</td>
+</tr>
+</tbody>
+</table>
+<h3 id="data-flow-in-examples">Data Flow in Examples</h3>
+<ol>
+<li>
+<p><strong>Quickstart Examples</strong> (OpenAI/Ollama):</p>
+<ul>
+<li>User prompt → Provider.call() → LLMResponse → Consensus voting → PatternResult → Print metrics</li>
+</ul>
+</li>
+<li>
+<p><strong>Mock Examples</strong> (Consensus/Refine):</p>
+<ul>
+<li>Pre-configured responses → Pattern logic → Agreement/score computation → PatternResult → Print metrics</li>
+</ul>
+</li>
+<li>
+<p><strong>Advanced Example</strong> (ReAct + Pipe):</p>
+<ul>
+<li>User prompt → Tool use decision → Tool execution → Final answer (ReAct)</li>
+<li>OR: Prompt → Consensus classification → Refine to action → Final result (Pipe)</li>
+<li>Kit enforces temperature, token limits, budget across all patterns</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h2 id="execution-models">Execution Models</h2>
+<h3 id="synchronous-execution">Synchronous Execution</h3>
+<ul>
+<li><code>quickstart_openai.py</code>: <code>consensus_sync()</code> - blocks until complete</li>
+<li><code>quickstart_ollama.py</code>: <code>consensus_sync()</code> - blocks until complete</li>
+<li><code>consensus_mock.py</code>: <code>consensus_sync()</code> - instant (mock responses)</li>
+<li><code>refine_loop_mock.py</code>: <code>refine_loop_sync()</code> - instant (mock responses)</li>
+</ul>
+<p><strong>Note</strong>: Sync APIs use <code>asyncio.run()</code> internally, cannot run inside existing event loops.</p>
+<h3 id="asynchronous-execution">Asynchronous Execution</h3>
+<ul>
+<li><code>react_pipe_kit.py</code>: <code>asyncio.run(main())</code> - explicit async/await with <code>async def</code></li>
+<li><code>run_react_demo()</code>: <code>await react_loop()</code> - async pattern execution</li>
+<li><code>run_pipe_demo()</code>: <code>await kit.pipe()</code> - async composition</li>
+<li>Enables concurrent pattern execution and tool calls</li>
+</ul>
+<hr>
+<h2 id="error-handling-patterns">Error Handling Patterns</h2>
+<h3 id="live-provider-examples">Live Provider Examples</h3>
+<p><strong>quickstart_openai.py</strong>:</p>
+<pre class="hljs"><code><div><span class="hljs-keyword">try</span>:
+    result = consensus_sync(...)
+<span class="hljs-keyword">except</span> ProviderError <span class="hljs-keyword">as</span> exc:
+    print(<span class="hljs-string">f"OpenAI quickstart failed: <span class="hljs-subst">{exc}</span>"</span>)
+<span class="hljs-keyword">except</span> ExceptionGroup <span class="hljs-keyword">as</span> exc:
+    first_error = exc.exceptions[<span class="hljs-number">0</span>]
+    print(<span class="hljs-string">f"OpenAI quickstart failed: <span class="hljs-subst">{first_error}</span>"</span>)
+</div></code></pre>
+<p><strong>quickstart_ollama.py</strong>:</p>
+<pre class="hljs"><code><div><span class="hljs-keyword">try</span>:
+    result = consensus_sync(...)
+<span class="hljs-keyword">except</span> ProviderError <span class="hljs-keyword">as</span> exc:
+    print(<span class="hljs-string">f"Ollama quickstart skipped: <span class="hljs-subst">{exc}</span>"</span>)  <span class="hljs-comment"># Graceful skip</span>
+<span class="hljs-keyword">except</span> ExceptionGroup <span class="hljs-keyword">as</span> exc:
+    first_error = exc.exceptions[<span class="hljs-number">0</span>]
+    print(<span class="hljs-string">f"Ollama quickstart skipped: <span class="hljs-subst">{first_error}</span>"</span>)
+</div></code></pre>
+<p><strong>Key Difference</strong>: OpenAI reports failure, Ollama gracefully skips (expects local service may not be running).</p>
+<hr>
+<h2 id="notes">Notes</h2>
+<ol>
+<li><strong>Environment Configuration</strong>: Live examples expect environment variables for API keys and endpoints</li>
+<li><strong>Async Patterns</strong>: Advanced example shows recommended async/await patterns for complex reasoning chains</li>
+<li><strong>Cost Tracking</strong>: All examples demonstrate <code>result.cost</code> which aggregates TokenUsage across LLM calls</li>
+<li><strong>Mock Testing</strong>: Mock examples are deterministic and suitable for unit tests and CI/CD pipelines</li>
+<li><strong>Tool Integration</strong>: react_pipe_kit.py shows complete Tool schema structure (JSON Schema format matching OpenAI format)</li>
+<li><strong>Budget Management</strong>: Kit's max_budget prevents runaway LLM costs in refine_loop and react_loop patterns</li>
+<li><strong>Pattern Composition</strong>: pipe() enables flexible chaining of any pattern combination (not limited to the example)</li>
+</ol>
+
+</body>
+</html>
