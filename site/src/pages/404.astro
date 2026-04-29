@@ -1,0 +1,32 @@
+---
+import Base from "../layouts/Base.astro";
+
+const base = import.meta.env.BASE_URL;
+---
+
+<Base title="404 — Page Not Found" description="The page you are looking for does not exist.">
+  <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-24 md:py-40 text-center">
+    <p class="text-8xl font-bold text-[var(--color-accent)] mb-6 opacity-60">404</p>
+    <h1 class="text-3xl font-bold mb-4">Page not found</h1>
+    <p class="text-[var(--color-text-secondary)] mb-10">
+      The page you're looking for doesn't exist or has been moved.
+    </p>
+    <div class="flex flex-col sm:flex-row gap-4 justify-center">
+      <a
+        href={base}
+        class="inline-flex items-center justify-center gap-2 px-6 py-3 bg-[var(--color-accent)] text-[var(--color-bg-primary)] font-semibold rounded-lg hover:opacity-90 transition-opacity"
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M6.78 1.97a.75.75 0 010 1.06L3.81 6h9.44a.75.75 0 010 1.5H3.81l2.97 2.97a.75.75 0 11-1.06 1.06L1.47 7.28a.75.75 0 010-1.06l4.25-4.25a.75.75 0 011.06 0z"/>
+        </svg>
+        Back to home
+      </a>
+      <a
+        href={`${base}quickstart/`}
+        class="inline-flex items-center justify-center gap-2 px-6 py-3 border border-[var(--color-border)] text-[var(--color-text-primary)] font-semibold rounded-lg hover:border-[var(--color-text-muted)] transition-colors"
+      >
+        Quick Start
+      </a>
+    </div>
+  </div>
+</Base>

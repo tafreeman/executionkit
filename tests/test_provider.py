@@ -618,3 +618,69 @@ class TestProviderImmutability:
         """_use_httpx is set to a bool by __post_init__ regardless of httpx."""
         provider = Provider("https://api.openai.com/v1", model="gpt-4o-mini")
         assert isinstance(provider._use_httpx, bool)
+
+
+# ---------------------------------------------------------------------------
+# _classify_http_error regression tests (F-02)
+# Ref: extracted to eliminate duplication between urllib and httpx backends.
+# Anthropic SDK uses same pattern in _make_status_error().
+# ---------------------------------------------------------------------------
+
+
+class TestClassifyHttpError:
+    """_classify_http_error maps HTTP status codes to the correct exception."""
+
+    def test_429_raises_rate_limit_error(self) -> None:
+        from executionkit.provider import _classify_http_error
+
+        cause = Exception("original")
+        with pytest.raises(RateLimitError) as exc_info:
+            _classify_http_error(429, {}, 5.0, cause=cause)
+        assert exc_info.value.retry_after == 5.0
+        assert exc_info.value.__cause__ is cause
+
+    def test_429_default_retry_after_is_propagated(self) -> None:
+        from executionkit.provider import _classify_http_error
+
+        with pytest.raises(RateLimitError) as exc_info:
+            _classify_http_error(429, {}, 2.5, cause=Exception())
+        assert exc_info.value.retry_after == 2.5
+
+    def test_401_raises_permanent_error(self) -> None:
+        from executionkit.provider import _classify_http_error
+
+        with pytest.raises(PermanentError):
+            _classify_http_error(401, {}, 1.0, cause=Exception())
+
+    def test_403_raises_permanent_error(self) -> None:
+        from executionkit.provider import _classify_http_error
+
+        with pytest.raises(PermanentError):
+            _classify_http_error(403, {}, 1.0, cause=Exception())
+
+    def test_404_raises_permanent_error(self) -> None:
+        from executionkit.provider import _classify_http_error
+
+        with pytest.raises(PermanentError):
+            _classify_http_error(404, {}, 1.0, cause=Exception())
+
+    def test_500_raises_provider_error(self) -> None:
+        from executionkit.provider import _classify_http_error
+
+        with pytest.raises(ProviderError):
+            _classify_http_error(500, {}, 1.0, cause=Exception())
+
+    def test_503_raises_provider_error(self) -> None:
+        from executionkit.provider import _classify_http_error
+
+        with pytest.raises(ProviderError):
+            _classify_http_error(503, {}, 1.0, cause=Exception())
+
+    def test_exception_is_chained_via_cause(self) -> None:
+        """raise ... from cause must set __cause__, not just __context__."""
+        from executionkit.provider import _classify_http_error
+
+        original = ValueError("root cause")
+        with pytest.raises(ProviderError) as exc_info:
+            _classify_http_error(500, {}, 1.0, cause=original)
+        assert exc_info.value.__cause__ is original

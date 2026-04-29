@@ -6,7 +6,7 @@ This document is the master index for all C4 Component-level documentation for t
 
 | # | Component | Files | Responsibility |
 |---|-----------|-------|----------------|
-| 1 | [Provider Layer](c4-component-provider-layer.md) | `provider.py`, `types.py` | LLM provider protocols, concrete HTTP client, all data types, error hierarchy |
+| 1 | [Provider Layer](c4-component-provider-layer.md) | `provider.py`, `errors.py`, `types.py` | LLM provider protocols, concrete HTTP client, all data types, error hierarchy |
 | 2 | [Execution Engine](c4-component-execution-engine.md) | `engine/retry.py`, `engine/parallel.py`, `engine/convergence.py`, `engine/json_extraction.py` | Retry/backoff, bounded concurrency, convergence detection, JSON extraction |
 | 3 | [Reasoning Patterns](c4-component-reasoning-patterns.md) | `patterns/consensus.py`, `patterns/refine_loop.py`, `patterns/react_loop.py`, `patterns/base.py` | Three composable LLM reasoning strategies with shared budget/cost base |
 | 4 | [Composition & Session](c4-component-composition-session.md) | `compose.py`, `kit.py`, `cost.py`, `__init__.py` (sync wrappers) | Pipeline chaining, session defaults, cost tracking, sync convenience API |
@@ -27,7 +27,7 @@ flowchart TB
         direction TB
 
         subgraph PL["Provider Layer"]
-            PLcore["LLMProvider / ToolCallingProvider\nProvider (HTTP client)\nLLMResponse / ToolCall\nPatternResult / TokenUsage / Tool\nVotingStrategy / Evaluator\nException hierarchy"]
+            PLcore["LLMProvider / ToolCallingProvider\nProvider (HTTP client) / _classify_http_error\nLLMResponse / ToolCall\nPatternResult / TokenUsage / Tool\nVotingStrategy / Evaluator\nerrors.py: Exception hierarchy (9 classes)\nprovider.py re-exports exceptions via Name as Name"]
         end
 
         subgraph EE["Execution Engine"]

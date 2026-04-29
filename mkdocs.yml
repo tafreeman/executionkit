@@ -106,6 +106,7 @@ nav:
       - Consensus: patterns/consensus.md
       - Iterative Refinement: patterns/iterative-refinement.md
       - ReAct Tool Loop: patterns/react-loop.md
+      - Structured Output: patterns/structured.md
       - Pipe (Composition): patterns/pipe.md
   - Recipes:
       - Multi-provider failover: recipes/failover.md
