@@ -1,10 +1,25 @@
 site_name: ExecutionKit
-docs_dir: docs
-site_dir: mkdocs_site
-site_description: Composable LLM reasoning patterns with budget-aware execution
+site_description: Composable LLM reasoning patterns. Provider-agnostic. Zero SDK lock-in.
+site_url: https://tafreeman.github.io/executionkit/
 repo_url: https://github.com/tafreeman/executionkit
 repo_name: tafreeman/executionkit
-site_dir: mkdocs-site
+edit_uri: edit/main/docs/
+
+# Exclude internal/legacy artifacts from the public site without deleting them.
+exclude_docs: |
+  c4/
+  superpowers/
+  test-audit/
+  architecture.md
+  security.md
+
+# Quiet strict-mode complaints about files we keep in the docs tree but don't
+# link from nav (legacy references, snippets, etc.).
+validation:
+  omitted_files: info
+  absolute_links: info
+  unrecognized_links: info
+  anchors: info
 
 theme:
   name: material
@@ -25,33 +40,90 @@ theme:
     - navigation.tabs
     - navigation.sections
     - navigation.top
+    - navigation.indexes
+    - navigation.footer
     - search.highlight
+    - search.suggest
     - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+  icon:
+    repo: fontawesome/brands/github
+
+extra_css:
+  - stylesheets/extra.css
 
 plugins:
   - search
+  - tags
+  - mermaid2
   - mkdocstrings:
       handlers:
         python:
+          paths: [.]
           options:
             docstring_style: google
             show_source: true
+            show_root_heading: true
+            show_signature_annotations: true
+            separate_signature: true
+            merge_init_into_class: true
+            heading_level: 3
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:mermaid2.fence_mermaid_custom
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.details
+  - pymdownx.snippets
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
 
 nav:
   - Home: index.md
   - Getting Started:
-    - Quick Start: quick-start.md
-    - Custom Providers: custom-providers.md
+      - Installation: getting-started/installation.md
+      - Quick Start: getting-started/quickstart.md
+      - Provider Setup: getting-started/providers.md
   - Patterns:
-    - consensus: patterns/consensus.md
-    - refine_loop: patterns/refine_loop.md
-    - react_loop: patterns/react_loop.md
-    - structured: patterns/structured.md
-    - pipe: patterns/pipe.md
-  - Reference:
-    - API Reference: api-reference.md
-    - Architecture: architecture.md
-  - Development:
-    - Contributing: contributing.md
-    - Security: security.md
-    - Changelog: changelog.md
+      - Overview: patterns/index.md
+      - Consensus: patterns/consensus.md
+      - Iterative Refinement: patterns/iterative-refinement.md
+      - ReAct Tool Loop: patterns/react-loop.md
+      - Structured Output: patterns/structured.md
+      - Pipe (Composition): patterns/pipe.md
+  - Recipes:
+      - Multi-provider failover: recipes/failover.md
+      - Cost-aware routing: recipes/cost-routing.md
+      - Combining patterns: recipes/composition.md
+  - API Reference:
+      - Core: api/core.md
+      - Adapters: api/adapters.md
+      - Configuration: api/configuration.md
+  - Project:
+      - Changelog: changelog.md
+      - Contributing: contributing.md
+      - License: license.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/tafreeman/executionkit
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/executionkit/

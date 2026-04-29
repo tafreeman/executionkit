@@ -1,0 +1,144 @@
+/* ExecutionKit — visual coherence with sibling agentic-runtimes site */
+
+:root {
+  --md-typeset-a-color: #ffb300;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-default-bg-color: #1a1a1f;
+  --md-typeset-a-color: #ffc107;
+}
+
+/* Landing page hero */
+.ek-hero {
+  padding: 3rem 1rem 2rem;
+  text-align: left;
+  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+  margin-bottom: 2rem;
+}
+
+.ek-hero h1 {
+  font-size: 3rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem;
+  letter-spacing: -0.02em;
+}
+
+.ek-hero .ek-tagline {
+  font-size: 1.35rem;
+  font-weight: 500;
+  color: var(--md-default-fg-color);
+  margin: 0 0 0.5rem;
+}
+
+.ek-hero .ek-subtagline {
+  font-size: 1.05rem;
+  color: var(--md-default-fg-color--light);
+  margin: 0 0 1.5rem;
+}
+
+.ek-cta {
+  display: inline-block;
+  padding: 0.6rem 1.2rem;
+  margin: 0 0.4rem 0.4rem 0;
+  border-radius: 6px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.ek-cta-primary {
+  background: var(--md-primary-fg-color);
+  color: var(--md-primary-bg-color);
+}
+
+.ek-cta-secondary {
+  background: transparent;
+  color: var(--md-typeset-a-color);
+  border: 1px solid var(--md-typeset-a-color);
+}
+
+.ek-cta:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Pattern cards grid */
+.ek-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0 2rem;
+}
+
+.ek-card {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 8px;
+  padding: 1.25rem;
+  background: var(--md-code-bg-color);
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.ek-card:hover {
+  border-color: var(--md-typeset-a-color);
+  transform: translateY(-2px);
+}
+
+.ek-card h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+  color: var(--md-typeset-a-color);
+}
+
+.ek-card p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--md-default-fg-color--light);
+  line-height: 1.45;
+}
+
+/* "Why" section */
+.ek-why {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.25rem;
+  margin: 1.5rem 0;
+}
+
+.ek-why-item h4 {
+  margin: 0 0 0.4rem;
+  font-size: 1rem;
+}
+
+.ek-why-item p {
+  margin: 0;
+  font-size: 0.92rem;
+  color: var(--md-default-fg-color--light);
+}
+
+/* Code block tweaks */
+.md-typeset pre > code {
+  font-size: 0.85rem;
+}
+
+/* Tables — tighter, monospace numerics */
+.md-typeset table:not([class]) {
+  font-size: 0.85rem;
+}
+
+.md-typeset table:not([class]) th {
+  background: var(--md-code-bg-color);
+}
+
+/* Mermaid diagrams — center and bound */
+.mermaid {
+  text-align: center;
+  margin: 1.5rem 0;
+}
+
+/* Admonition tweak — more contrast */
+.md-typeset .admonition,
+.md-typeset details {
+  border-radius: 6px;
+  font-size: 0.88rem;
+}
