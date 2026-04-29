@@ -85,7 +85,7 @@ async def main() -> None:
         print(result.value)                          # billing
         print(result.score)                          # 1.0
         print(result.metadata["agreement_ratio"])    # 1.0
-        print(result.cost)                           # TokenUsage(input=..., output=..., calls=5)
+        print(result.cost)                           # TokenUsage(input_tokens=..., output_tokens=..., llm_calls=5)
 
 asyncio.run(main())
 ```
