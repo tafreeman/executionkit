@@ -29,7 +29,7 @@ async def main() -> None:
         )
         print(result.value)                          # Paris
         print(result.metadata["agreement_ratio"])    # 1.0
-        print(result.cost)                           # TokenUsage(input=..., output=..., calls=3)
+        print(result.cost)                           # TokenUsage(input_tokens=..., output_tokens=..., llm_calls=3)
 
 asyncio.run(main())
 ```

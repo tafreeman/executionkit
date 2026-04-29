@@ -102,7 +102,7 @@ result = await pipe(
 Pass the routing decision through `max_cost`. If a request comes with a tight `TokenUsage` ceiling, route it to the cheap provider:
 
 ```python
-def pick(budget: TokenUsage | None) -> Provider:
+def pick(routed: Routed, budget: TokenUsage | None) -> Provider:
     if budget and budget.input_tokens > 0 and budget.input_tokens < 1_000:
         return routed.cheap
     return routed.premium
