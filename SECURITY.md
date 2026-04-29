@@ -42,7 +42,10 @@ ExecutionKit passes LLM-generated content to evaluators and tools. Treat all LLM
 
 ### Prompt Injection
 
-The `refine_loop` default evaluator interpolates generated content into evaluation prompts. Use structured output mode or explicit delimiters when evaluating untrusted content.
+The `refine_loop` default evaluator wraps generated content in
+`<response_to_rate>` delimiters and instructs the model to ignore any
+instructions inside those tags. Prefer explicit delimiters like this when
+evaluating untrusted content.
 
 ### Tool Execution
 

@@ -31,6 +31,12 @@ def test_react_loop_sync_returns_pattern_result() -> None:
     assert isinstance(result.value, str)
 
 
+def test_structured_sync_returns_pattern_result() -> None:
+    provider = MockProvider(responses=['{"answer": 42}'])
+    result = executionkit.structured_sync(provider, "Return JSON")
+    assert result.value == {"answer": 42}
+
+
 def test_sync_wrapper_raises_in_active_event_loop() -> None:
     provider = MockProvider(responses=["hi"] * 10)
 
