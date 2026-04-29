@@ -95,7 +95,7 @@ parameters; extract other constants.
 
 ## Architecture
 
-See [`docs/architecture.md`](docs/architecture.md) for the full module map,
+See [`docs/architecture.md`](https://github.com/tafreeman/executionkit/blob/main/docs/architecture.md) for the full module map,
 data-flow diagram, immutability contract, error hierarchy, and extension points.
 
 Key modules:
@@ -142,7 +142,7 @@ first to discuss scope.
 
 ## Security
 
-See [`SECURITY.md`](SECURITY.md) for the full security policy, including the
+See [`SECURITY.md`](https://github.com/tafreeman/executionkit/blob/main/SECURITY.md) for the full security policy, including the
 vulnerability reporting process and response SLAs.
 
 Key rules for contributors:

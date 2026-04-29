@@ -43,14 +43,15 @@ Thumbs.db
 node_modules/
 package.json
 package-lock.json
-!site/package.json
-!site/package-lock.json
 
 # Coverage artifacts
 coverage.json
 
 # MkDocs build output
-mkdocs_site/
+site/
+
+# Claude Code worktree workspaces
+.claude/worktrees/
 
 # Local review artifacts
 .full-review/
