@@ -7,5 +7,5 @@
 
 ## Maintenance
 - The code lives in `executionkit/` at the repo root (no `src/` prefix). The allowlist has been trimmed to repo-specific commands; avoid adding machine-specific paths or unrelated directories.
-- Keep the allowlist aligned with the canonical workflows in `CONTRIBUTING.md` and `AGENTS.md`. Track any needed exceptions or drift in `_analysis/DRIFT_REPORT.md` rather than embedding policy here.
+- Keep the allowlist aligned with the canonical workflows in `CONTRIBUTING.md` and `AGENTS.md`. Track any needed exceptions or drift in `dev/_analysis/DRIFT_REPORT.md` rather than embedding policy here.
 - Do not add secrets or environment-specific keys; prefer environment variables for credentials.

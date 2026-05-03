@@ -1525,8 +1525,10 @@ class TestStructuredPattern:
     async def test_structured_raises_after_retries_exhausted(self) -> None:
         from executionkit.patterns.structured import structured
 
+        from executionkit.errors import PatternError
+
         provider = MockProvider(responses=["still not json", "still not json"])
-        with pytest.raises(ValueError, match="JSON parse failed"):
+        with pytest.raises(PatternError, match="JSON parse failed"):
             await structured(provider, "Return an answer", max_retries=1)
 
 

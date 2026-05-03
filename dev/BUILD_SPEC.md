@@ -605,7 +605,7 @@ python examples/quickstart_ollama.py  # requires local Ollama
 
 ## Historical Context
 
-All planning artifacts are in `planning/`. Reference only if you need to understand WHY a decision was made:
+All planning artifacts are in `dev/planning/`. Reference only if you need to understand WHY a decision was made:
 
 | File | What It Contains |
 |------|-----------------|

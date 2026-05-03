@@ -7,7 +7,8 @@ Consensus voting · Iterative refinement · ReAct tool loops · Structured JSON 
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Coverage: 83%](https://img.shields.io/badge/coverage-83%25-brightgreen)](pyproject.toml)
+[![CI](https://github.com/tafreeman/executionkit/actions/workflows/ci.yml/badge.svg)](https://github.com/tafreeman/executionkit/actions/workflows/ci.yml)
+[![Coverage](https://codecov.io/gh/tafreeman/executionkit/branch/main/graph/badge.svg)](https://codecov.io/gh/tafreeman/executionkit)
 [![Linting: ruff](https://img.shields.io/badge/linting-ruff-261230.svg)](https://github.com/astral-sh/ruff)
 [![Type checked: mypy](https://img.shields.io/badge/type%20checked-mypy-blue.svg)](http://mypy-lang.org/)
 [![Docs](https://img.shields.io/badge/docs-mkdocs--material-amber)](https://tafreeman.github.io/executionkit/)
