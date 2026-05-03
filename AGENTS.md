@@ -14,6 +14,6 @@ This repository includes several agent-specific configuration directories. Use t
 - Credentials: never commit secrets; examples must read keys from environment variables.
 
 ## Coordination and Drift
-- Claim work before editing by appending `_analysis/CLAIMS.md`. Record any documentation/code drift in `_analysis/DRIFT_REPORT.md`.
+- Claim work before editing by appending `dev/_analysis/CLAIMS.md`. Record any documentation/code drift in `dev/_analysis/DRIFT_REPORT.md`.
 - The Claude allowlist in `.claude/settings.local.json` uses the `executionkit/` root paths and the standard lint/type/test commands. Update it when workflows change; avoid adding machine-specific paths.
 - Add new agent rules to the directory that loads them, then cross-link from here instead of duplicating text.

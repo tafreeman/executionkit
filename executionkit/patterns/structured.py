@@ -10,6 +10,7 @@ from executionkit.cost import CostTracker
 from executionkit.engine.json_extraction import extract_json
 from executionkit.engine.messages import user_message
 from executionkit.engine.retry import RetryConfig  # noqa: TC001
+from executionkit.errors import PatternError
 from executionkit.patterns.base import checked_complete
 from executionkit.provider import LLMProvider  # noqa: TC001
 from executionkit.types import PatternResult, TokenUsage
@@ -123,4 +124,4 @@ async def structured(
         )
         latest_text = repair_response.content
 
-    raise ValueError(last_error)
+    raise PatternError(last_error, cost=tracker.to_usage())

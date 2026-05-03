@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import TracebackType
 from typing import TYPE_CHECKING, Any
 
 from executionkit.compose import pipe
@@ -82,3 +83,16 @@ class Kit:
         result = await pipe(self.provider, prompt, *steps, **kwargs)
         self._record(result.cost)
         return result
+
+    async def __aenter__(self) -> Kit:
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        aclose = getattr(self.provider, "aclose", None)
+        if aclose is not None:
+            await aclose()
