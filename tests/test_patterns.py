@@ -1523,9 +1523,8 @@ class TestStructuredPattern:
 
     @pytest.mark.asyncio
     async def test_structured_raises_after_retries_exhausted(self) -> None:
-        from executionkit.patterns.structured import structured
-
         from executionkit.errors import PatternError
+        from executionkit.patterns.structured import structured
 
         provider = MockProvider(responses=["still not json", "still not json"])
         with pytest.raises(PatternError, match="JSON parse failed"):

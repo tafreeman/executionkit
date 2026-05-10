@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from types import TracebackType
 from typing import TYPE_CHECKING, Any
 
 from executionkit.compose import pipe
@@ -15,6 +14,7 @@ from executionkit.types import PatternResult, TokenUsage, Tool
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
+    from types import TracebackType
 
 
 class Kit:
