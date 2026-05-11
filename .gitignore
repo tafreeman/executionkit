@@ -55,3 +55,4 @@ site/
 
 # Local review artifacts
 .full-review/
+.full-review/state.json
