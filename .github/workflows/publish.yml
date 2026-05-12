@@ -53,6 +53,17 @@ jobs:
       - name: Install build tools
         run: pip install build
 
+      - name: Generate SBOM
+        run: |
+          pip install cyclonedx-bom
+          cyclonedx-py environment --of JSON --output-file sbom.json
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.json
+
       - name: Build wheel and sdist
         run: python -m build
 
