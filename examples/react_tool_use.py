@@ -12,17 +12,22 @@ import ast
 import asyncio
 import operator as _op
 import os
-from typing import Any
+from collections.abc import Callable
+from typing import cast
 
 from executionkit import Provider, react_loop
+from executionkit.provider import ToolCallingProvider
 from executionkit.types import Tool
 
-_SAFE_OPS: dict[type, Any] = {
+_BIN_OPS: dict[type, Callable[[float, float], float]] = {
     ast.Add: _op.add,
     ast.Sub: _op.sub,
     ast.Mult: _op.mul,
     ast.Div: _op.truediv,
     ast.Pow: _op.pow,
+}
+
+_UNARY_OPS: dict[type, Callable[[float], float]] = {
     ast.USub: _op.neg,
 }
 
@@ -33,10 +38,10 @@ def _safe_eval(expression: str) -> float:
     def _eval(node: ast.expr) -> float:
         if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
             return float(node.value)
-        if isinstance(node, ast.BinOp) and type(node.op) in _SAFE_OPS:
-            return _SAFE_OPS[type(node.op)](_eval(node.left), _eval(node.right))
-        if isinstance(node, ast.UnaryOp) and type(node.op) in _SAFE_OPS:
-            return _SAFE_OPS[type(node.op)](_eval(node.operand))
+        if isinstance(node, ast.BinOp) and type(node.op) in _BIN_OPS:
+            return _BIN_OPS[type(node.op)](_eval(node.left), _eval(node.right))
+        if isinstance(node, ast.UnaryOp) and type(node.op) in _UNARY_OPS:
+            return _UNARY_OPS[type(node.op)](_eval(node.operand))
         raise ValueError(f"Unsafe expression: {ast.dump(node)}")
 
     tree = ast.parse(expression, mode="eval")
@@ -124,7 +129,7 @@ weather_tool = Tool(
 # ---------------------------------------------------------------------------
 
 
-async def calculator_example(provider: Provider) -> None:
+async def calculator_example(provider: ToolCallingProvider) -> None:
     print("--- Calculator tool ---")
     result = await react_loop(
         provider,
@@ -139,7 +144,7 @@ async def calculator_example(provider: Provider) -> None:
     print()
 
 
-async def weather_example(provider: Provider) -> None:
+async def weather_example(provider: ToolCallingProvider) -> None:
     print("--- Weather lookup tool ---")
     result = await react_loop(
         provider,
@@ -154,7 +159,7 @@ async def weather_example(provider: Provider) -> None:
     print()
 
 
-async def multi_tool_example(provider: Provider) -> None:
+async def multi_tool_example(provider: ToolCallingProvider) -> None:
     print("--- Multiple tools together ---")
     result = await react_loop(
         provider,
@@ -172,10 +177,13 @@ async def multi_tool_example(provider: Provider) -> None:
 
 
 async def main() -> None:
-    provider = Provider(
-        base_url="https://api.openai.com/v1",
-        api_key=os.environ["OPENAI_API_KEY"],
-        model="gpt-4o-mini",
+    provider = cast(
+        "ToolCallingProvider",
+        Provider(
+            base_url="https://api.openai.com/v1",
+            api_key=os.environ["OPENAI_API_KEY"],
+            model="gpt-4o-mini",
+        ),
     )
 
     await calculator_example(provider)

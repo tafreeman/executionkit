@@ -1,20 +1,18 @@
 # Architecture Decision Records
 
-Formal decision records for ExecutionKit's key design choices.
+Formal records of significant design decisions made during ExecutionKit's development.
+Records follow the [MADR template](https://adr.github.io/madr/).
 
-> **Status: Sprint 2 in progress.** ADRs are being extracted from
-> [`docs/planning/FINAL_VERDICT.md`](../planning/FINAL_VERDICT.md) and
-> [`dev/BUILD_SPEC.md`](../../dev/BUILD_SPEC.md).
+## Records
 
-## Planned Records
-
-| ADR | Decision | Status |
-|-----|----------|--------|
-| ADR-001 | Structural protocols (PEP 544) over abstract base classes | Pending |
-| ADR-002 | Flat package layout over `src/` wrapper | Pending |
-| ADR-003 | Single OpenAI-compatible `Provider` over native adapter matrix | Pending |
+| ADR | Decision | Status | Date |
+|-----|----------|--------|------|
+| [ADR-001](001-structural-protocols.md) | Structural protocols over ABC | Accepted | 2026-05-11 |
+| [ADR-002](002-flat-layout.md) | Flat package layout over src/ | Accepted | 2026-05-11 |
+| [ADR-003](003-single-provider.md) | Single OpenAI-compatible Provider over adapter matrix | Accepted | 2026-05-11 |
 
 ## Format
 
-Records follow the [MADR template](https://adr.github.io/madr/) (Markdown Architectural
-Decision Records). Each file is named `NNN-short-title.md`.
+Each ADR file is named `NNN-short-title.md` and follows the
+[MADR template](https://adr.github.io/madr/). Status values:
+**Proposed** → **Accepted** / **Deprecated** / **Superseded**.

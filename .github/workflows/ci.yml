@@ -65,3 +65,6 @@ jobs:
 
       - name: Run Bandit SAST scan
         run: bandit -r executionkit/ -c pyproject.toml
+
+      - name: Dependency audit (pip-audit)
+        run: pip install pip-audit && pip-audit --requirement requirements.lock
