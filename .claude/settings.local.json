@@ -33,7 +33,11 @@
       "Bash(git commit:*)",
       "Bash(git push:*)",
       "Bash(gh pr:*)",
-      "Bash(gh api:*)"
+      "Bash(gh api:*)",
+      "Bash(python -m pytest -m \"not integration\" -q)",
+      "Bash(gh run:*)",
+      "Bash(git reset:*)",
+      "Bash(git fetch:*)"
     ]
   }
 }
