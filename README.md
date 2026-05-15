@@ -21,6 +21,20 @@ ExecutionKit fills the gap between raw chat calls and full orchestration stacks 
 
 📚 **Full documentation: [tafreeman.github.io/executionkit](https://tafreeman.github.io/executionkit/)**
 
+## For Reviewers
+
+ExecutionKit is the execution-primitive layer of a two-tier stack. The companion repo,
+[agentic-runtimes](https://github.com/tafreeman/agentic-runtimes), handles orchestration
+above it — ExecutionKit patterns run inside each agent step there.
+
+| File | Contents |
+|---|---|
+| [`docs/architecture.md`](docs/architecture.md) | Module map, dependency graph, error hierarchy, security notes |
+| [`CONTRIBUTING.md` — Anti-Scope](CONTRIBUTING.md#anti-scope) | What the library does not do, and why |
+| [`examples/`](examples/) | `OPENAI_API_KEY=sk-... python examples/quickstart_openai.py` |
+
+See [`PORTFOLIO.md`](PORTFOLIO.md) for full context.
+
 ## Quick Start
 
 ```bash

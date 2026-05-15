@@ -337,7 +337,6 @@ def test_mock_provider_satisfies_tool_calling_provider() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
 async def test_post_maps_5xx_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     provider = Provider("https://example.com/v1", model="test-model")
 
@@ -439,7 +438,6 @@ def test_same_client_reused_across_calls() -> None:
     assert client_id_before == client_id_after
 
 
-@pytest.mark.asyncio
 async def test_post_httpx_maps_429_to_rate_limit_error() -> None:
     """_post_httpx maps HTTP 429 to RateLimitError with retry_after."""
     try:
@@ -472,7 +470,6 @@ async def test_post_httpx_maps_429_to_rate_limit_error() -> None:
     assert exc_info.value.retry_after == 3.0
 
 
-@pytest.mark.asyncio
 async def test_post_httpx_maps_401_to_permanent_error() -> None:
     """_post_httpx maps HTTP 401 to PermanentError."""
     try:
@@ -504,7 +501,6 @@ async def test_post_httpx_maps_401_to_permanent_error() -> None:
         await provider._post_httpx("https://example.com/v1/chat/completions", b"{}", {})
 
 
-@pytest.mark.asyncio
 async def test_post_httpx_maps_500_to_provider_error() -> None:
     """_post_httpx maps HTTP 5xx to ProviderError."""
     try:
@@ -536,7 +532,6 @@ async def test_post_httpx_maps_500_to_provider_error() -> None:
         await provider._post_httpx("https://example.com/v1/chat/completions", b"{}", {})
 
 
-@pytest.mark.asyncio
 async def test_aclose_with_httpx() -> None:
     """aclose() calls client.aclose() when httpx is the active backend."""
     try:
@@ -561,7 +556,6 @@ async def test_aclose_with_httpx() -> None:
     assert closed == [True]
 
 
-@pytest.mark.asyncio
 async def test_aclose_noop_without_httpx(monkeypatch: pytest.MonkeyPatch) -> None:
     """aclose() is a no-op when the urllib backend is active."""
     import executionkit.provider as pmod
@@ -575,7 +569,6 @@ async def test_aclose_noop_without_httpx(monkeypatch: pytest.MonkeyPatch) -> Non
     await provider.aclose()
 
 
-@pytest.mark.asyncio
 async def test_context_manager_closes_client() -> None:
     """Using Provider as async context manager calls aclose() on exit."""
     try:

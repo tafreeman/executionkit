@@ -89,7 +89,6 @@ async def _capture_budget_step(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
 async def test_pipe_no_steps_returns_prompt_as_is() -> None:
     provider = MockProvider(responses=["irrelevant"])
     result = await pipe(provider, "hello world")
@@ -97,7 +96,6 @@ async def test_pipe_no_steps_returns_prompt_as_is() -> None:
     assert result.cost == TokenUsage()
 
 
-@pytest.mark.asyncio
 async def test_pipe_single_step() -> None:
     provider = MockProvider(responses=[])
     result = await pipe(provider, "hello", _upper_step)
@@ -105,7 +103,6 @@ async def test_pipe_single_step() -> None:
     assert result.cost.llm_calls == 1
 
 
-@pytest.mark.asyncio
 async def test_pipe_chains_two_steps() -> None:
     provider = MockProvider(responses=[])
     # echo passes "hello" -> upper makes it "HELLO"
@@ -114,7 +111,6 @@ async def test_pipe_chains_two_steps() -> None:
     assert result.cost.llm_calls == 2
 
 
-@pytest.mark.asyncio
 async def test_pipe_accumulates_costs_across_steps() -> None:
     provider = MockProvider(responses=[])
     result = await pipe(provider, "hello", _echo_step, _upper_step)
@@ -125,7 +121,6 @@ async def test_pipe_accumulates_costs_across_steps() -> None:
     assert result.cost.llm_calls == 2
 
 
-@pytest.mark.asyncio
 async def test_pipe_three_steps_accumulates_all_costs() -> None:
     provider = MockProvider(responses=[])
     result = await pipe(provider, "hi", _echo_step, _upper_step, _echo_step)
@@ -135,7 +130,6 @@ async def test_pipe_three_steps_accumulates_all_costs() -> None:
     assert result.cost.llm_calls == 3
 
 
-@pytest.mark.asyncio
 async def test_pipe_value_threads_through_steps() -> None:
     provider = MockProvider(responses=[])
     # echo passes prompt unchanged, then append adds "!"
@@ -143,14 +137,12 @@ async def test_pipe_value_threads_through_steps() -> None:
     assert result.value == "hello!"
 
 
-@pytest.mark.asyncio
 async def test_pipe_shared_kwargs_forwarded() -> None:
     provider = MockProvider(responses=[])
     result = await pipe(provider, "hi", _append_step, suffix="?")
     assert result.value == "hi?"
 
 
-@pytest.mark.asyncio
 async def test_pipe_with_max_budget_passes_remaining_to_steps() -> None:
     _budget_received.clear()
     provider = MockProvider(responses=[])
@@ -175,7 +167,6 @@ async def test_pipe_with_max_budget_passes_remaining_to_steps() -> None:
     assert second_budget.llm_calls == 10 - 1
 
 
-@pytest.mark.asyncio
 async def test_pipe_without_max_budget_passes_no_max_cost() -> None:
     _budget_received.clear()
     provider = MockProvider(responses=[])
@@ -186,7 +177,6 @@ async def test_pipe_without_max_budget_passes_no_max_cost() -> None:
     assert _budget_received[0] is None
 
 
-@pytest.mark.asyncio
 async def test_pipe_budget_exhausted_uses_sentinel() -> None:
     """Forward exhausted budget fields as -1 (not 0) to avoid 'unlimited' misread."""
     _budget_received.clear()
@@ -209,7 +199,6 @@ async def test_pipe_budget_exhausted_uses_sentinel() -> None:
     assert second_budget.llm_calls == -1
 
 
-@pytest.mark.asyncio
 async def test_pipe_returns_last_step_metadata() -> None:
     async def _meta_step(
         provider: Any, prompt: str, *, max_cost: TokenUsage | None = None, **kwargs: Any
@@ -224,7 +213,6 @@ async def test_pipe_returns_last_step_metadata() -> None:
     assert result.metadata["step_count"] == 1
 
 
-@pytest.mark.asyncio
 async def test_pipe_returns_last_step_score() -> None:
     async def _scored_step(
         provider: Any, prompt: str, *, max_cost: TokenUsage | None = None, **kwargs: Any

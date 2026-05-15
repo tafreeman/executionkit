@@ -89,7 +89,6 @@ def test_kit_track_cost_false_returns_zero_usage(provider: MockProvider) -> None
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
 async def test_kit_consensus_delegates_to_consensus_fn(provider: MockProvider) -> None:
     expected = _make_result(
         "consensus_answer", input_tokens=50, output_tokens=20, llm_calls=5
@@ -104,7 +103,6 @@ async def test_kit_consensus_delegates_to_consensus_fn(provider: MockProvider) -
     assert result is expected
 
 
-@pytest.mark.asyncio
 async def test_kit_consensus_accumulates_cost(provider: MockProvider) -> None:
     result1 = _make_result(input_tokens=20, output_tokens=10, llm_calls=2)
     result2 = _make_result(input_tokens=30, output_tokens=15, llm_calls=3)
@@ -120,7 +118,6 @@ async def test_kit_consensus_accumulates_cost(provider: MockProvider) -> None:
     assert kit.usage.llm_calls == 5
 
 
-@pytest.mark.asyncio
 async def test_kit_consensus_no_tracking(provider: MockProvider) -> None:
     expected = _make_result(input_tokens=20, output_tokens=10, llm_calls=2)
     with patch("executionkit.kit.consensus", new=AsyncMock(return_value=expected)):
@@ -135,7 +132,6 @@ async def test_kit_consensus_no_tracking(provider: MockProvider) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
 async def test_kit_refine_delegates_to_refine_loop(provider: MockProvider) -> None:
     expected = _make_result("refined", input_tokens=40, output_tokens=30, llm_calls=4)
     with patch(
@@ -148,7 +144,6 @@ async def test_kit_refine_delegates_to_refine_loop(provider: MockProvider) -> No
     assert result is expected
 
 
-@pytest.mark.asyncio
 async def test_kit_refine_accumulates_cost(provider: MockProvider) -> None:
     expected = _make_result(input_tokens=15, output_tokens=8, llm_calls=3)
     with patch("executionkit.kit.refine_loop", new=AsyncMock(return_value=expected)):
@@ -165,7 +160,6 @@ async def test_kit_refine_accumulates_cost(provider: MockProvider) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
 async def test_kit_react_delegates_to_react_loop(provider: MockProvider) -> None:
     tools: list[Tool] = []
     expected = _make_result(
@@ -181,7 +175,6 @@ async def test_kit_react_delegates_to_react_loop(provider: MockProvider) -> None
     assert result is expected
 
 
-@pytest.mark.asyncio
 async def test_kit_react_accumulates_cost(provider: MockProvider) -> None:
     expected = _make_result(input_tokens=25, output_tokens=12, llm_calls=3)
     with patch("executionkit.kit.react_loop", new=AsyncMock(return_value=expected)):
@@ -198,7 +191,6 @@ async def test_kit_react_accumulates_cost(provider: MockProvider) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
 async def test_kit_pipe_delegates_to_pipe_fn(provider: MockProvider) -> None:
     async def dummy_step(p: Any, prompt: str, **kwargs: Any) -> PatternResult[str]:
         return PatternResult(value=prompt + "_done", cost=TokenUsage())
@@ -214,7 +206,6 @@ async def test_kit_pipe_delegates_to_pipe_fn(provider: MockProvider) -> None:
     assert result is expected
 
 
-@pytest.mark.asyncio
 async def test_kit_pipe_accumulates_cost(provider: MockProvider) -> None:
     expected = _make_result(input_tokens=18, output_tokens=9, llm_calls=2)
     with patch("executionkit.kit.pipe", new=AsyncMock(return_value=expected)):
@@ -231,7 +222,6 @@ async def test_kit_pipe_accumulates_cost(provider: MockProvider) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
 async def test_kit_usage_accumulates_across_different_patterns(
     provider: MockProvider,
 ) -> None:
@@ -259,7 +249,6 @@ async def test_kit_usage_accumulates_across_different_patterns(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
 async def test_kit_consensus_integration_with_mock_provider() -> None:
     """End-to-end: Kit.consensus calls through with MockProvider."""
     # consensus runs 5 samples by default; provide 5 identical answers
@@ -272,7 +261,6 @@ async def test_kit_consensus_integration_with_mock_provider() -> None:
     assert kit.usage.input_tokens >= 0
 
 
-@pytest.mark.asyncio
 async def test_kit_pipe_integration_no_steps() -> None:
     """pipe with no steps returns prompt unchanged."""
     p = MockProvider(responses=[])

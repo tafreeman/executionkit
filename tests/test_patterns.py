@@ -837,7 +837,6 @@ class TestReactLoop:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
 async def test_react_loop_rejects_plain_llm_provider() -> None:
     """react_loop must raise PatternError when provider lacks supports_tools."""
     from executionkit.patterns.react_loop import react_loop
@@ -857,7 +856,6 @@ async def test_react_loop_rejects_plain_llm_provider() -> None:
         await react_loop(provider, "hello", tools=[])  # type: ignore[arg-type]
 
 
-@pytest.mark.asyncio
 async def test_react_loop_raises_max_iterations_error() -> None:
     """react_loop must raise MaxIterationsError after max_rounds."""
     from executionkit.patterns.react_loop import react_loop
@@ -872,7 +870,6 @@ async def test_react_loop_raises_max_iterations_error() -> None:
         await react_loop(provider, "loop forever", tools=[], max_rounds=2)
 
 
-@pytest.mark.asyncio
 async def test_react_loop_returns_final_answer() -> None:
     """react_loop with no tool calls returns the model's response immediately."""
     from executionkit.patterns.react_loop import react_loop
@@ -888,7 +885,6 @@ async def test_react_loop_returns_final_answer() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
 async def test_react_loop_message_history_trimmed() -> None:
     """max_history_messages limits messages sent to provider each round."""
     from executionkit.patterns.react_loop import react_loop
@@ -920,7 +916,6 @@ async def test_react_loop_message_history_trimmed() -> None:
         )
 
 
-@pytest.mark.asyncio
 async def test_react_loop_first_message_always_preserved() -> None:
     """After trimming, messages[0] always contains the original prompt."""
     from executionkit.patterns.react_loop import react_loop
@@ -950,7 +945,6 @@ async def test_react_loop_first_message_always_preserved() -> None:
         assert call_messages.messages[0]["content"] == "original prompt"
 
 
-@pytest.mark.asyncio
 async def test_react_loop_no_trim_when_none() -> None:
     """Default max_history_messages=None does not trim messages."""
     from executionkit.patterns.react_loop import react_loop
@@ -1252,7 +1246,6 @@ def test_validate_score_raises_on_out_of_range() -> None:
         validate_score(1.5)
 
 
-@pytest.mark.asyncio
 async def test_note_truncation_emits_warning() -> None:
     """_note_truncation should warn and increment counter when truncated."""
     import warnings
@@ -1275,7 +1268,6 @@ async def test_note_truncation_emits_warning() -> None:
     assert "truncated" in str(w[0].message).lower()
 
 
-@pytest.mark.asyncio
 async def test_tracked_provider_delegates_and_tracks() -> None:
     """_TrackedProvider.complete must delegate and record usage."""
     from executionkit.cost import CostTracker
@@ -1298,7 +1290,6 @@ async def test_tracked_provider_delegates_and_tracks() -> None:
     assert tracker.call_count == 1
 
 
-@pytest.mark.asyncio
 async def test_checked_complete_raises_on_input_token_budget() -> None:
     """checked_complete must raise BudgetExhaustedError when input tokens exhausted."""
     from executionkit.cost import CostTracker
@@ -1317,7 +1308,6 @@ async def test_checked_complete_raises_on_input_token_budget() -> None:
         await checked_complete(provider, msgs, tracker, budget, None)
 
 
-@pytest.mark.asyncio
 async def test_checked_complete_releases_slot_on_failure() -> None:
     """Failed retries still count real wire attempts in the tracker."""
     from executionkit.cost import CostTracker
@@ -1344,7 +1334,6 @@ async def test_checked_complete_releases_slot_on_failure() -> None:
     assert tracker.call_count == 3
 
 
-@pytest.mark.asyncio
 async def test_checked_complete_stops_retry_when_call_budget_exhausted() -> None:
     """Call budgets must stop retry dispatch once the attempt limit is reached."""
     from executionkit.cost import CostTracker
@@ -1378,7 +1367,6 @@ async def test_checked_complete_stops_retry_when_call_budget_exhausted() -> None
 
 
 class TestPatternInputValidation:
-    @pytest.mark.asyncio
     async def test_consensus_rejects_invalid_max_concurrency(self) -> None:
         from executionkit.patterns.consensus import consensus
 
@@ -1386,7 +1374,6 @@ class TestPatternInputValidation:
         with pytest.raises(ValueError, match="max_concurrency must be >= 1"):
             await consensus(provider, "hi", max_concurrency=0)
 
-    @pytest.mark.asyncio
     async def test_consensus_rejects_invalid_max_tokens(self) -> None:
         from executionkit.patterns.consensus import consensus
 
@@ -1394,7 +1381,6 @@ class TestPatternInputValidation:
         with pytest.raises(ValueError, match="max_tokens must be >= 1"):
             await consensus(provider, "hi", max_tokens=0)
 
-    @pytest.mark.asyncio
     async def test_refine_loop_rejects_invalid_target_score(self) -> None:
         from executionkit.patterns.refine_loop import refine_loop
 
@@ -1402,7 +1388,6 @@ class TestPatternInputValidation:
         with pytest.raises(ValueError, match="target_score must be in"):
             await refine_loop(provider, "hi", target_score=1.5)
 
-    @pytest.mark.asyncio
     async def test_refine_loop_rejects_invalid_patience(self) -> None:
         from executionkit.patterns.refine_loop import refine_loop
 
@@ -1410,7 +1395,6 @@ class TestPatternInputValidation:
         with pytest.raises(ValueError, match="patience must be >= 1"):
             await refine_loop(provider, "hi", patience=0)
 
-    @pytest.mark.asyncio
     async def test_refine_loop_rejects_invalid_max_eval_chars(self) -> None:
         from executionkit.patterns.refine_loop import refine_loop
 
@@ -1418,7 +1402,6 @@ class TestPatternInputValidation:
         with pytest.raises(ValueError, match="max_eval_chars must be >= 1"):
             await refine_loop(provider, "hi", max_eval_chars=0)
 
-    @pytest.mark.asyncio
     async def test_react_loop_rejects_invalid_max_rounds(self) -> None:
         from executionkit.patterns.react_loop import react_loop
 
@@ -1426,7 +1409,6 @@ class TestPatternInputValidation:
         with pytest.raises(ValueError, match="max_rounds must be >= 1"):
             await react_loop(provider, "hi", tools=[], max_rounds=0)
 
-    @pytest.mark.asyncio
     async def test_react_loop_rejects_invalid_tool_timeout(self) -> None:
         from executionkit.patterns.react_loop import react_loop
 
@@ -1434,7 +1416,6 @@ class TestPatternInputValidation:
         with pytest.raises(ValueError, match="tool_timeout must be > 0"):
             await react_loop(provider, "hi", tools=[], tool_timeout=0)
 
-    @pytest.mark.asyncio
     async def test_react_loop_rejects_invalid_history_limit(self) -> None:
         from executionkit.patterns.react_loop import react_loop
 
@@ -1442,7 +1423,6 @@ class TestPatternInputValidation:
         with pytest.raises(ValueError, match="max_history_messages must be >= 1"):
             await react_loop(provider, "hi", tools=[], max_history_messages=0)
 
-    @pytest.mark.asyncio
     async def test_react_loop_truncates_small_limit(self) -> None:
         from executionkit.patterns.react_loop import _execute_tool_call
 
@@ -1467,7 +1447,6 @@ class TestPatternInputValidation:
 
 
 class TestStructuredPattern:
-    @pytest.mark.asyncio
     async def test_structured_returns_parsed_json(self) -> None:
         from executionkit.patterns.structured import structured
 
@@ -1478,7 +1457,6 @@ class TestStructuredPattern:
         assert result.metadata["repair_attempts"] == 0
         assert result.metadata["validated"] is True
 
-    @pytest.mark.asyncio
     async def test_structured_repairs_invalid_json(self) -> None:
         from executionkit.patterns.structured import structured
 
@@ -1488,7 +1466,6 @@ class TestStructuredPattern:
         assert result.metadata["parse_attempts"] == 2
         assert result.metadata["repair_attempts"] == 1
 
-    @pytest.mark.asyncio
     async def test_structured_validator_triggers_repair(self) -> None:
         from executionkit.patterns.structured import structured
 
@@ -1513,7 +1490,6 @@ class TestStructuredPattern:
         assert result.metadata["validated"] is True
         assert result.metadata["repair_attempts"] == 1
 
-    @pytest.mark.asyncio
     async def test_structured_accepts_fenced_json(self) -> None:
         from executionkit.patterns.structured import structured
 
@@ -1521,7 +1497,6 @@ class TestStructuredPattern:
         result = await structured(provider, "Return an answer")
         assert result.value == {"answer": 42}
 
-    @pytest.mark.asyncio
     async def test_structured_raises_after_retries_exhausted(self) -> None:
         from executionkit.errors import PatternError
         from executionkit.patterns.structured import structured
@@ -1536,7 +1511,6 @@ class TestStructuredPattern:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
 async def test_tool_error_leaks_only_type() -> None:
     """Tool exceptions must expose only the type name — not the message — to the LLM."""
     from executionkit.patterns.react_loop import react_loop
