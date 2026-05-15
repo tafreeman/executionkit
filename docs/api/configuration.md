@@ -10,7 +10,7 @@ Every knob and its default. Grouped by component.
 | `default_max_tokens` | `4096` | Per-completion token cap when not overridden. |
 | `timeout` | `120.0 s` | HTTP request timeout. |
 
-Per-call kwargs on `consensus`, `refine_loop`, and `react_loop` always win over `Provider` defaults.
+Per-call kwargs on `consensus`, `refine_loop`, `react_loop`, and `structured` always win over `Provider` defaults.
 
 ## RetryConfig
 
@@ -80,6 +80,17 @@ result = await consensus(provider, "...", num_samples=5, max_cost=budget)
 | `max_cost` | `None` | Across all rounds. |
 | `retry` | `DEFAULT_RETRY` | Per-call. |
 | `max_history_messages` | `None` | When set, trims history; always preserves the original prompt. |
+
+### `structured`
+
+| Parameter | Default | Notes |
+|-----------|---------|-------|
+| `validator` | `None` | Optional callable that accepts parsed JSON or returns an error string / `False`. |
+| `max_retries` | `3` | Repair attempts after the first parse. Must be `>= 0`. |
+| `temperature` | `0.0` | Lower = more deterministic JSON. |
+| `max_tokens` | `4096` | Per completion. Must be `>= 1`. |
+| `max_cost` | `None` | Across the initial call and repairs. |
+| `retry` | `DEFAULT_RETRY` | Per-call transport retry config. |
 
 ### `pipe`
 

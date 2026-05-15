@@ -16,7 +16,7 @@ ExecutionKit needed to decide how broad its provider support should be at v0.1. 
 ## Decision Drivers
 
 * Provider-matrix creep is one of three named Anti-Scope Guardrails in the build specification; the team committed to rejecting it at design time.
-* The OpenAI `/chat/completions` JSON format has become a de facto standard: OpenAI, Ollama, LM Studio, vLLM, Azure OpenAI, Groq, Mistral, Fireworks, Together AI, and GitHub Models all expose a compatible endpoint.
+* The OpenAI `/chat/completions` JSON format has become a de facto standard: OpenAI, Ollama, LM Studio, vLLM, Groq, Mistral, Fireworks, Together AI, GitHub Models, and Azure deployments behind compatible gateways all expose a compatible endpoint shape.
 * Each native adapter (Anthropic Messages API, Gemini GenerateContent, etc.) requires ongoing maintenance and testing against a live API.
 * The `LLMProvider` structural protocol allows users to implement their own adapters without any changes to ExecutionKit.
 
@@ -31,7 +31,7 @@ ExecutionKit needed to decide how broad its provider support should be at v0.1. 
 
 ### Positive Consequences
 
-* A single `Provider(base_url, api_key, model)` constructor works against OpenAI, Ollama, Groq, Azure OpenAI, Together AI, LM Studio, vLLM, and any other OpenAI-compatible endpoint — zero configuration change required between them.
+* A single `Provider(base_url, api_key, model)` constructor works against OpenAI, Ollama, Groq, Together AI, LM Studio, vLLM, Azure through compatible gateways, and any other OpenAI-compatible endpoint using bearer-token authentication.
 * The library's identity stays focused on reasoning patterns, not provider plumbing.
 * Eliminates an entire class of maintenance work: no per-provider test suites, no per-provider API version tracking.
 * Users can implement their own `LLMProvider`-conforming adapter for any non-compatible provider without waiting for a library release.
@@ -46,7 +46,7 @@ ExecutionKit needed to decide how broad its provider support should be at v0.1. 
 
 ### Option A: Single OpenAI-compatible Provider
 
-* **Good:** One class covers the majority of endpoints in use today (OpenAI, Groq, Azure, Ollama, vLLM, LM Studio, Together AI, Fireworks, Mistral, GitHub Models).
+* **Good:** One class covers the majority of endpoints in use today (OpenAI, Groq, Ollama, vLLM, LM Studio, Together AI, Fireworks, Mistral, GitHub Models, and Azure through compatible gateways).
 * **Good:** Zero maintenance overhead for providers that don't need their own adapter.
 * **Good:** The `LLMProvider` protocol acts as an extension point — anyone can implement a native adapter as a drop-in without forking the library.
 * **Bad:** Anthropic and Gemini native APIs are not covered; users need a proxy or a custom implementation.

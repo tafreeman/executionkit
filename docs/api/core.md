@@ -16,6 +16,10 @@ This page is auto-generated from docstrings via [mkdocstrings](https://mkdocstri
 
 ::: executionkit.patterns.react_loop.react_loop
 
+### `structured`
+
+::: executionkit.patterns.structured.structured
+
 ### `pipe`
 
 ::: executionkit.compose.pipe
@@ -29,6 +33,7 @@ from executionkit import (
     consensus_sync,
     refine_loop_sync,
     react_loop_sync,
+    structured_sync,
     pipe_sync,
 )
 ```
@@ -77,7 +82,7 @@ All exceptions inherit from `ExecutionKitError` and carry `.cost` (`TokenUsage` 
 | `PatternError` | Base for pattern logic errors. |
 | `BudgetExhaustedError` | Token or call budget exceeded. |
 | `ConsensusFailedError` | Unanimous strategy could not agree. |
-| `MaxIterationsError` | Loop hit `max_rounds` / `max_iterations`. |
+| `MaxIterationsError` | `react_loop` exhausted `max_rounds` without a final answer. |
 
 ::: executionkit.provider.ExecutionKitError
 

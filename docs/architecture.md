@@ -22,7 +22,7 @@ shape every design decision:
 
 4. **Async-first, sync wrappers provided.** All pattern functions are `async`.
    Synchronous convenience wrappers (`consensus_sync`, `refine_loop_sync`,
-   `react_loop_sync`, `pipe_sync`) live in `__init__.py` and call
+   `react_loop_sync`, `structured_sync`, `pipe_sync`) live in `__init__.py` and call
    `asyncio.run()`, raising a helpful error when called inside a running loop.
 
 5. **Composable, not opinionated.** Patterns are standalone async functions that
@@ -54,7 +54,8 @@ executionkit/
 │   │                      to wrapped provider via getattr (F-04)
 │   ├── consensus.py     — parallel majority/unanimous voting
 │   ├── refine_loop.py   — iterative score-guided refinement
-│   └── react_loop.py    — tool-calling think-act-observe loop
+│   ├── react_loop.py    — tool-calling think-act-observe loop
+│   └── structured.py    — JSON extraction, validation, and repair retries
 └── engine/
     ├── convergence.py   — ConvergenceDetector (delta + patience)
     ├── retry.py         — RetryConfig, with_retry() exponential backoff
@@ -72,6 +73,7 @@ patterns/base    ──► cost, engine/retry, provider, types
 patterns/consensus  ──► cost, engine/parallel, engine/retry, patterns/base, provider, types
 patterns/refine_loop ──► cost, engine/convergence, engine/retry, patterns/base, provider, types
 patterns/react_loop  ──► cost, engine/retry, patterns/base, provider, types
+patterns/structured  ──► engine/json_extraction, engine/retry, patterns/base, provider, types
 provider  ──► types, errors  (re-exports all 9 error classes from errors.py)
 errors    ──► types
 cost      ──► types
@@ -193,7 +195,7 @@ ExecutionKitError              ← executionkit/errors.py
 └── PatternError              ← reasoning logic failures
     ├── BudgetExhaustedError  ← token or call budget exceeded
     ├── ConsensusFailedError  ← unanimous strategy failed
-    └── MaxIterationsError    ← loop hit max_rounds/max_iterations
+    └── MaxIterationsError    ← react_loop exhausted max_rounds
 ```
 
 All errors carry `cost: TokenUsage` so callers can see what was spent before

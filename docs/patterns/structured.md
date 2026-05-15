@@ -42,7 +42,7 @@ sequenceDiagram
         structured->>Provider: complete(repair_prompt with previous + error)
         Provider-->>structured: corrected text
     end
-    structured-->>App: raise ValueError(last_error)
+    structured-->>App: raise PatternError(last_error)
 ```
 
 ## Minimal example
@@ -129,7 +129,7 @@ The validator runs only when JSON parses successfully. Parse errors trigger repa
 | Exception | Cause |
 |-----------|-------|
 | `ValueError` | `max_retries < 0` or `max_tokens < 1`. |
-| `ValueError` (after exhaustion) | All `max_retries + 1` attempts failed parse or validation. The message carries the last error. |
+| `PatternError` (after exhaustion) | All `max_retries + 1` attempts failed parse or validation. The message carries the last error. |
 | `BudgetExhaustedError` | `max_cost` exceeded mid-loop. |
 | `RateLimitError` / `ProviderError` | Bubbled from `Provider.complete` after retry exhaustion. |
 

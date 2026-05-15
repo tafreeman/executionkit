@@ -34,7 +34,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-`Provider` opens an HTTP client on first use; the async context manager closes it cleanly. You can also call `await provider.aclose()` directly.
+When `httpx` is installed, `Provider` creates an `httpx.AsyncClient` at construction time; the async context manager closes it cleanly. With the default stdlib backend, there is no persistent client. You can also call `await provider.aclose()` directly.
 
 ## 3. Pick a different pattern
 
@@ -119,6 +119,6 @@ The sync wrappers raise `RuntimeError` when called inside a running event loop (
 
 ## What next
 
-- [Provider Setup](providers.md) — configure OpenAI, Ollama, Groq, Together, GitHub Models, Azure.
+- [Provider Setup](providers.md) — configure OpenAI, Ollama, Groq, Together, GitHub Models, and Azure via a gateway.
 - [Patterns Overview](../patterns/index.md) — pick the right pattern for your problem.
 - [Recipes](../recipes/composition.md) — failover, cost-aware routing, pattern chaining.

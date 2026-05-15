@@ -6,6 +6,28 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Add the `structured()` pattern and `structured_sync()` wrapper for JSON extraction, optional validation, and repair retries.
+- Add MkDocs Material documentation with public guides for installation, provider setup, patterns, recipes, API reference, contributing, license, and changelog.
+- Add architecture decision records for structural protocols, flat package layout, and the single OpenAI-compatible provider design.
+- Add a GitHub Pages documentation deployment workflow and CodeQL analysis workflow.
+- Add supply-chain artifacts and release hardening, including `requirements.lock`, `sbom.json`, and SBOM artifact generation in the publish workflow.
+- Add C4 diagram source files for ExecutionKit component and relationship documentation.
+
+### Changed
+
+- Update GitHub Actions workflow dependencies to current major versions for checkout, setup-python, upload/download artifacts, Pages upload/deploy, and CodeQL.
+- Replace the old Astro documentation site with the MkDocs Material site.
+- Clarify the relationship between ExecutionKit and the companion `agentic-runtimes` orchestration repo in the README and docs.
+- Exclude internal planning, review, C4, superpowers, and test-audit documents from the public MkDocs build while keeping them in the repository.
+
+### Fixed
+
+- Fix strict MkDocs builds by excluding internal documents with stale cross-references from the public site.
+- Remove obsolete Serena project files from the tracked repo state.
+- Clean up async test markers now covered by the project-level pytest asyncio configuration.
+
 ## [0.1.0] - 2026-04-06
 
 ### Security

@@ -36,7 +36,9 @@ httpx = ["httpx>=0.27"]
 docs = [
     "mkdocs>=1.6",
     "mkdocs-material>=9.5",
+    "mkdocs-mermaid2-plugin>=1.1",
     "mkdocstrings[python]>=0.25",
+    "mkdocs-material[imaging]>=9.5",
 ]
 dev = [
     "bandit[toml]>=1.8",
@@ -52,7 +54,7 @@ dev = [
 [project.urls]
 Homepage = "https://github.com/tafreeman/executionkit"
 Issues = "https://github.com/tafreeman/executionkit/issues"
-Changelog = "https://github.com/tafreeman/executionkit/CHANGELOG.md"
+Changelog = "https://tafreeman.github.io/executionkit/changelog/"
 
 [tool.hatch.version]
 path = "executionkit/__init__.py"

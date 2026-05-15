@@ -1,12 +1,13 @@
 # Patterns Overview
 
-ExecutionKit ships **four composable patterns**. Each is a single async function that takes a provider and a prompt and returns a `PatternResult` carrying the answer, a score, accumulated cost, and per-pattern metadata.
+ExecutionKit ships **five composable pattern utilities**. Each is a single async function that takes a provider and a prompt and returns a `PatternResult` carrying the answer, a score, accumulated cost, and per-pattern metadata.
 
 | Pattern | Use when… | Cost shape |
 |---------|-----------|------------|
 | [Consensus](consensus.md) | You need to reduce hallucination on a factual or classification answer. | `O(num_samples)` parallel calls. |
-| [Iterative Refinement](iterative-refinement.md) | Quality of the answer matters more than latency, and you can score it. | `O(2 × max_iterations)` sequential calls (one to refine, one to evaluate, per round). |
+| [Iterative Refinement](iterative-refinement.md) | Quality of the answer matters more than latency, and you can score it. | Up to `O(2 × (1 + max_iterations))` calls with the default evaluator; fewer with a non-LLM evaluator. |
 | [ReAct Tool Loop](react-loop.md) | The model needs to call tools to gather information before answering. | `O(rounds)` sequential calls; bounded by `max_rounds`. |
+| [Structured Output](structured.md) | You need a JSON object or array with optional validation and repair. | `1 + max_retries` sequential calls in the worst case. |
 | [Pipe](pipe.md) | You want to chain patterns end-to-end with a shared budget. | Sum of the individual pattern costs. |
 
 ## Choosing a pattern
@@ -19,10 +20,13 @@ flowchart TD
     D -- yes --> E[Iterative Refinement]
     D -- no --> F{Need to reduce<br/>hallucination?}
     F -- yes --> G[Consensus]
-    F -- no --> H[Single completion<br/>via Provider directly]
+    F -- no --> K{Need JSON<br/>with validation?}
+    K -- yes --> L[Structured Output]
+    K -- no --> H[Single completion<br/>via Provider directly]
     C --> I{Need multi-step?}
     E --> I
     G --> I
+    L --> I
     I -- yes --> J[Pipe to chain them]
 ```
 
@@ -43,7 +47,7 @@ class PatternResult(Generic[T]):
 
 ## Common kwargs
 
-Every pattern accepts these (all optional):
+The reasoning patterns accept these (all optional). `pipe()` forwards compatible shared kwargs to each step rather than declaring them directly:
 
 | Kwarg | Default | Purpose |
 |-------|---------|---------|
@@ -59,7 +63,13 @@ Every pattern accepts these (all optional):
 Every pattern has a `_sync` twin in the package root for use outside an async context:
 
 ```python
-from executionkit import consensus_sync, refine_loop_sync, react_loop_sync, pipe_sync
+from executionkit import (
+    consensus_sync,
+    refine_loop_sync,
+    react_loop_sync,
+    structured_sync,
+    pipe_sync,
+)
 ```
 
 The wrappers raise `RuntimeError` if called inside a running event loop — use `await` directly there (e.g. Jupyter, FastAPI handlers).

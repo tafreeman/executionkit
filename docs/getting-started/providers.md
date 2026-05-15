@@ -1,6 +1,6 @@
 # Provider Setup
 
-`Provider` speaks the OpenAI-compatible `/chat/completions` JSON format. Anything that endpoint speaks works without changes — swap `base_url`, `api_key`, and `model`.
+`Provider` speaks the OpenAI-compatible `/chat/completions` JSON format using bearer-token authentication. Anything that endpoint shape supports works without changes — swap `base_url`, `api_key`, and `model`.
 
 ## OpenAI
 
@@ -27,17 +27,17 @@ provider = Provider(
 )
 ```
 
-## Azure OpenAI
+## Azure OpenAI through a compatible gateway
+
+Azure OpenAI's native REST API uses an `api-version` query parameter and `api-key` header shape that the default `Provider` does not construct directly. Use Azure through an OpenAI-compatible gateway or proxy that exposes `/v1/chat/completions` with bearer-token authentication.
 
 ```python
 provider = Provider(
-    base_url="https://YOUR-RESOURCE.openai.azure.com/openai/deployments/YOUR-DEPLOYMENT",
-    api_key=os.environ["AZURE_OPENAI_API_KEY"],
-    model="gpt-4o-mini",                               # deployment name
+    base_url="https://YOUR-GATEWAY.example.com/v1",
+    api_key=os.environ["AZURE_GATEWAY_API_KEY"],
+    model="YOUR-DEPLOYMENT",
 )
 ```
-
-Azure URLs include the deployment path; `model` is the deployment name.
 
 ## Ollama (local)
 
@@ -105,7 +105,7 @@ provider = Provider(
 | `default_max_tokens` | `4096` | Max tokens when not overridden per call |
 | `timeout` | `120.0` | HTTP request timeout in seconds |
 
-Per-call overrides on `consensus`, `refine_loop`, and `react_loop` always win over the provider defaults.
+Per-call overrides on `consensus`, `refine_loop`, `react_loop`, and `structured` always win over the provider defaults.
 
 ## Lifecycle
 

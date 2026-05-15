@@ -13,8 +13,6 @@ exclude_docs: |
   c4/
   superpowers/
   test-audit/
-  architecture.md
-  security.md
 
 # Quiet strict-mode complaints about files we keep in the docs tree but don't
 # link from nav (legacy references, snippets, etc.).
@@ -120,6 +118,13 @@ nav:
       - Adapters: api/adapters.md
       - Configuration: api/configuration.md
   - Project:
+      - Architecture: architecture.md
+      - Security: security.md
+      - Architecture Decisions:
+          - Overview: adr/README.md
+          - Structural Protocols: adr/001-structural-protocols.md
+          - Flat Package Layout: adr/002-flat-layout.md
+          - Single Provider: adr/003-single-provider.md
       - Changelog: changelog.md
       - Contributing: contributing.md
       - License: license.md

@@ -8,7 +8,7 @@ hide:
 # ExecutionKit
 
 <p class="ek-tagline">Composable LLM reasoning patterns.</p>
-<p class="ek-subtagline">Consensus voting · Iterative refinement · ReAct tool loops · Zero SDK lock-in.</p>
+<p class="ek-subtagline">Consensus voting · Iterative refinement · ReAct tool loops · Structured JSON · Zero SDK lock-in.</p>
 
 [Quick Start](getting-started/quickstart.md){ .ek-cta .ek-cta-primary }
 [Patterns](patterns/index.md){ .ek-cta .ek-cta-secondary }
@@ -40,6 +40,11 @@ Reasoning + acting + observing. Standard tool-use loop with bounded iterations a
 Chain patterns end-to-end. Thread one result into the next prompt with a shared budget across all steps.
 </div>
 
+<div class="ek-card" markdown>
+### [Structured Output](patterns/structured.md)
+Request JSON, parse it, validate it, and repair malformed responses with bounded retries.
+</div>
+
 </div>
 
 ## Why ExecutionKit
@@ -48,7 +53,7 @@ Chain patterns end-to-end. Thread one result into the next prompt with a shared 
 
 <div class="ek-why-item" markdown>
 #### Provider-agnostic
-Works with any OpenAI-compatible endpoint: OpenAI, Anthropic via proxy, Azure, Ollama, vLLM, GitHub Models, local llama.cpp.
+Works with any OpenAI-compatible endpoint: OpenAI, Anthropic via proxy, Ollama, vLLM, GitHub Models, local llama.cpp, and Azure via an OpenAI-compatible gateway.
 </div>
 
 <div class="ek-why-item" markdown>
@@ -104,7 +109,7 @@ The two are designed to compose: agentic-runtimes calls ExecutionKit patterns in
 
 | Need | Reach for |
 |------|-----------|
-| One-shot voting / refinement / tool loop in your app | ExecutionKit |
+| One-shot voting / refinement / structured extraction / tool loop in your app | ExecutionKit |
 | Multi-step DAG with state, retries, and gating | agentic-runtimes |
 | Cost ceiling per request | ExecutionKit `max_cost=` |
 | Cost ceiling per workflow with per-step budgets | agentic-runtimes + ExecutionKit |

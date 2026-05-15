@@ -3,7 +3,7 @@
 ## Requirements
 
 - Python **3.11+**
-- An OpenAI-compatible LLM endpoint (OpenAI, Azure, Ollama, vLLM, GitHub Models, llama.cpp, etc.)
+- An OpenAI-compatible LLM endpoint (OpenAI, Ollama, vLLM, GitHub Models, llama.cpp, Azure through a compatible gateway, etc.)
 
 ## From PyPI
 
@@ -39,7 +39,16 @@ source .venv/bin/activate     # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
 ```
 
-The `[dev]` extra adds `pytest`, `ruff`, `mypy`, `bandit`, and `pre-commit`. See [Contributing](../contributing.md) for the full dev workflow.
+The `[dev]` extra adds `pytest`, `pytest-asyncio`, `pytest-cov`, `ruff`, `mypy`, `bandit`, `build`, and the optional `httpx` backend. See [Contributing](../contributing.md) for the full dev workflow.
+
+## Build the docs locally
+
+```bash
+pip install -e ".[docs]"
+mkdocs build --strict
+```
+
+The docs extra includes MkDocs Material, mkdocstrings, and Mermaid support used by the public site.
 
 ## Run the test suite
 
@@ -52,4 +61,4 @@ OPENAI_API_KEY=sk-... pytest -m integration              # live API tests
 ## Next
 
 - [Quick Start](quickstart.md) — first call in 5 lines.
-- [Provider Setup](providers.md) — configure OpenAI, Ollama, GitHub Models, Together, Groq, Azure.
+- [Provider Setup](providers.md) — configure OpenAI, Ollama, GitHub Models, Together, Groq, and Azure through a compatible gateway.

@@ -42,11 +42,20 @@ pip install executionkit
 ```
 
 ```python
+import asyncio
+import os
 from executionkit import Provider, consensus
 
-provider = Provider("https://api.openai.com/v1", api_key=KEY, model="gpt-4o-mini")
-result  = await consensus(provider, "Classify this ticket: ...", num_samples=5)
-print(result.value, result.metadata["agreement_ratio"], result.cost)
+async def main() -> None:
+    async with Provider(
+        "https://api.openai.com/v1",
+        api_key=os.environ["OPENAI_API_KEY"],
+        model="gpt-4o-mini",
+    ) as provider:
+        result = await consensus(provider, "Classify this ticket: ...", num_samples=5)
+        print(result.value, result.metadata["agreement_ratio"], result.cost)
+
+asyncio.run(main())
 ```
 
 See the [Quick Start guide](https://tafreeman.github.io/executionkit/getting-started/quickstart/) for a complete walkthrough.
@@ -63,7 +72,7 @@ See the [Quick Start guide](https://tafreeman.github.io/executionkit/getting-sta
 
 ## Why ExecutionKit
 
-- **Provider-agnostic.** OpenAI, Azure, Ollama, vLLM, GitHub Models, Together, Groq, llama.cpp — anything OpenAI-compatible.
+- **Provider-agnostic.** OpenAI, Ollama, vLLM, GitHub Models, Together, Groq, llama.cpp, and Azure via an OpenAI-compatible gateway.
 - **Zero SDK lock-in.** Structural `LLMProvider` protocol — any conforming object works without inheritance.
 - **Composable.** Patterns are async functions. Wrap them, chain them with `pipe()`, or drop them inside a larger orchestrator like [agentic-runtimes](https://github.com/tafreeman/agentic-runtimes).
 - **Budget-aware.** TOCTOU-safe `max_cost` enforcement across parallel calls.
