@@ -7,6 +7,9 @@ edit_uri: edit/main/docs/
 
 # Exclude internal/legacy artifacts from the public site without deleting them.
 exclude_docs: |
+  analysis/
+  planning/
+  review-process/
   c4/
   superpowers/
   test-audit/
