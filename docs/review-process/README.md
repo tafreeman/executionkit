@@ -1,3 +1,9 @@
+> **Context:** These documents are the output of a structured multi-agent review
+> process run during development. They are preserved as methodology documentation,
+> not as active product specs. For current architecture, see `docs/architecture.md`.
+
+---
+
 # Full Review Playbooks
 
 This directory holds human-readable playbooks for deep review passes. They are not auto-loaded by any tool; open the files directly when running a quality, security, performance, or documentation review.
