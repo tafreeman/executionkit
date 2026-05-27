@@ -1,0 +1,69 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Type checking
+.mypy_cache/
+
+# Linting
+.ruff_cache/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node (not used in root — prevent accidental commits)
+node_modules/
+package.json
+package-lock.json
+
+# Coverage artifacts
+coverage.json
+
+# MkDocs build output
+site/
+
+# Local review artifacts
+.full-review/
+
+# Internal development artifacts (purged from history)
+dev/
+docs/planning/
+docs/review-process/
+docs/test-audit/
+sbom.json
+AGENTS.md
+CLAUDE.md
+
+# Internal analysis
+docs/analysis/
+
+# Internal C4 analysis (contains local paths, not for public repo)
+docs/c4/

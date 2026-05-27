@@ -1,0 +1,1154 @@
+"""Tests for provider.py — error hierarchy, value types, and Provider class."""
+
+from __future__ import annotations
+
+import io
+import unittest.mock
+from dataclasses import FrozenInstanceError
+from types import MappingProxyType
+from urllib import error
+
+import pytest
+
+from executionkit.provider import (
+    BudgetExhaustedError,
+    ConsensusFailedError,
+    ExecutionKitError,
+    LLMError,
+    LLMProvider,
+    LLMResponse,
+    MaxIterationsError,
+    PatternError,
+    PermanentError,
+    Provider,
+    ProviderError,
+    RateLimitError,
+    ToolCall,
+)
+
+# ---------------------------------------------------------------------------
+# Error hierarchy
+# ---------------------------------------------------------------------------
+
+
+class TestErrorHierarchy:
+    """All 9 error classes exist with correct inheritance."""
+
+    def test_execution_kit_error_is_exception(self) -> None:
+        assert issubclass(ExecutionKitError, Exception)
+
+    def test_llm_error_inherits_execution_kit_error(self) -> None:
+        assert issubclass(LLMError, ExecutionKitError)
+
+    def test_rate_limit_error_inherits_llm_error(self) -> None:
+        assert issubclass(RateLimitError, LLMError)
+
+    def test_permanent_error_inherits_llm_error(self) -> None:
+        assert issubclass(PermanentError, LLMError)
+
+    def test_provider_error_inherits_llm_error(self) -> None:
+        assert issubclass(ProviderError, LLMError)
+
+    def test_pattern_error_inherits_execution_kit_error(self) -> None:
+        assert issubclass(PatternError, ExecutionKitError)
+
+    def test_budget_exhausted_error_inherits_pattern_error(self) -> None:
+        assert issubclass(BudgetExhaustedError, PatternError)
+
+    def test_consensus_failed_error_inherits_pattern_error(self) -> None:
+        assert issubclass(ConsensusFailedError, PatternError)
+
+    def test_max_iterations_error_inherits_pattern_error(self) -> None:
+        assert issubclass(MaxIterationsError, PatternError)
+
+    def test_rate_limit_error_has_retry_after_attribute(self) -> None:
+        err = RateLimitError("limited", retry_after=5.0)
+        assert err.retry_after == 5.0
+
+    def test_rate_limit_error_default_retry_after(self) -> None:
+        err = RateLimitError("limited")
+        assert err.retry_after == 1.0
+
+    def test_rate_limit_error_message(self) -> None:
+        err = RateLimitError("rate limited")
+        assert str(err) == "rate limited"
+
+    def test_permanent_error_not_retryable_by_design(self) -> None:
+        # PermanentError must NOT be a subclass of RateLimitError or ProviderError
+        assert not issubclass(PermanentError, RateLimitError)
+        assert not issubclass(PermanentError, ProviderError)
+
+    def test_all_llm_errors_inherit_execution_kit_error(self) -> None:
+        for cls in (RateLimitError, PermanentError, ProviderError):
+            assert issubclass(cls, ExecutionKitError)
+
+    def test_all_pattern_errors_inherit_execution_kit_error(self) -> None:
+        for cls in (BudgetExhaustedError, ConsensusFailedError, MaxIterationsError):
+            assert issubclass(cls, ExecutionKitError)
+
+    def test_can_catch_llm_errors_by_base(self) -> None:
+        with pytest.raises(LLMError):
+            raise RateLimitError("oops")
+
+    def test_can_catch_pattern_errors_by_base(self) -> None:
+        with pytest.raises(PatternError):
+            raise BudgetExhaustedError("over budget")
+
+    def test_can_catch_all_errors_by_execution_kit_error(self) -> None:
+        for exc_class in (
+            LLMError,
+            RateLimitError,
+            PermanentError,
+            ProviderError,
+            PatternError,
+            BudgetExhaustedError,
+            ConsensusFailedError,
+            MaxIterationsError,
+        ):
+            with pytest.raises(ExecutionKitError):
+                raise exc_class("test")
+
+
+# ---------------------------------------------------------------------------
+# ToolCall
+# ---------------------------------------------------------------------------
+
+
+class TestToolCall:
+    def test_toolcall_is_frozen(self) -> None:
+        tc = ToolCall(id="tc1", name="search", arguments={"query": "hello"})
+        with pytest.raises(AttributeError):
+            tc.name = "other"  # type: ignore[misc]
+
+    def test_toolcall_fields(self) -> None:
+        tc = ToolCall(id="abc", name="calculator", arguments={"x": 1, "y": 2})
+        assert tc.id == "abc"
+        assert tc.name == "calculator"
+        assert tc.arguments == {"x": 1, "y": 2}
+
+    def test_toolcall_empty_arguments(self) -> None:
+        tc = ToolCall(id="", name="noop", arguments={})
+        assert tc.arguments == {}
+
+    def test_toolcall_equality(self) -> None:
+        tc1 = ToolCall(id="x", name="fn", arguments={"a": 1})
+        tc2 = ToolCall(id="x", name="fn", arguments={"a": 1})
+        assert tc1 == tc2
+
+    def test_toolcall_inequality(self) -> None:
+        tc1 = ToolCall(id="x", name="fn", arguments={"a": 1})
+        tc2 = ToolCall(id="y", name="fn", arguments={"a": 1})
+        assert tc1 != tc2
+
+
+# ---------------------------------------------------------------------------
+# LLMResponse
+# ---------------------------------------------------------------------------
+
+
+class TestLLMResponse:
+    def test_llmresponse_is_frozen(self) -> None:
+        r = LLMResponse(content="hello")
+        with pytest.raises(AttributeError):
+            r.content = "other"  # type: ignore[misc]
+
+    def test_llmresponse_default_fields(self) -> None:
+        r = LLMResponse(content="hi")
+        assert r.content == "hi"
+        assert r.tool_calls == ()
+        assert r.finish_reason == "stop"
+        assert r.usage == MappingProxyType({})
+        assert r.raw is None
+
+    def test_input_tokens_from_prompt_tokens(self) -> None:
+        r = LLMResponse(content="", usage=MappingProxyType({"prompt_tokens": 42}))
+        assert r.input_tokens == 42
+
+    def test_input_tokens_from_input_tokens_key(self) -> None:
+        r = LLMResponse(content="", usage=MappingProxyType({"input_tokens": 55}))
+        assert r.input_tokens == 55
+
+    def test_output_tokens_from_completion_tokens(self) -> None:
+        r = LLMResponse(content="", usage=MappingProxyType({"completion_tokens": 10}))
+        assert r.output_tokens == 10
+
+    def test_output_tokens_from_output_tokens_key(self) -> None:
+        r = LLMResponse(content="", usage=MappingProxyType({"output_tokens": 20}))
+        assert r.output_tokens == 20
+
+    def test_total_tokens(self) -> None:
+        r = LLMResponse(
+            content="",
+            usage=MappingProxyType({"prompt_tokens": 30, "completion_tokens": 15}),
+        )
+        assert r.total_tokens == 45
+
+    def test_total_tokens_zero_when_no_usage(self) -> None:
+        r = LLMResponse(content="")
+        assert r.total_tokens == 0
+
+    def test_was_truncated_when_finish_reason_length(self) -> None:
+        r = LLMResponse(content="truncated...", finish_reason="length")
+        assert r.was_truncated is True
+
+    def test_was_truncated_false_when_stop(self) -> None:
+        r = LLMResponse(content="complete", finish_reason="stop")
+        assert r.was_truncated is False
+
+    def test_has_tool_calls_false_by_default(self) -> None:
+        r = LLMResponse(content="text")
+        assert r.has_tool_calls is False
+
+    def test_has_tool_calls_true_with_tool_calls(self) -> None:
+        tc = ToolCall(id="1", name="fn", arguments={})
+        r = LLMResponse(content="", tool_calls=(tc,))
+        assert r.has_tool_calls is True
+
+    def test_input_tokens_zero_when_no_usage(self) -> None:
+        r = LLMResponse(content="")
+        assert r.input_tokens == 0
+
+    def test_output_tokens_zero_when_no_usage(self) -> None:
+        r = LLMResponse(content="")
+        assert r.output_tokens == 0
+
+    def test_dual_format_input_prefers_input_tokens(self) -> None:
+        # When both keys present, input_tokens takes priority (truthy check)
+        r = LLMResponse(
+            content="",
+            usage=MappingProxyType({"input_tokens": 5, "prompt_tokens": 99}),
+        )
+        assert r.input_tokens == 5
+
+    def test_dual_format_input_tokens_zero_not_falsy(self) -> None:
+        # input_tokens=0 (e.g. cached prompt) must NOT fall back to prompt_tokens
+        r = LLMResponse(
+            content="",
+            usage=MappingProxyType({"input_tokens": 0, "prompt_tokens": 99}),
+        )
+        assert r.input_tokens == 0
+
+
+# ---------------------------------------------------------------------------
+# Provider constructor
+# ---------------------------------------------------------------------------
+
+
+class TestProvider:
+    def test_provider_fields(self) -> None:
+        p = Provider(base_url="https://api.openai.com/v1", model="gpt-4o-mini")
+        assert p.base_url == "https://api.openai.com/v1"
+        assert p.model == "gpt-4o-mini"
+        assert p.api_key == ""
+        assert p.default_temperature == 0.7
+        assert p.default_max_tokens == 4096
+        assert p.timeout == 120.0
+
+    def test_provider_custom_fields(self) -> None:
+        p = Provider(
+            base_url="http://localhost:11434/v1",
+            model="llama3.2",
+            api_key="sk-test",
+            default_temperature=0.5,
+            default_max_tokens=2048,
+            timeout=30.0,
+        )
+        assert p.api_key == "sk-test"
+        assert p.default_temperature == 0.5
+        assert p.default_max_tokens == 2048
+        assert p.timeout == 30.0
+
+    def test_provider_satisfies_llm_provider_protocol(self) -> None:
+        p = Provider(base_url="https://api.openai.com/v1", model="gpt-4o-mini")
+        assert isinstance(p, LLMProvider)
+
+    def test_mock_provider_satisfies_llm_provider_protocol(self) -> None:
+        from executionkit._mock import MockProvider
+
+        mp = MockProvider(responses=["hi"])
+        assert isinstance(mp, LLMProvider)
+
+    def test_provider_repr_masks_api_key(self) -> None:
+        p = Provider(base_url="http://x", model="gpt", api_key="sk-real-secret")
+        assert "sk-real-secret" not in repr(p)
+
+    def test_provider_repr_shows_masked_marker(self) -> None:
+        p = Provider(base_url="http://x", model="gpt", api_key="sk-real-secret")
+        assert "***" in repr(p)
+
+    def test_provider_repr_empty_key_no_marker(self) -> None:
+        p = Provider(base_url="http://x", model="gpt", api_key="")
+        assert "***" not in repr(p)
+
+    def test_provider_repr_contains_model_and_url(self) -> None:
+        p = Provider(base_url="http://x", model="gpt", api_key="sk-real-secret")
+        result = repr(p)
+        assert "http://x" in result
+        assert "gpt" in result
+
+
+# ---------------------------------------------------------------------------
+# MB-007a: was_truncated recognises "max_tokens" finish reason
+# ---------------------------------------------------------------------------
+
+
+def test_parse_response_was_truncated_on_max_tokens() -> None:
+    provider = Provider("https://example.com/v1", model="test-model")
+    response = provider._parse_response(
+        {
+            "choices": [{"message": {"content": "hi"}, "finish_reason": "max_tokens"}],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+        }
+    )
+    assert response.was_truncated is True
+
+
+# ---------------------------------------------------------------------------
+# MB-007b: was_truncated is False for normal stop
+# ---------------------------------------------------------------------------
+
+
+def test_parse_response_was_truncated_false_on_stop() -> None:
+    provider = Provider("https://example.com/v1", model="test-model")
+    response = provider._parse_response(
+        {
+            "choices": [{"message": {"content": "hi"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+        }
+    )
+    assert response.was_truncated is False
+
+
+# ---------------------------------------------------------------------------
+# MB-007c: ToolCallingProvider isinstance check passes for MockProvider
+# ---------------------------------------------------------------------------
+
+
+def test_mock_provider_satisfies_tool_calling_provider() -> None:
+    from executionkit._mock import MockProvider
+    from executionkit.provider import ToolCallingProvider
+
+    mock = MockProvider(responses=["hello"])
+    assert isinstance(mock, ToolCallingProvider)
+
+
+# ---------------------------------------------------------------------------
+# P1-7: 5xx maps to ProviderError
+# ---------------------------------------------------------------------------
+
+
+async def test_post_maps_5xx_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    provider = Provider("https://example.com/v1", model="test-model")
+
+    def fake_urlopen(*args: object, **kwargs: object) -> object:
+        raise error.HTTPError(
+            url="https://example.com/v1/chat/completions",
+            code=500,
+            msg="Internal Server Error",
+            hdrs={},
+            fp=io.BytesIO(b'{"error":{"message":"server error"}}'),
+        )
+
+    # Force urllib backend so the monkeypatch is effective regardless of
+    # whether httpx is installed in the test environment.
+    object.__setattr__(provider, "_use_httpx", False)
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    with pytest.raises(ProviderError, match="server error"):
+        await provider._post("chat/completions", {"model": "x"})
+
+
+# ---------------------------------------------------------------------------
+# P1-7b: input_tokens=0 does not fall back to prompt_tokens
+# ---------------------------------------------------------------------------
+
+
+def test_parse_response_zero_input_tokens_not_falsy() -> None:
+    """input_tokens=0 (cached prompt) must not fall back to prompt_tokens."""
+    provider = Provider("https://example.com/v1", model="test-model")
+    response = provider._parse_response(
+        {
+            "choices": [{"message": {"content": "hi"}, "finish_reason": "stop"}],
+            "usage": {"input_tokens": 0, "prompt_tokens": 5, "completion_tokens": 2},
+        }
+    )
+    assert response.input_tokens == 0
+    assert response.output_tokens == 2
+
+
+# ---------------------------------------------------------------------------
+# P2-SEC-07: _format_http_error redacts key fragments
+# ---------------------------------------------------------------------------
+
+
+def test_format_http_error_redacts_key_fragment() -> None:
+    """Raw provider error messages containing API key fragments must be redacted."""
+    from executionkit.provider import _format_http_error
+
+    payload = {"error": {"message": "key sk-abc123xyz invalid"}}
+    result = _format_http_error(401, payload)
+
+    assert "sk-abc123xyz" not in result
+    assert "[REDACTED]" in result
+
+
+# ---------------------------------------------------------------------------
+# P1-5: httpx backend tests
+# ---------------------------------------------------------------------------
+
+
+def test_provider_uses_httpx_when_available() -> None:
+    """Provider._use_httpx is True when httpx can be imported."""
+    try:
+        import httpx  # noqa: F401
+    except ImportError:
+        pytest.skip("httpx not installed")
+
+    provider = Provider("https://example.com/v1", model="test-model")
+    assert provider._use_httpx is True
+    assert provider._client is not None
+
+
+def test_provider_falls_back_to_urllib(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Provider._use_httpx is False when httpx is unavailable."""
+    import executionkit.provider as pmod
+
+    monkeypatch.setattr(pmod, "_HTTPX_AVAILABLE", False)
+    monkeypatch.setattr(pmod, "_httpx", None)
+
+    provider = Provider("https://example.com/v1", model="test-model")
+    assert provider._use_httpx is False
+    assert provider._client is None
+
+
+def test_same_client_reused_across_calls() -> None:
+    """The httpx.AsyncClient instance is reused between calls (connection pool)."""
+    try:
+        import httpx  # noqa: F401
+    except ImportError:
+        pytest.skip("httpx not installed")
+
+    provider = Provider("https://example.com/v1", model="test-model")
+    if not provider._use_httpx:
+        pytest.skip("httpx backend not active")
+
+    client_id_before = id(provider._client)
+    # Simulate a second "call" — client must not be recreated
+    client_id_after = id(provider._client)
+    assert client_id_before == client_id_after
+
+
+async def test_post_httpx_maps_429_to_rate_limit_error() -> None:
+    """_post_httpx maps HTTP 429 to RateLimitError with retry_after."""
+    try:
+        import httpx
+    except ImportError:
+        pytest.skip("httpx not installed")
+
+    provider = Provider("https://example.com/v1", model="test-model")
+    if not provider._use_httpx:
+        pytest.skip("httpx backend not active")
+
+    mock_response = unittest.mock.MagicMock()
+    mock_response.status_code = 429
+    mock_response.headers = {"retry-after": "3"}
+    mock_response.json.return_value = {"error": "rate limited"}
+
+    exc = httpx.HTTPStatusError(
+        "429", request=unittest.mock.MagicMock(), response=mock_response
+    )
+
+    async def fake_post(*args: object, **kwargs: object) -> object:
+        raise exc
+
+    mock_client = unittest.mock.MagicMock()
+    mock_client.post = fake_post
+    object.__setattr__(provider, "_client", mock_client)
+
+    with pytest.raises(RateLimitError) as exc_info:
+        await provider._post_httpx("https://example.com/v1/chat/completions", b"{}", {})
+    assert exc_info.value.retry_after == 3.0
+
+
+async def test_post_httpx_maps_401_to_permanent_error() -> None:
+    """_post_httpx maps HTTP 401 to PermanentError."""
+    try:
+        import httpx
+    except ImportError:
+        pytest.skip("httpx not installed")
+
+    provider = Provider("https://example.com/v1", model="test-model")
+    if not provider._use_httpx:
+        pytest.skip("httpx backend not active")
+
+    mock_response = unittest.mock.MagicMock()
+    mock_response.status_code = 401
+    mock_response.headers = {}
+    mock_response.json.return_value = {"error": {"message": "Unauthorized"}}
+
+    exc = httpx.HTTPStatusError(
+        "401", request=unittest.mock.MagicMock(), response=mock_response
+    )
+
+    async def fake_post(*args: object, **kwargs: object) -> object:
+        raise exc
+
+    mock_client = unittest.mock.MagicMock()
+    mock_client.post = fake_post
+    object.__setattr__(provider, "_client", mock_client)
+
+    with pytest.raises(PermanentError):
+        await provider._post_httpx("https://example.com/v1/chat/completions", b"{}", {})
+
+
+async def test_post_httpx_maps_500_to_provider_error() -> None:
+    """_post_httpx maps HTTP 5xx to ProviderError."""
+    try:
+        import httpx
+    except ImportError:
+        pytest.skip("httpx not installed")
+
+    provider = Provider("https://example.com/v1", model="test-model")
+    if not provider._use_httpx:
+        pytest.skip("httpx backend not active")
+
+    mock_response = unittest.mock.MagicMock()
+    mock_response.status_code = 500
+    mock_response.headers = {}
+    mock_response.json.return_value = {"error": {"message": "internal error"}}
+
+    exc = httpx.HTTPStatusError(
+        "500", request=unittest.mock.MagicMock(), response=mock_response
+    )
+
+    async def fake_post(*args: object, **kwargs: object) -> object:
+        raise exc
+
+    mock_client = unittest.mock.MagicMock()
+    mock_client.post = fake_post
+    object.__setattr__(provider, "_client", mock_client)
+
+    with pytest.raises(ProviderError, match="internal error"):
+        await provider._post_httpx("https://example.com/v1/chat/completions", b"{}", {})
+
+
+async def test_aclose_with_httpx() -> None:
+    """aclose() calls client.aclose() when httpx is the active backend."""
+    try:
+        import httpx  # noqa: F401
+    except ImportError:
+        pytest.skip("httpx not installed")
+
+    provider = Provider("https://example.com/v1", model="test-model")
+    if not provider._use_httpx:
+        pytest.skip("httpx backend not active")
+
+    closed: list[bool] = []
+
+    async def fake_aclose() -> None:
+        closed.append(True)
+
+    mock_client = unittest.mock.MagicMock()
+    mock_client.aclose = fake_aclose
+    object.__setattr__(provider, "_client", mock_client)
+
+    await provider.aclose()
+    assert closed == [True]
+
+
+async def test_aclose_noop_without_httpx(monkeypatch: pytest.MonkeyPatch) -> None:
+    """aclose() is a no-op when the urllib backend is active."""
+    import executionkit.provider as pmod
+
+    monkeypatch.setattr(pmod, "_HTTPX_AVAILABLE", False)
+    monkeypatch.setattr(pmod, "_httpx", None)
+
+    provider = Provider("https://example.com/v1", model="test-model")
+    assert provider._use_httpx is False
+    # Must not raise
+    await provider.aclose()
+
+
+async def test_context_manager_closes_client() -> None:
+    """Using Provider as async context manager calls aclose() on exit."""
+    try:
+        import httpx  # noqa: F401
+    except ImportError:
+        pytest.skip("httpx not installed")
+
+    provider = Provider("https://example.com/v1", model="test-model")
+    if not provider._use_httpx:
+        pytest.skip("httpx backend not active")
+
+    closed: list[bool] = []
+
+    async def fake_aclose() -> None:
+        closed.append(True)
+
+    mock_client = unittest.mock.MagicMock()
+    mock_client.aclose = fake_aclose
+    object.__setattr__(provider, "_client", mock_client)
+
+    async with provider:
+        pass
+
+    assert closed == [True]
+
+
+# ---------------------------------------------------------------------------
+# Provider immutability
+# ---------------------------------------------------------------------------
+
+
+class TestProviderImmutability:
+    def test_provider_is_immutable(self) -> None:
+        """Public field assignment on Provider must raise FrozenInstanceError."""
+        provider = Provider("https://api.openai.com/v1", model="gpt-4o-mini")
+        with pytest.raises(FrozenInstanceError):
+            provider.model = "new"  # type: ignore[misc]
+
+    def test_provider_client_is_set_post_init(self) -> None:
+        """_use_httpx is set to a bool by __post_init__ regardless of httpx."""
+        provider = Provider("https://api.openai.com/v1", model="gpt-4o-mini")
+        assert isinstance(provider._use_httpx, bool)
+
+
+# ---------------------------------------------------------------------------
+# _classify_http_error regression tests (F-02)
+# Ref: extracted to eliminate duplication between urllib and httpx backends.
+# Anthropic SDK uses same pattern in _make_status_error().
+# ---------------------------------------------------------------------------
+
+
+class TestClassifyHttpError:
+    """_classify_http_error maps HTTP status codes to the correct exception."""
+
+    def test_429_raises_rate_limit_error(self) -> None:
+        from executionkit.provider import _classify_http_error
+
+        cause = Exception("original")
+        with pytest.raises(RateLimitError) as exc_info:
+            _classify_http_error(429, {}, 5.0, cause=cause)
+        assert exc_info.value.retry_after == 5.0
+        assert exc_info.value.__cause__ is cause
+
+    def test_429_default_retry_after_is_propagated(self) -> None:
+        from executionkit.provider import _classify_http_error
+
+        with pytest.raises(RateLimitError) as exc_info:
+            _classify_http_error(429, {}, 2.5, cause=Exception())
+        assert exc_info.value.retry_after == 2.5
+
+    def test_401_raises_permanent_error(self) -> None:
+        from executionkit.provider import _classify_http_error
+
+        with pytest.raises(PermanentError):
+            _classify_http_error(401, {}, 1.0, cause=Exception())
+
+    def test_403_raises_permanent_error(self) -> None:
+        from executionkit.provider import _classify_http_error
+
+        with pytest.raises(PermanentError):
+            _classify_http_error(403, {}, 1.0, cause=Exception())
+
+    def test_404_raises_permanent_error(self) -> None:
+        from executionkit.provider import _classify_http_error
+
+        with pytest.raises(PermanentError):
+            _classify_http_error(404, {}, 1.0, cause=Exception())
+
+    def test_500_raises_provider_error(self) -> None:
+        from executionkit.provider import _classify_http_error
+
+        with pytest.raises(ProviderError):
+            _classify_http_error(500, {}, 1.0, cause=Exception())
+
+    def test_503_raises_provider_error(self) -> None:
+        from executionkit.provider import _classify_http_error
+
+        with pytest.raises(ProviderError):
+            _classify_http_error(503, {}, 1.0, cause=Exception())
+
+    def test_exception_is_chained_via_cause(self) -> None:
+        """raise ... from cause must set __cause__, not just __context__."""
+        from executionkit.provider import _classify_http_error
+
+        original = ValueError("root cause")
+        with pytest.raises(ProviderError) as exc_info:
+            _classify_http_error(500, {}, 1.0, cause=original)
+        assert exc_info.value.__cause__ is original
+
+
+# ---------------------------------------------------------------------------
+# Targeted provider transport + parsing coverage
+# ---------------------------------------------------------------------------
+
+
+async def test_complete_builds_payload_with_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = Provider(
+        "https://example.com/v1",
+        model="test-model",
+        default_temperature=0.25,
+        default_max_tokens=321,
+    )
+    captured: dict[str, object] = {}
+
+    async def fake_post(
+        self: Provider,
+        endpoint: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        captured["endpoint"] = endpoint
+        captured["payload"] = payload
+        return {
+            "choices": [{"message": {"content": "hello"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 2},
+        }
+
+    monkeypatch.setattr(Provider, "_post", fake_post)
+
+    response = await provider.complete([{"role": "user", "content": "hi"}])
+
+    assert response.content == "hello"
+    assert captured["endpoint"] == "chat/completions"
+    assert captured["payload"] == {
+        "model": "test-model",
+        "messages": [{"role": "user", "content": "hi"}],
+        "temperature": 0.25,
+        "max_tokens": 321,
+    }
+
+
+async def test_complete_includes_tools_and_extra_kwargs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = Provider("https://example.com/v1", model="test-model")
+    captured: dict[str, object] = {}
+    tools = [{"type": "function", "function": {"name": "lookup"}}]
+
+    async def fake_post(
+        self: Provider,
+        endpoint: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        captured["endpoint"] = endpoint
+        captured["payload"] = payload
+        return {
+            "choices": [{"message": {"content": "ok"}, "finish_reason": "length"}],
+            "usage": {"prompt_tokens": 3, "completion_tokens": 4},
+        }
+
+    monkeypatch.setattr(Provider, "_post", fake_post)
+
+    response = await provider.complete(
+        [{"role": "user", "content": "hi"}],
+        temperature=0.9,
+        max_tokens=12,
+        tools=tools,
+        top_p=0.8,
+    )
+
+    assert response.was_truncated is True
+    assert captured["endpoint"] == "chat/completions"
+    assert captured["payload"] == {
+        "model": "test-model",
+        "messages": [{"role": "user", "content": "hi"}],
+        "temperature": 0.9,
+        "max_tokens": 12,
+        "tools": tools,
+        "top_p": 0.8,
+    }
+
+
+async def test_post_routes_to_httpx_with_auth_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = Provider("https://example.com/v1/", model="test-model", api_key="abc123")
+    object.__setattr__(provider, "_use_httpx", True)
+    captured: dict[str, object] = {}
+
+    async def fake_post_httpx(
+        self: Provider,
+        url: str,
+        body: bytes,
+        headers: dict[str, str],
+    ) -> dict[str, object]:
+        captured["url"] = url
+        captured["body"] = body
+        captured["headers"] = headers
+        return {"ok": True}
+
+    monkeypatch.setattr(Provider, "_post_httpx", fake_post_httpx)
+
+    result = await provider._post("/chat/completions", {"x": 1})
+
+    assert result == {"ok": True}
+    assert captured["url"] == "https://example.com/v1/chat/completions"
+    assert captured["body"] == b'{"x": 1}'
+    assert captured["headers"] == {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer abc123",
+    }
+
+
+async def test_post_routes_to_urllib_without_auth_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = Provider("https://example.com/v1", model="test-model")
+    object.__setattr__(provider, "_use_httpx", False)
+    captured: dict[str, object] = {}
+
+    async def fake_post_urllib(
+        self: Provider,
+        url: str,
+        body: bytes,
+        headers: dict[str, str],
+    ) -> dict[str, object]:
+        captured["url"] = url
+        captured["body"] = body
+        captured["headers"] = headers
+        return {"ok": True}
+
+    monkeypatch.setattr(Provider, "_post_urllib", fake_post_urllib)
+
+    result = await provider._post("chat/completions", {"x": 2})
+
+    assert result == {"ok": True}
+    assert captured["url"] == "https://example.com/v1/chat/completions"
+    assert captured["body"] == b'{"x": 2}'
+    assert captured["headers"] == {"Content-Type": "application/json"}
+
+
+async def test_post_httpx_success_returns_json_dict() -> None:
+    provider = Provider("https://example.com/v1", model="test-model")
+    if not provider._use_httpx:
+        pytest.skip("httpx backend not active")
+
+    mock_response = unittest.mock.MagicMock()
+    mock_response.raise_for_status.return_value = None
+    mock_response.json.return_value = {"choices": []}
+
+    async def fake_post(*args: object, **kwargs: object) -> object:
+        return mock_response
+
+    mock_client = unittest.mock.MagicMock()
+    mock_client.post = fake_post
+    object.__setattr__(provider, "_client", mock_client)
+
+    result = await provider._post_httpx(
+        "https://example.com/v1/chat/completions",
+        b"{}",
+        {},
+    )
+    assert result == {"choices": []}
+
+
+async def test_post_httpx_handles_non_dict_error_payload() -> None:
+    try:
+        import httpx
+    except ImportError:
+        pytest.skip("httpx not installed")
+
+    provider = Provider("https://example.com/v1", model="test-model")
+    if not provider._use_httpx:
+        pytest.skip("httpx backend not active")
+
+    mock_response = unittest.mock.MagicMock()
+    mock_response.status_code = 500
+    mock_response.headers = {}
+    mock_response.json.return_value = ["not", "a", "dict"]
+
+    exc = httpx.HTTPStatusError(
+        "500", request=unittest.mock.MagicMock(), response=mock_response
+    )
+
+    async def fake_post(*args: object, **kwargs: object) -> object:
+        raise exc
+
+    mock_client = unittest.mock.MagicMock()
+    mock_client.post = fake_post
+    object.__setattr__(provider, "_client", mock_client)
+
+    with pytest.raises(ProviderError, match="HTTP 500"):
+        await provider._post_httpx("https://example.com/v1/chat/completions", b"{}", {})
+
+
+async def test_post_httpx_handles_json_parse_error_in_error_response() -> None:
+    try:
+        import httpx
+    except ImportError:
+        pytest.skip("httpx not installed")
+
+    provider = Provider("https://example.com/v1", model="test-model")
+    if not provider._use_httpx:
+        pytest.skip("httpx backend not active")
+
+    mock_response = unittest.mock.MagicMock()
+    mock_response.status_code = 500
+    mock_response.headers = {}
+    mock_response.json.side_effect = ValueError("bad json")
+
+    exc = httpx.HTTPStatusError(
+        "500", request=unittest.mock.MagicMock(), response=mock_response
+    )
+
+    async def fake_post(*args: object, **kwargs: object) -> object:
+        raise exc
+
+    mock_client = unittest.mock.MagicMock()
+    mock_client.post = fake_post
+    object.__setattr__(provider, "_client", mock_client)
+
+    with pytest.raises(ProviderError, match="HTTP 500"):
+        await provider._post_httpx("https://example.com/v1/chat/completions", b"{}", {})
+
+
+async def test_post_httpx_maps_transport_error_to_provider_error() -> None:
+    try:
+        import httpx
+    except ImportError:
+        pytest.skip("httpx not installed")
+
+    provider = Provider("https://example.com/v1", model="test-model")
+    if not provider._use_httpx:
+        pytest.skip("httpx backend not active")
+
+    async def fake_post(*args: object, **kwargs: object) -> object:
+        raise httpx.ConnectError("boom")
+
+    mock_client = unittest.mock.MagicMock()
+    mock_client.post = fake_post
+    object.__setattr__(provider, "_client", mock_client)
+
+    with pytest.raises(ProviderError, match="Transport failure: boom"):
+        await provider._post_httpx("https://example.com/v1/chat/completions", b"{}", {})
+
+
+async def test_post_urllib_success_returns_json_dict(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = Provider("https://example.com/v1", model="test-model")
+    object.__setattr__(provider, "_use_httpx", False)
+
+    class FakeResponse:
+        def __enter__(self) -> FakeResponse:
+            return self
+
+        def __exit__(self, exc_type: object, exc: object, tb: object) -> bool:
+            return False
+
+        def read(self) -> bytes:
+            return b'{"choices":[{"message":{"content":"hi"}}]}'
+
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda *args, **kwargs: FakeResponse(),
+    )
+
+    result = await provider._post_urllib(
+        "https://example.com/v1/chat/completions",
+        b"{}",
+        {},
+    )
+    assert result == {"choices": [{"message": {"content": "hi"}}]}
+
+
+async def test_post_urllib_invalid_error_body_falls_back_to_empty_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = Provider("https://example.com/v1", model="test-model")
+    object.__setattr__(provider, "_use_httpx", False)
+
+    def fake_urlopen(*args: object, **kwargs: object) -> object:
+        raise error.HTTPError(
+            url="https://example.com/v1/chat/completions",
+            code=500,
+            msg="Internal Server Error",
+            hdrs={},
+            fp=io.BytesIO(b"not-json"),
+        )
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    with pytest.raises(ProviderError, match="HTTP 500"):
+        await provider._post_urllib(
+            "https://example.com/v1/chat/completions",
+            b"{}",
+            {},
+        )
+
+
+async def test_post_urllib_maps_urlerror_to_provider_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = Provider("https://example.com/v1", model="test-model")
+    object.__setattr__(provider, "_use_httpx", False)
+
+    def fake_urlopen(*args: object, **kwargs: object) -> object:
+        raise error.URLError("dns down")
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    with pytest.raises(ProviderError, match="Transport failure: dns down"):
+        await provider._post_urllib(
+            "https://example.com/v1/chat/completions",
+            b"{}",
+            {},
+        )
+
+
+def test_parse_response_handles_non_dict_usage() -> None:
+    provider = Provider("https://example.com/v1", model="test-model")
+    response = provider._parse_response(
+        {
+            "choices": [{"message": {"content": "hello"}, "finish_reason": None}],
+            "usage": ["not", "a", "dict"],
+        }
+    )
+    assert response.content == "hello"
+    assert response.finish_reason == "None"
+    assert dict(response.usage) == {}
+
+
+def test_first_choice_raises_when_missing_choices() -> None:
+    from executionkit.provider import _first_choice
+
+    with pytest.raises(ProviderError, match="did not include any choices"):
+        _first_choice({})
+
+
+def test_first_choice_raises_when_first_choice_not_object() -> None:
+    from executionkit.provider import _first_choice
+
+    with pytest.raises(ProviderError, match="was not an object"):
+        _first_choice({"choices": ["bad"]})
+
+
+def test_extract_content_handles_mixed_content_list() -> None:
+    from executionkit.provider import _extract_content
+
+    result = _extract_content(
+        [
+            "alpha",
+            {"type": "text", "text": "beta"},
+            {"type": "output_text", "text": {"value": "gamma"}},
+            {"value": "delta"},
+            123,
+        ]
+    )
+
+    assert result == "alphabetagammadelta"
+
+
+def test_extract_content_stringifies_non_list_non_string() -> None:
+    from executionkit.provider import _extract_content
+
+    assert _extract_content(42) == "42"
+
+
+def test_parse_tool_calls_parses_missing_id_as_empty_string() -> None:
+    from executionkit.provider import _parse_tool_calls
+
+    result = _parse_tool_calls(
+        [{"function": {"name": "lookup", "arguments": '{"q":"hi"}'}}]
+    )
+
+    assert result == [ToolCall(id="", name="lookup", arguments={"q": "hi"})]
+
+
+def test_parse_tool_calls_raises_when_payload_not_list() -> None:
+    from executionkit.provider import _parse_tool_calls
+
+    with pytest.raises(ProviderError, match="payload was not a list"):
+        _parse_tool_calls("bad")
+
+
+def test_parse_tool_calls_raises_when_item_not_object() -> None:
+    from executionkit.provider import _parse_tool_calls
+
+    with pytest.raises(ProviderError, match="payload was not an object"):
+        _parse_tool_calls(["bad"])
+
+
+def test_parse_tool_calls_raises_when_function_not_object() -> None:
+    from executionkit.provider import _parse_tool_calls
+
+    with pytest.raises(ProviderError, match="function payload was not an object"):
+        _parse_tool_calls([{"function": "bad"}])
+
+
+def test_parse_tool_calls_raises_when_name_missing() -> None:
+    from executionkit.provider import _parse_tool_calls
+
+    with pytest.raises(ProviderError, match="name was missing"):
+        _parse_tool_calls([{"function": {"arguments": "{}"}}])
+
+
+def test_parse_tool_arguments_handles_none_and_dict() -> None:
+    from executionkit.provider import _parse_tool_arguments
+
+    assert _parse_tool_arguments(None) == {}
+    assert _parse_tool_arguments({"x": 1}) == {"x": 1}
+
+
+def test_parse_tool_arguments_raises_on_invalid_type() -> None:
+    from executionkit.provider import _parse_tool_arguments
+
+    with pytest.raises(ProviderError, match="dict or JSON string"):
+        _parse_tool_arguments(123)
+
+
+def test_parse_tool_arguments_raises_on_invalid_json() -> None:
+    from executionkit.provider import _parse_tool_arguments
+
+    with pytest.raises(ProviderError, match="were not valid JSON"):
+        _parse_tool_arguments("{bad json}")
+
+
+def test_parse_tool_arguments_raises_on_non_object_json() -> None:
+    from executionkit.provider import _parse_tool_arguments
+
+    with pytest.raises(ProviderError, match="decode to a JSON object"):
+        _parse_tool_arguments('["not","object"]')
+
+
+def test_load_json_handles_empty_and_valid_object() -> None:
+    from executionkit.provider import _load_json
+
+    assert _load_json(b"") == {}
+    assert _load_json(b'{"ok": true}') == {"ok": True}
+
+
+def test_load_json_raises_on_invalid_utf8_or_json() -> None:
+    from executionkit.provider import _load_json
+
+    with pytest.raises(ProviderError, match="non-JSON data"):
+        _load_json(b"\xff\xfe")
+
+    with pytest.raises(ProviderError, match="non-JSON data"):
+        _load_json(b"{bad json}")
+
+
+def test_load_json_raises_on_non_object_json() -> None:
+    from executionkit.provider import _load_json
+
+    with pytest.raises(ProviderError, match="non-object JSON payload"):
+        _load_json(b'["not","object"]')
+
+
+def test_format_http_error_uses_string_error_field() -> None:
+    from executionkit.provider import _format_http_error
+
+    result = _format_http_error(500, {"error": "token secret-abcdef failed"})
+    assert "secret-abcdef" not in result
+    assert "[REDACTED]" in result
+
+
+def test_format_http_error_falls_back_without_message() -> None:
+    from executionkit.provider import _format_http_error
+
+    assert _format_http_error(502, {"error": {"code": "bad_gateway"}}) == (
+        "Provider request failed with HTTP 502"
+    )
