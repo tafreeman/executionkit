@@ -10,7 +10,6 @@ Consensus voting · Iterative refinement · ReAct tool loops · Structured JSON 
 [![PyPI](https://img.shields.io/pypi/v/executionkit)](https://pypi.org/project/executionkit/)
 [![Release](https://img.shields.io/github/v/tag/tafreeman/executionkit?label=release)](https://github.com/tafreeman/executionkit/releases/tag/v0.1.0)
 [![CI](https://github.com/tafreeman/executionkit/actions/workflows/ci.yml/badge.svg)](https://github.com/tafreeman/executionkit/actions/workflows/ci.yml)
-[![Coverage](https://codecov.io/gh/tafreeman/executionkit/branch/main/graph/badge.svg)](https://codecov.io/gh/tafreeman/executionkit)
 [![Linting: ruff](https://img.shields.io/badge/linting-ruff-261230.svg)](https://github.com/astral-sh/ruff)
 [![Type checked: mypy](https://img.shields.io/badge/type%20checked-mypy-blue.svg)](http://mypy-lang.org/)
 [![Docs](https://img.shields.io/badge/docs-mkdocs--material-amber)](https://tafreeman.github.io/executionkit/)
