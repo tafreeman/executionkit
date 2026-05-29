@@ -8,7 +8,7 @@
 ## From PyPI
 
 ```bash
-pip install git+https://github.com/tafreeman/executionkit.git
+pip install executionkit
 ```
 
 This pulls **zero runtime dependencies** — the default backend is stdlib `urllib`.

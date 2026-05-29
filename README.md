@@ -7,6 +7,7 @@ Consensus voting · Iterative refinement · ReAct tool loops · Structured JSON 
 
 [![Python 3.11-3.13](https://img.shields.io/badge/python-3.11--3.13-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/executionkit)](https://pypi.org/project/executionkit/)
 [![Release](https://img.shields.io/github/v/tag/tafreeman/executionkit?label=release)](https://github.com/tafreeman/executionkit/releases/tag/v0.1.0)
 [![CI](https://github.com/tafreeman/executionkit/actions/workflows/ci.yml/badge.svg)](https://github.com/tafreeman/executionkit/actions/workflows/ci.yml)
 [![Coverage](https://codecov.io/gh/tafreeman/executionkit/branch/main/graph/badge.svg)](https://codecov.io/gh/tafreeman/executionkit)
@@ -58,7 +59,7 @@ flowchart TB
 ## Quick Start
 
 ```bash
-pip install git+https://github.com/tafreeman/executionkit.git
+pip install executionkit
 ```
 
 ```python
@@ -81,7 +82,7 @@ asyncio.run(main())
 **What you see when you run it:**
 
 ```console
-$ pip install git+https://github.com/tafreeman/executionkit.git
+$ pip install executionkit
 $ export OPENAI_API_KEY=<your-key>
 $ python examples/quickstart_openai.py
 Answer: Paris
@@ -90,6 +91,10 @@ Cost: TokenUsage(input_tokens=57, output_tokens=6, llm_calls=3)
 ```
 
 See the [Quick Start guide](https://tafreeman.github.io/executionkit/getting-started/quickstart/) for a complete walkthrough.
+
+## What shipped in v0.1.0
+
+**Five security fixes** in the initial release: prompt-injection sandboxing in the default evaluator via XML delimiters and 32 KB input truncation; API key masking in `Provider.__repr__`; credential redaction in HTTP error messages; information hiding in tool error returns; and supply-chain hardening with Bandit SAST + pip-audit in CI. **Six net-new features** including the `structured()` pattern, optional `httpx` pooling backend, `max_history_messages` capping, JSON Schema tool-arg validation, async context manager lifecycle for `Provider`, and MkDocs Material docs with ADRs. Full notes: [`CHANGELOG.md`](CHANGELOG.md) · [docs site](https://tafreeman.github.io/executionkit/changelog/).
 
 ## Patterns
 
@@ -113,7 +118,7 @@ See the [Quick Start guide](https://tafreeman.github.io/executionkit/getting-sta
 
 ExecutionKit targets three groups who need LLM reliability without runtime coupling:
 
-- **Platform / infra engineers** dropping a reasoning primitive into an existing service — no SDK to pin, no dependency conflict. `pip install git+https://github.com/tafreeman/executionkit.git` adds one package with zero transitive dependencies; provider swap is one constructor call.
+- **Platform / infra engineers** dropping a reasoning primitive into an existing service — no SDK to pin, no dependency conflict. `pip install executionkit` adds one package with zero transitive dependencies; provider swap is one constructor call.
 - **Solutions architects** evaluating multi-vendor strategies — the structural `LLMProvider` protocol means vendor A and vendor B are runtime-swappable with no code changes outside the constructor.
 - **AI-native teams** building beyond chat — consensus voting, iterative refinement, and ReAct tool loops are the building blocks for production-grade LLM behaviour without pulling in a full framework.
 

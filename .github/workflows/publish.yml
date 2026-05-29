@@ -83,8 +83,7 @@ jobs:
     environment:
       name: pypi
       url: https://pypi.org/project/executionkit/
-    permissions:
-      id-token: write  # required for OIDC trusted publishing
+    permissions: {}
     steps:
       - name: Download dist artifacts
         uses: actions/download-artifact@v8
@@ -92,5 +91,7 @@ jobs:
           name: dist
           path: dist/
 
-      - name: Publish to PyPI (trusted publishing)
+      - name: Publish to PyPI (API token)
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_KEY }}
