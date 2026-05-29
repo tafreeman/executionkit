@@ -6,6 +6,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+<!-- 2026-05-28 -->
+### Maintenance
+- Repository hygiene pass; no functional changes.
+- Pinned at 835c839 following CI green confirmation.
+
 ## [0.1.0] - 2026-05-22
 
 ### Security
