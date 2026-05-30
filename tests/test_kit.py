@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from types import MappingProxyType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -12,6 +12,9 @@ from executionkit._mock import MockProvider
 from executionkit.kit import Kit
 from executionkit.provider import LLMResponse
 from executionkit.types import PatternResult, TokenUsage, Tool
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -184,6 +187,28 @@ async def test_kit_react_accumulates_cost(provider: MockProvider) -> None:
     assert kit.usage.input_tokens == 25
     assert kit.usage.output_tokens == 12
     assert kit.usage.llm_calls == 3
+
+
+async def test_kit_react_rejects_non_tool_calling_provider() -> None:
+    """react() raises TypeError when the provider is not a ToolCallingProvider."""
+
+    class NoToolsProvider:
+        """Satisfies LLMProvider (has complete) but not ToolCallingProvider."""
+
+        async def complete(
+            self,
+            messages: Sequence[dict[str, Any]],
+            *,
+            temperature: float | None = None,
+            max_tokens: int | None = None,
+            tools: Sequence[dict[str, Any]] | None = None,
+            **kwargs: Any,
+        ) -> LLMResponse:
+            raise NotImplementedError
+
+    kit = Kit(NoToolsProvider())
+    with pytest.raises(TypeError, match="ToolCallingProvider"):
+        await kit.react("prompt", [])
 
 
 # ---------------------------------------------------------------------------

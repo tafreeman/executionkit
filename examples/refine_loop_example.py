@@ -77,14 +77,13 @@ async def custom_evaluator_example(provider: Provider) -> None:
 
 
 async def main() -> None:
-    provider = Provider(
+    async with Provider(
         base_url="https://api.openai.com/v1",
         api_key=os.environ["OPENAI_API_KEY"],
         model="gpt-4o-mini",
-    )
-
-    await default_evaluator_example(provider)
-    await custom_evaluator_example(provider)
+    ) as provider:
+        await default_evaluator_example(provider)
+        await custom_evaluator_example(provider)
 
 
 if __name__ == "__main__":

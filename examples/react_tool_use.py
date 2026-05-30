@@ -177,18 +177,17 @@ async def multi_tool_example(provider: ToolCallingProvider) -> None:
 
 
 async def main() -> None:
-    provider = cast(
-        "ToolCallingProvider",
-        Provider(
-            base_url="https://api.openai.com/v1",
-            api_key=os.environ["OPENAI_API_KEY"],
-            model="gpt-4o-mini",
-        ),
-    )
-
-    await calculator_example(provider)
-    await weather_example(provider)
-    await multi_tool_example(provider)
+    async with Provider(
+        base_url="https://api.openai.com/v1",
+        api_key=os.environ["OPENAI_API_KEY"],
+        model="gpt-4o-mini",
+    ) as provider:
+        # Provider supports tool calling; cast to the narrower protocol the
+        # tool-calling examples annotate against.
+        tool_provider = cast("ToolCallingProvider", provider)
+        await calculator_example(tool_provider)
+        await weather_example(tool_provider)
+        await multi_tool_example(tool_provider)
 
 
 if __name__ == "__main__":

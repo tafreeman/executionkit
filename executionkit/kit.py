@@ -9,7 +9,7 @@ from executionkit.cost import CostTracker
 from executionkit.patterns.consensus import consensus
 from executionkit.patterns.react_loop import react_loop
 from executionkit.patterns.refine_loop import refine_loop
-from executionkit.provider import LLMProvider  # noqa: TC001
+from executionkit.provider import LLMProvider, ToolCallingProvider
 from executionkit.types import PatternResult, TokenUsage, Tool
 
 if TYPE_CHECKING:
@@ -67,9 +67,16 @@ class Kit:
 
         All keyword arguments are forwarded unchanged to :func:`react_loop`.
         The provider must satisfy :class:`~executionkit.provider.ToolCallingProvider`;
-        react_loop will raise :exc:`TypeError` if it does not.
+        a :exc:`TypeError` is raised if it does not.
         """
-        result = await react_loop(self.provider, prompt, tools, **kwargs)  # type: ignore[arg-type]
+        provider = self.provider
+        if not isinstance(provider, ToolCallingProvider):
+            msg = (
+                f"react() requires a ToolCallingProvider; "
+                f"{type(provider).__name__} does not support tool calling."
+            )
+            raise TypeError(msg)
+        result = await react_loop(provider, prompt, tools, **kwargs)
         self._record(result.cost)
         return result
 

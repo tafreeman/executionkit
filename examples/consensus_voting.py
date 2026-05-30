@@ -66,15 +66,14 @@ async def low_temperature_example(provider: Provider) -> None:
 
 
 async def main() -> None:
-    provider = Provider(
+    async with Provider(
         base_url="https://api.openai.com/v1",
         api_key=os.environ["OPENAI_API_KEY"],
         model="gpt-4o-mini",
-    )
-
-    await majority_example(provider)
-    await unanimous_example(provider)
-    await low_temperature_example(provider)
+    ) as provider:
+        await majority_example(provider)
+        await unanimous_example(provider)
+        await low_temperature_example(provider)
 
 
 if __name__ == "__main__":

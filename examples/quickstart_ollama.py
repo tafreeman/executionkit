@@ -14,20 +14,19 @@ from executionkit import Provider, consensus
 
 
 async def main() -> None:
-    provider = Provider(
+    async with Provider(
         base_url="http://localhost:11434/v1",
         model="llama3.2",
-    )
+    ) as provider:
+        result = await consensus(
+            provider,
+            "What is the capital of France?",
+            num_samples=3,
+        )
 
-    result = await consensus(
-        provider,
-        "What is the capital of France?",
-        num_samples=3,
-    )
-
-    print(f"Answer: {result}")
-    print(f"Agreement: {result.metadata['agreement_ratio']:.0%}")
-    print(f"Cost: {result.cost}")
+        print(f"Answer: {result}")
+        print(f"Agreement: {result.metadata['agreement_ratio']:.0%}")
+        print(f"Cost: {result.cost}")
 
 
 if __name__ == "__main__":
