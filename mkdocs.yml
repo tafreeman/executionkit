@@ -25,14 +25,14 @@ theme:
   name: material
   palette:
     - scheme: slate
-      primary: amber
-      accent: amber
+      primary: custom
+      accent: custom
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
     - scheme: default
-      primary: amber
-      accent: amber
+      primary: custom
+      accent: custom
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
@@ -49,8 +49,12 @@ theme:
     - content.tabs.link
   icon:
     repo: fontawesome/brands/github
+  # Social card for og:image / Twitter card
+  social:
+    cards: false
 
 extra_css:
+  - stylesheets/ember.css
   - stylesheets/extra.css
 
 plugins:
@@ -129,8 +133,13 @@ nav:
       - License: license.md
 
 extra:
+  # Social preview image (og:image) — used by Material's social plugin and meta
+  og_image: assets/executionkit-social.png
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/tafreeman/executionkit
     - icon: fontawesome/brands/python
       link: https://pypi.org/project/executionkit/
+    - icon: fontawesome/solid/house
+      link: https://github.com/tafreeman
+      name: tafreeman profile

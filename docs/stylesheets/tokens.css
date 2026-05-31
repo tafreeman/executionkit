@@ -1,0 +1,269 @@
+/*
+  Andy Freeman Portfolio — Design Tokens
+  Brand: AI engineering portfolio. Linear-inspired dark theme as primary,
+  Paper & Ink editorial as secondary print/light surface.
+  Source: decks-generated/src/tokens/themes.ts (Linear, Paper & Ink themes)
+*/
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=DM+Serif+Display&display=swap");
+
+:root {
+  /* ============ PRIMARY: Console (near-black + clay) ============ */
+  /* Lifted from the Prompts UI / repo social-preview cards */
+  --bg:           #08080c;
+  --bg-deep:      #050507;
+  --surface:      #101018;
+  --surface-2:    #16161e;
+  --surface-deep: #0a0a10;
+
+  --border:       #2c2c36;
+  --border-soft:  #1d1d26;
+
+  /* Text hierarchy */
+  --fg-1:         #ececde;  /* primary cream */
+  --fg-2:         #8a8a82;  /* muted / supporting */
+  --fg-3:         #50504a;  /* dim / decorative */
+  --fg-on-accent: #0a0a10;
+
+  /* Brand accent — clay / ember */
+  --accent:       #d97757;
+  --accent-hover: #e48970;
+  --accent-press: #b8603f;
+  --accent-glow:  rgba(217, 119, 87, 0.22);
+  --accent-soft:  rgba(217, 119, 87, 0.10);
+  --accent-2:     #e8a285;  /* warm gradient pair */
+  --gradient-brand: linear-gradient(135deg, #d97757 0%, #e8a285 100%);
+
+  /* Semantic */
+  --success: #4ade80;
+  --danger:  #f87171;
+  --warning: #fbbf24;
+  --info:    #6ea8d8;
+
+  /* ============ Typography ============ */
+  --font-display: "JetBrains Mono", ui-monospace, "SF Mono", Consolas, monospace;
+  --font-body:    "JetBrains Mono", ui-monospace, "SF Mono", Consolas, monospace;
+  --font-mono:    "JetBrains Mono", ui-monospace, "SF Mono", Consolas, monospace;
+  --font-serif:   "DM Serif Display", Georgia, serif; /* used for editorial accents */
+
+  /* Type scale (px) — from decks-generated/tokens/type-scale.ts */
+  --fs-stat:    48px;
+  --fs-hero:    44px;
+  --fs-title:   32px;
+  --fs-section: 24px;
+  --fs-card:    18px;
+  --fs-body:    16px;
+  --fs-caption: 13px;
+  --fs-eyebrow: 11px;
+
+  --fw-light:   300;
+  --fw-regular: 400;
+  --fw-medium:  500;
+  --fw-semi:    600;
+  --fw-bold:    700;
+  --fw-black:   800;
+
+  --lh-tight:    1.0;
+  --lh-snug:     1.05;
+  --lh-heading:  1.12;
+  --lh-card:     1.2;
+  --lh-body:     1.6;
+  --lh-caption:  1.4;
+
+  --tracking-hero:    -0.5px;
+  --tracking-title:   -0.3px;
+  --tracking-eyebrow: 2.5px;
+  --tracking-label:   1.5px;
+
+  /* ============ Spacing — 8px grid ============ */
+  --sp-xs:   8px;
+  --sp-sm:  16px;
+  --sp-md:  24px;
+  --sp-lg:  32px;
+  --sp-xl:  48px;
+  --sp-2xl: 64px;
+  --sp-3xl: 80px;
+
+  /* ============ Radius ============ */
+  --radius-xs: 2px;
+  --radius-sm: 3px;
+  --radius-md: 4px;
+  --radius-lg: 6px;   /* card default */
+  --radius-xl: 10px;
+  --radius-pill: 999px;
+
+  /* ============ Borders ============ */
+  --border-w-1: 1px;
+  --border-accent: 3px solid var(--accent); /* signal stripe */
+
+  /* ============ Shadows ============ */
+  --shadow-soft:  0 2px 8px rgba(0,0,0,0.15), 0 1px 3px rgba(0,0,0,0.1);
+  --shadow-glow:  0 2px 8px rgba(0,0,0,0.15), 0 0 20px var(--accent-glow);
+  --shadow-pop:   0 12px 32px rgba(0,0,0,0.35), 0 2px 8px rgba(0,0,0,0.2);
+
+  /* ============ Motion ============ */
+  --ease-out:     cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out:  cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 320ms;
+}
+
+/* ============ ACCENT THEMES ============
+   Single source of truth for the selectable brand accents. Set
+   [data-accent="…"] on <html> (the Tweaks panel does this) and every
+   accent-derived token updates from here — no palette duplicated in JS.
+   Accent blocks are scoped to :root (specificity 0,2,0) so an explicit
+   accent wins over the light theme's default cobalt ([data-mode="light"],
+   0,1,0) regardless of source order, while leaving surfaces/text intact.
+   Default (no attribute): ember, inherited from :root above. */
+:root[data-accent="ember"] {
+  --accent:       #d97757;
+  --accent-hover: #e48970;
+  --accent-press: #b8603f;
+  --accent-glow:  rgba(217, 119, 87, 0.22);
+  --accent-soft:  rgba(217, 119, 87, 0.10);
+  --accent-2:     #e8a285;
+  --gradient-brand: linear-gradient(135deg, #d97757 0%, #e8a285 100%);
+}
+:root[data-accent="indigo"] {
+  --accent:       #5e6ad2;
+  --accent-hover: #6e7be5;
+  --accent-press: #4d58b8;
+  --accent-glow:  rgba(94, 106, 210, 0.22);
+  --accent-soft:  rgba(94, 106, 210, 0.10);
+  --accent-2:     #8b7ce8;
+  --gradient-brand: linear-gradient(135deg, #5e6ad2 0%, #8b7ce8 100%);
+}
+:root[data-accent="cobalt"] {
+  --accent:       #2a6fdb;
+  --accent-hover: #3c82ee;
+  --accent-press: #1f58b8;
+  --accent-glow:  rgba(42, 111, 219, 0.22);
+  --accent-soft:  rgba(42, 111, 219, 0.10);
+  --accent-2:     #6ca0ee;
+  --gradient-brand: linear-gradient(135deg, #2a6fdb 0%, #6ca0ee 100%);
+}
+:root[data-accent="mint"] {
+  --accent:       #1f8a5b;
+  --accent-hover: #2ba471;
+  --accent-press: #16704a;
+  --accent-glow:  rgba(31, 138, 91, 0.22);
+  --accent-soft:  rgba(31, 138, 91, 0.10);
+  --accent-2:     #65c4a0;
+  --gradient-brand: linear-gradient(135deg, #1f8a5b 0%, #65c4a0 100%);
+}
+
+/* ============ LIGHT — Paper & Ink (editorial / notebook) ============
+   Cream paper, ink-black text, cobalt accent. Use for docs, READMEs, print,
+   and any surface where the reader is settling in to read for >30 seconds.
+   Opt in via [data-mode="light"] on <html> or any wrapper. */
+[data-mode="light"] {
+  --bg:           #FAF8F5;
+  --bg-deep:      #F0EDE8;
+  --surface:      #FFFFFF;
+  --surface-2:    #F0EDE8;
+  --surface-deep: #ECE9E1;
+  --border:       #E2DFD8;
+  --border-soft:  #ECE9E1;
+
+  --fg-1: #1A1A2E;
+  --fg-2: #5C5C6F;
+  --fg-3: #8E8E9F;
+
+  --accent:       #1E40AF;
+  --accent-hover: #2547BF;
+  --accent-press: #16358F;
+  --accent-glow:  rgba(30,64,175,0.12);
+  --accent-soft:  rgba(30,64,175,0.06);
+  --accent-2:     #7C3AED;
+  --gradient-brand: linear-gradient(135deg, #1E40AF 0%, #7C3AED 100%);
+
+  --success: #047857;
+  --danger:  #DC2626;
+  --warning: #B45309;
+  --info:    #2563EB;
+
+  --shadow-soft: 0 1px 2px rgba(26,26,46,0.06), 0 1px 1px rgba(26,26,46,0.04);
+  --shadow-pop:  0 12px 32px rgba(26,26,46,0.10), 0 2px 6px rgba(26,26,46,0.06);
+  --shadow-glow: 0 1px 2px rgba(26,26,46,0.08), 0 0 0 3px var(--accent-glow);
+}
+
+/* ============ Semantic element styles ============ */
+html { background: var(--bg); color: var(--fg-1); }
+body {
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-regular);
+  line-height: var(--lh-body);
+  color: var(--fg-1);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, .h1 {
+  font-family: var(--font-display);
+  font-size: var(--fs-hero);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--tracking-hero);
+  line-height: var(--lh-snug);
+  color: var(--fg-1);
+}
+h2, .h2 {
+  font-family: var(--font-display);
+  font-size: var(--fs-title);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--tracking-title);
+  line-height: var(--lh-snug);
+  color: var(--fg-1);
+}
+h3, .h3 {
+  font-family: var(--font-display);
+  font-size: var(--fs-section);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-heading);
+  color: var(--fg-1);
+}
+h4, .h4 {
+  font-family: var(--font-display);
+  font-size: var(--fs-card);
+  font-weight: var(--fw-semi);
+  line-height: var(--lh-card);
+  color: var(--fg-1);
+}
+
+p {
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--fg-1);
+}
+
+.eyebrow {
+  font-size: var(--fs-eyebrow);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.caption {
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-medium);
+  letter-spacing: 0.5px;
+  line-height: var(--lh-caption);
+  color: var(--fg-2);
+}
+
+code, pre, .mono {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  font-feature-settings: "ss01", "ss02";
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+a:hover { color: var(--accent-hover); border-bottom-color: currentColor; }
