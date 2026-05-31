@@ -4,11 +4,11 @@ hide:
 description: Provider-agnostic Python library for composable LLM execution patterns. Zero runtime dependencies.
 ---
 
-<a class="ek-back" href="https://github.com/tafreeman">← tafreeman</a>
+[← tafreeman](https://github.com/tafreeman){ .ek-back }
 
 <div class="ek-hero" markdown>
 
-<span class="ek-eyebrow">Python · stdlib only · v0.1.0</span>
+[Python · stdlib only · v0.1.0]{ .ek-eyebrow }
 
 # ExecutionKit
 

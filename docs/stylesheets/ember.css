@@ -1,13 +1,11 @@
 /*
   ExecutionKit — Ember / Console design-system layer for MkDocs Material
   =======================================================================
-  This file ONLY imports the shared token source and maps those tokens onto
-  Material's custom-property hooks.  Do NOT duplicate palette values here —
-  all colours, type, spacing, and radius come from tokens.css (G3 rule:
-  one source, no drift).
+  This file maps design tokens onto Material's custom-property hooks.
+  Do NOT duplicate palette values here — all colours, type, spacing, and
+  radius come from tokens.css (G3 rule: one source, no drift).
+  tokens.css is loaded before this file via mkdocs.yml extra_css.
 */
-
-@import "./tokens.css";
 
 /* ======================================================================
    1. MATERIAL PALETTE OVERRIDES — dark (slate) scheme
@@ -320,13 +318,11 @@
 .ek-cta-primary {
   background: var(--gradient-brand);
   color: var(--fg-on-accent) !important;
-  -webkit-text-fill-color: var(--fg-on-accent);
 }
 
 .ek-cta-secondary {
   background: transparent;
   color: var(--accent) !important;
-  -webkit-text-fill-color: var(--accent);
   border: 1px solid var(--accent) !important;
 }
 
