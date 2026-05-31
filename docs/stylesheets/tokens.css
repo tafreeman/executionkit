@@ -157,8 +157,10 @@
 /* ============ LIGHT — Paper & Ink (editorial / notebook) ============
    Cream paper, ink-black text, cobalt accent. Use for docs, READMEs, print,
    and any surface where the reader is settling in to read for >30 seconds.
-   Opt in via [data-mode="light"] on <html> or any wrapper. */
-[data-mode="light"] {
+   Opt in via [data-mode="light"], or automatically when MkDocs Material's
+   palette toggle selects its light scheme ([data-md-color-scheme="default"]). */
+[data-mode="light"],
+[data-md-color-scheme="default"] {
   --bg:           #FAF8F5;
   --bg-deep:      #F0EDE8;
   --surface:      #FFFFFF;
