@@ -55,6 +55,19 @@ flowchart TB
     EK -->|"HTTP POST /chat/completions"| P
 ```
 
+> **Platform role (ADR-023).** ExecutionKit is the **OpenAI-message-format execution kernel** of the
+> stack: the runtime aligns its provider seam onto ExecutionKit's `LLMProvider` / `LLMResponse`
+> contract rather than maintaining a parallel one. The decision, migration plan, and
+> functionality-preservation matrix live in the runtime repo at
+> [`docs/adr/ADR-023-*`](https://github.com/tafreeman/agentic-runtime-platform/tree/main/docs/adr).
+> The shared value types (`LLMResponse`, `ToolCall`, `TokenUsage`, error hierarchy) are extracted
+> into the zero-dependency **`executionkit-contracts`** package so both layers depend on the same
+> shapes without copying them.
+
+> **Development note:** Built with AI-assisted development under human review; architecture, tests,
+> release gates, and public documentation remain maintainer-owned and verified through the repo's
+> lint, type, test, and security checks.
+
 ## Quick Start
 
 ```bash
@@ -72,7 +85,7 @@ async def main() -> None:
         api_key=os.environ["OPENAI_API_KEY"],
         model="gpt-4o-mini",
     ) as provider:
-        result = await consensus(provider, "Classify this ticket: ...", num_samples=5)
+        result = await consensus(provider, "What is the capital of France?", num_samples=5)
         print(result.value, result.metadata["agreement_ratio"], result.cost)
 
 asyncio.run(main())

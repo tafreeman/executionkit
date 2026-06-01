@@ -83,7 +83,8 @@ jobs:
     environment:
       name: pypi
       url: https://pypi.org/project/executionkit/
-    permissions: {}
+    permissions:
+      id-token: write
     steps:
       - name: Download dist artifacts
         uses: actions/download-artifact@v8
@@ -91,7 +92,5 @@ jobs:
           name: dist
           path: dist/
 
-      - name: Publish to PyPI (API token)
+      - name: Publish to PyPI (trusted publishing)
         uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          password: ${{ secrets.PYPI_KEY }}
