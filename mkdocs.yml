@@ -49,13 +49,13 @@ theme:
     - content.tabs.link
   icon:
     repo: fontawesome/brands/github
-  # Social card for og:image / Twitter card
-  social:
-    cards: false
+  # Note: social cards are NOT enabled here. To generate og:image/Twitter card
+  # meta tags, add the 'social' plugin under `plugins:` and install cairosvg+pillow.
 
 extra_css:
-  - stylesheets/ember.css
-  - stylesheets/extra.css
+  - stylesheets/tokens.css   # design-token variables — must load before ember.css
+  - stylesheets/extra.css    # legacy overrides (loaded before ember so ember wins)
+  - stylesheets/ember.css    # ember/console design layer — must be last to win cascade
 
 plugins:
   - search

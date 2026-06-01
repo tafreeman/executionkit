@@ -5,7 +5,8 @@
   Source: decks-generated/src/tokens/themes.ts (Linear, Paper & Ink themes)
 */
 
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=DM+Serif+Display&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=DM+Serif+Display&display=swap");
+/* Note: Inter was removed — it is not referenced by any font token (--font-body/display/mono all use JetBrains Mono). */
 
 :root {
   /* ============ PRIMARY: Console (near-black + clay) ============ */
