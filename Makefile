@@ -19,7 +19,7 @@ type-check:
 	mypy --strict executionkit/
 
 test:
-	pytest -m "not integration"
+	pytest
 
 coverage:
 	pytest --cov=executionkit --cov-fail-under=80

@@ -49,22 +49,20 @@ pre-commit run --all-files
 ## Running the Test Suite
 
 ```bash
-# Unit tests only — no real API calls
-python -m pytest -m "not integration"
+# Unit tests and deterministic smoke tests — no real API calls
+python -m pytest
 
 # With coverage report — must stay above 80%
 python -m pytest --cov=executionkit --cov-fail-under=80
-
-# Full integration tests (requires real API keys)
-OPENAI_API_KEY=sk-... python -m pytest -m integration
 ```
 
 Coverage is enforced in CI via `fail_under = 80` in `pyproject.toml`. New code
 must include tests — follow TDD: write the test first (RED), implement to pass
 (GREEN), then refactor (IMPROVE).
 
-Use `MockProvider` from `executionkit._mock` in unit tests. Never make real API
-calls in non-integration tests.
+Use `MockProvider` from `executionkit._mock` in tests. The public test suite is
+deterministic and does not call live LLM APIs; add a separately documented
+manual smoke script before introducing provider-backed tests.
 
 ## Code Quality
 

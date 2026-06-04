@@ -62,9 +62,10 @@ flowchart TB
 > functionality-preservation matrix live in the runtime repo at
 > [`docs/adr/ADR-023-*`](https://github.com/tafreeman/agentic-runtime-platform/tree/main/docs/adr).
 > The shared value types (`LLMResponse`, `ToolCall`, `TokenUsage`) and the error
-> hierarchy live directly in `executionkit/`. A dedicated `executionkit-contracts`
-> package is planned (see ADR-023 in tafreeman/agentic-runtime-platform) for
-> when agentic-runtime-platform depends on executionkit directly.
+> hierarchy live directly in `executionkit/` today. ADR-023 reserves a future
+> extraction path if agentic-runtime-platform ever needs a separate contracts
+> package, but there is no standalone `executionkit-contracts` distribution in
+> v0.1.0.
 
 > **Development note:** Built with AI-assisted development under human review; architecture, tests,
 > release gates, and public documentation remain maintainer-owned and verified through the repo's

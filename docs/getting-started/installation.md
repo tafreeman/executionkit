@@ -53,9 +53,8 @@ The docs extra includes MkDocs Material, mkdocstrings, and Mermaid support used 
 ## Run the test suite
 
 ```bash
-pytest -m "not integration"                              # unit tests, no API keys
+pytest                                                   # deterministic tests, no API keys
 pytest --cov=executionkit --cov-fail-under=80            # full suite with coverage
-OPENAI_API_KEY=sk-... pytest -m integration              # live API tests
 ```
 
 ## Next

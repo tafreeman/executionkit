@@ -40,14 +40,14 @@ jobs:
         run: mypy --strict executionkit/
 
       - name: Tests with coverage
-        run: pytest tests/ --cov=executionkit --cov-report=term-missing --cov-report=xml --cov-fail-under=80 -x -q
+        run: pytest tests/ --cov=executionkit --cov-report=term-missing --cov-report=xml --cov-fail-under=80 -q
 
       - name: Upload coverage to Codecov
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
         uses: codecov/codecov-action@v6
         with:
           files: ./coverage.xml
-          fail_ci_if_error: false
+          fail_ci_if_error: true
 
   security:
     name: "Security scan (Bandit)"

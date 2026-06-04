@@ -4,7 +4,7 @@ ExecutionKit ships **five composable pattern utilities**. Each is a single async
 
 | Pattern | Use when… | Cost shape |
 |---------|-----------|------------|
-| [Consensus](consensus.md) | You need to reduce hallucination on a factual or classification answer. | `O(num_samples)` parallel calls. |
+| [Consensus](consensus.md) | You need agreement scoring across multiple independent factual or classification samples. | `O(num_samples)` parallel calls. |
 | [Iterative Refinement](iterative-refinement.md) | Quality of the answer matters more than latency, and you can score it. | Up to `O(2 × (1 + max_iterations))` calls with the default evaluator; fewer with a non-LLM evaluator. |
 | [ReAct Tool Loop](react-loop.md) | The model needs to call tools to gather information before answering. | `O(rounds)` sequential calls; bounded by `max_rounds`. |
 | [Structured Output](structured.md) | You need a JSON object or array with optional validation and repair. | `1 + max_retries` sequential calls in the worst case. |
@@ -18,7 +18,7 @@ flowchart TD
     B -- yes --> C[ReAct Tool Loop]
     B -- no --> D{Can you score<br/>answer quality?}
     D -- yes --> E[Iterative Refinement]
-    D -- no --> F{Need to reduce<br/>hallucination?}
+    D -- no --> F{Need agreement<br/>scoring?}
     F -- yes --> G[Consensus]
     F -- no --> K{Need JSON<br/>with validation?}
     K -- yes --> L[Structured Output]

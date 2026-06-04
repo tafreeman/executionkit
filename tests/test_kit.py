@@ -270,11 +270,11 @@ async def test_kit_usage_accumulates_across_different_patterns(
 
 
 # ---------------------------------------------------------------------------
-# Integration smoke test (uses real MockProvider without patching)
+# Deterministic smoke tests (use real MockProvider without patching)
 # ---------------------------------------------------------------------------
 
 
-async def test_kit_consensus_integration_with_mock_provider() -> None:
+async def test_kit_consensus_smoke_with_mock_provider() -> None:
     """End-to-end: Kit.consensus calls through with MockProvider."""
     # consensus runs 5 samples by default; provide 5 identical answers
     p = MockProvider(responses=["the answer"] * 5)
@@ -286,7 +286,7 @@ async def test_kit_consensus_integration_with_mock_provider() -> None:
     assert kit.usage.input_tokens >= 0
 
 
-async def test_kit_pipe_integration_no_steps() -> None:
+async def test_kit_pipe_smoke_no_steps() -> None:
     """pipe with no steps returns prompt unchanged."""
     p = MockProvider(responses=[])
     kit = Kit(p)

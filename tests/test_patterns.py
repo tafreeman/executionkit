@@ -1142,7 +1142,7 @@ class TestParseScore:
 
 
 # ---------------------------------------------------------------------------
-# _default_evaluator integration tests — Group B
+# _default_evaluator deterministic smoke tests — Group B
 # ---------------------------------------------------------------------------
 
 

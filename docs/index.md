@@ -27,7 +27,7 @@ description: Provider-agnostic Python library for composable LLM execution patte
 
 <div class="ek-card" markdown>
 ### [Consensus](patterns/consensus.md)
-Run *N* independent calls, score agreement, return the majority answer with confidence. Reduces hallucination on factual questions.
+Run *N* independent calls, score agreement, and return the majority answer with confidence. This can reduce answer variance on factual questions when the provider samples independently.
 </div>
 
 <div class="ek-card" markdown>
