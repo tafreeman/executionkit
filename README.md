@@ -60,9 +60,10 @@ flowchart TB
 > contract rather than maintaining a parallel one. The decision, migration plan, and
 > functionality-preservation matrix live in the runtime repo at
 > [`docs/adr/ADR-023-*`](https://github.com/tafreeman/agentic-runtime-platform/tree/main/docs/adr).
-> The shared value types (`LLMResponse`, `ToolCall`, `TokenUsage`, error hierarchy) are extracted
-> into the zero-dependency **`executionkit-contracts`** package so both layers depend on the same
-> shapes without copying them.
+> The shared value types (`LLMResponse`, `ToolCall`, `TokenUsage`) and the error
+> hierarchy live directly in `executionkit/`. A dedicated `executionkit-contracts`
+> package is planned (see ADR-023 in tafreeman/agentic-runtime-platform) for
+> when agentic-runtime-platform depends on executionkit directly.
 
 > **Development note:** Built with AI-assisted development under human review; architecture, tests,
 > release gates, and public documentation remain maintainer-owned and verified through the repo's
