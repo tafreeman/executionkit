@@ -47,7 +47,9 @@ jobs:
         uses: codecov/codecov-action@v6
         with:
           files: ./coverage.xml
-          fail_ci_if_error: true
+          # The enforced gate is pytest's --cov-fail-under=80 above. Codecov
+          # upload stays advisory until the repository has a Codecov token.
+          fail_ci_if_error: false
 
   security:
     name: "Security scan (Bandit)"
