@@ -239,13 +239,17 @@ async def _execute_tool_calls_round(
     metadata: dict[str, Any],
     messages: list[dict[str, Any]],
 ) -> None:
-    """Execute all tool calls from one round, appending observations to *messages*.
+    """Execute one round's tool calls concurrently, appending observations.
 
-    Mutates *metadata* (tool_calls_made, truncated_observations) and *messages*
-    in place — both are owned by the caller (react_loop).
+    Tool calls within a round are independent, so they run concurrently via
+    ``asyncio.gather``; results are then applied in the original request order
+    so the conversation and metadata stay deterministic. Mutates *metadata*
+    (tool_calls_made, truncated_observations) and *messages* in place — both are
+    owned by the caller (react_loop). ``_execute_tool_call`` never raises (it
+    returns error strings), so one failing tool cannot abort the round.
     """
-    for tc in tool_calls:
-        metadata["tool_calls_made"] = int(metadata["tool_calls_made"]) + 1
+
+    async def _run_one(tc: Any) -> tuple[Any, str]:
         observation = await _execute_tool_call(
             tc_name=tc.name,
             tc_arguments=tc.arguments,
@@ -253,6 +257,12 @@ async def _execute_tool_calls_round(
             tool_timeout=tool_timeout,
             max_observation_chars=max_observation_chars,
         )
+        return tc, observation
+
+    results = await asyncio.gather(*[_run_one(tc) for tc in tool_calls])
+
+    for tc, observation in results:
+        metadata["tool_calls_made"] = int(metadata["tool_calls_made"]) + 1
         if observation.endswith("\n[truncated]"):
             metadata["truncated_observations"] = (
                 int(metadata["truncated_observations"]) + 1
