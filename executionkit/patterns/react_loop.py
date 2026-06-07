@@ -33,6 +33,47 @@ _JSON_SCHEMA_TYPE_MAP: dict[str, type | tuple[type, ...]] = {
 }
 
 
+def _check_required_args(required: list[str], arguments: dict[str, Any]) -> str | None:
+    """Return an error string if any required argument is missing, else None."""
+    for key in required:
+        if key not in arguments:
+            return f"Missing required argument: '{key}'"
+    return None
+
+
+def _check_additional_args(
+    props: dict[str, Any],
+    additional: bool | dict[str, Any],
+    arguments: dict[str, Any],
+) -> str | None:
+    """Return an error string if additionalProperties is False and an extra key
+    is present, else None."""
+    if additional is not False:
+        return None
+    for key in arguments:
+        if key not in props:
+            return f"Unexpected argument: '{key}' (additionalProperties is false)"
+    return None
+
+
+def _check_arg_type(key: str, value: Any, prop_schema: dict[str, Any]) -> str | None:
+    """Return an error string if *value* does not match the JSON Schema type for
+    *key*, else None.  Returns None immediately when no mapped type is declared."""
+    expected_type: str | None = prop_schema.get("type")
+    if not expected_type or expected_type not in _JSON_SCHEMA_TYPE_MAP:
+        return None
+    # bool is a subclass of int in Python, so isinstance(True, int) is True.
+    # Reject booleans explicitly when an integer or number is expected.
+    if expected_type in ("integer", "number") and isinstance(value, bool):
+        return f"Argument '{key}' expected type '{expected_type}', got bool"
+    if not isinstance(value, _JSON_SCHEMA_TYPE_MAP[expected_type]):
+        return (
+            f"Argument '{key}' expected type '{expected_type}', "
+            f"got {type(value).__name__}"
+        )
+    return None
+
+
 def _validate_tool_args(
     parameters_schema: Mapping[str, Any], arguments: dict[str, Any]
 ) -> str | None:
@@ -43,28 +84,21 @@ def _validate_tool_args(
         "additionalProperties", True
     )
 
-    for key in required:
-        if key not in arguments:
-            return f"Missing required argument: '{key}'"
+    error = _check_required_args(required, arguments)
+    if error is not None:
+        return error
 
-    if additional is False:
-        for key in arguments:
-            if key not in props:
-                return f"Unexpected argument: '{key}' (additionalProperties is false)"
+    error = _check_additional_args(props, additional, arguments)
+    if error is not None:
+        return error
 
     for key, value in arguments.items():
-        if key in props:
-            expected_type = props[key].get("type")
-            if expected_type and expected_type in _JSON_SCHEMA_TYPE_MAP:
-                # bool is a subclass of int in Python, so isinstance(True, int) is True.
-                # Reject booleans explicitly when an integer or number is expected.
-                if expected_type in ("integer", "number") and isinstance(value, bool):
-                    return f"Argument '{key}' expected type '{expected_type}', got bool"
-                if not isinstance(value, _JSON_SCHEMA_TYPE_MAP[expected_type]):
-                    return (
-                        f"Argument '{key}' expected type '{expected_type}', "
-                        f"got {type(value).__name__}"
-                    )
+        if key not in props:
+            continue
+        error = _check_arg_type(key, value, props[key])
+        if error is not None:
+            return error
+
     return None
 
 
@@ -148,6 +182,144 @@ def _trim_messages(
     return [messages[0], *tail]
 
 
+def _validate_react_loop_args(
+    provider: ToolCallingProvider,
+    max_rounds: int,
+    max_observation_chars: int,
+    tool_timeout: float | None,
+    max_tokens: int,
+    max_history_messages: int | None,
+) -> None:
+    """Raise ValueError / TypeError for invalid react_loop arguments."""
+    if not isinstance(provider, ToolCallingProvider) or not getattr(
+        provider, "supports_tools", False
+    ):
+        raise TypeError(
+            "react_loop() requires a ToolCallingProvider. "
+            "Ensure the provider has supports_tools = True."
+        )
+    if max_rounds < 1:
+        raise ValueError(f"max_rounds must be >= 1, got {max_rounds}")
+    if max_observation_chars < 1:
+        raise ValueError(
+            f"max_observation_chars must be >= 1, got {max_observation_chars}"
+        )
+    if tool_timeout is not None and tool_timeout <= 0:
+        raise ValueError(f"tool_timeout must be > 0, got {tool_timeout}")
+    if max_tokens < 1:
+        raise ValueError(f"max_tokens must be >= 1, got {max_tokens}")
+    if max_history_messages is not None and max_history_messages < 1:
+        raise ValueError(
+            f"max_history_messages must be >= 1, got {max_history_messages}"
+        )
+
+
+def _build_assistant_message(response: Any) -> dict[str, Any]:
+    """Build the assistant-role message dict from an LLM response with tool calls."""
+    return {
+        "role": "assistant",
+        "content": response.content or None,
+        "tool_calls": [
+            {
+                "id": tc.id,
+                "type": "function",
+                "function": {
+                    "name": tc.name,
+                    "arguments": json.dumps(tc.arguments),
+                },
+            }
+            for tc in response.tool_calls
+        ],
+    }
+
+
+async def _execute_tool_calls_round(
+    tool_calls: Any,
+    tool_lookup: dict[str, Tool],
+    tool_timeout: float | None,
+    max_observation_chars: int,
+    metadata: dict[str, Any],
+    messages: list[dict[str, Any]],
+    *,
+    trace: TraceCallback | None = None,
+    approval_gate: ApprovalGate | None = None,
+) -> None:
+    """Execute one round's tool calls concurrently, appending observations.
+
+    Tool calls within a round are independent, so they run concurrently via
+    ``asyncio.gather``; results are then applied in the original request order
+    so the conversation and metadata stay deterministic. Mutates *metadata*
+    (tool_calls_made, truncated_observations) and *messages* in place — both are
+    owned by the caller (react_loop). ``_execute_tool_call`` never raises (it
+    returns error strings), so one failing tool cannot abort the round.
+
+    When *approval_gate* is supplied, each call is checked before its body runs;
+    a denial becomes a bounded observation instead of executing the tool. When
+    *trace* is supplied, ``tool_call_start``/``tool_call_end`` events are emitted
+    around each call. Both run inside the concurrent fan-out, so trace events may
+    interleave across calls; metadata is still applied in request order below.
+    """
+
+    async def _run_one(tc: Any) -> tuple[Any, str]:
+        await emit_trace(
+            trace,
+            TraceEvent.create(
+                "tool_call_start",
+                {"tool_name": tc.name, "tool_call_id": tc.id},
+            ),
+        )
+        decision = (
+            await approval_gate.request(
+                ApprovalRequest.create(
+                    "tool_call",
+                    tc.name,
+                    {"tool_call_id": tc.id, "arguments": tc.arguments},
+                )
+            )
+            if approval_gate is not None
+            else None
+        )
+        if decision is not None and not decision.approved:
+            suffix = f": {decision.reason}" if decision.reason else ""
+            observation = f"Tool '{tc.name}' blocked by approval{suffix}"
+        else:
+            observation = await _execute_tool_call(
+                tc_name=tc.name,
+                tc_arguments=tc.arguments,
+                tool_lookup=tool_lookup,
+                tool_timeout=tool_timeout,
+                max_observation_chars=max_observation_chars,
+            )
+        await emit_trace(
+            trace,
+            TraceEvent.create(
+                "tool_call_end",
+                {
+                    "tool_name": tc.name,
+                    "tool_call_id": tc.id,
+                    "blocked": decision is not None and not decision.approved,
+                },
+            ),
+        )
+        return tc, observation
+
+    results = await asyncio.gather(*[_run_one(tc) for tc in tool_calls])
+
+    for tc, observation in results:
+        metadata["tool_calls_made"] = int(metadata["tool_calls_made"]) + 1
+        if observation.endswith("\n[truncated]"):
+            metadata["truncated_observations"] = (
+                int(metadata["truncated_observations"]) + 1
+            )
+        messages.append(
+            {
+                "role": "tool",
+                "tool_call_id": tc.id,
+                "content": observation,
+            }
+        )
+
+
 async def react_loop(
     provider: ToolCallingProvider,
     prompt: str,
@@ -205,27 +377,14 @@ async def react_loop(
             ``max_observation_chars``.
         messages_trimmed (int): Number of rounds where history was trimmed.
     """
-    if not isinstance(provider, ToolCallingProvider) or not getattr(
-        provider, "supports_tools", False
-    ):
-        raise TypeError(
-            "react_loop() requires a ToolCallingProvider. "
-            "Ensure the provider has supports_tools = True."
-        )
-    if max_rounds < 1:
-        raise ValueError(f"max_rounds must be >= 1, got {max_rounds}")
-    if max_observation_chars < 1:
-        raise ValueError(
-            f"max_observation_chars must be >= 1, got {max_observation_chars}"
-        )
-    if tool_timeout is not None and tool_timeout <= 0:
-        raise ValueError(f"tool_timeout must be > 0, got {tool_timeout}")
-    if max_tokens < 1:
-        raise ValueError(f"max_tokens must be >= 1, got {max_tokens}")
-    if max_history_messages is not None and max_history_messages < 1:
-        raise ValueError(
-            f"max_history_messages must be >= 1, got {max_history_messages}"
-        )
+    _validate_react_loop_args(
+        provider,
+        max_rounds,
+        max_observation_chars,
+        tool_timeout,
+        max_tokens,
+        max_history_messages,
+    )
     tracker = CostTracker()
     metadata: dict[str, Any] = {
         "rounds": 0,
@@ -269,78 +428,19 @@ async def react_loop(
             )
 
         # Append assistant message with tool calls to conversation
-        assistant_msg: dict[str, Any] = {
-            "role": "assistant",
-            "content": response.content or None,
-            "tool_calls": [
-                {
-                    "id": tc.id,
-                    "type": "function",
-                    "function": {
-                        "name": tc.name,
-                        "arguments": json.dumps(tc.arguments),
-                    },
-                }
-                for tc in response.tool_calls
-            ],
-        }
-        messages.append(assistant_msg)
+        messages.append(_build_assistant_message(response))
 
         # Execute each tool call and append results
-        for tc in response.tool_calls:
-            metadata["tool_calls_made"] = int(metadata["tool_calls_made"]) + 1
-            await emit_trace(
-                trace,
-                TraceEvent.create(
-                    "tool_call_start",
-                    {"tool_name": tc.name, "tool_call_id": tc.id},
-                ),
-            )
-            if approval_gate is not None:
-                decision = await approval_gate.request(
-                    ApprovalRequest.create(
-                        "tool_call",
-                        tc.name,
-                        {"tool_call_id": tc.id, "arguments": tc.arguments},
-                    )
-                )
-            else:
-                decision = None
-
-            if decision is not None and not decision.approved:
-                suffix = f": {decision.reason}" if decision.reason else ""
-                observation = f"Tool '{tc.name}' blocked by approval{suffix}"
-            else:
-                observation = await _execute_tool_call(
-                    tc_name=tc.name,
-                    tc_arguments=tc.arguments,
-                    tc_id=tc.id,
-                    tool_lookup=tool_lookup,
-                    tool_timeout=tool_timeout,
-                    max_observation_chars=max_observation_chars,
-                )
-            await emit_trace(
-                trace,
-                TraceEvent.create(
-                    "tool_call_end",
-                    {
-                        "tool_name": tc.name,
-                        "tool_call_id": tc.id,
-                        "blocked": decision is not None and not decision.approved,
-                    },
-                ),
-            )
-            if observation.endswith("\n[truncated]"):
-                metadata["truncated_observations"] = (
-                    int(metadata["truncated_observations"]) + 1
-                )
-            messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": tc.id,
-                    "content": observation,
-                }
-            )
+        await _execute_tool_calls_round(
+            response.tool_calls,
+            tool_lookup,
+            tool_timeout,
+            max_observation_chars,
+            metadata,
+            messages,
+            trace=trace,
+            approval_gate=approval_gate,
+        )
 
     raise MaxIterationsError(
         "react_loop() reached max_rounds without a final answer",
@@ -353,7 +453,6 @@ async def _execute_tool_call(
     *,
     tc_name: str,
     tc_arguments: dict[str, Any],
-    tc_id: str,
     tool_lookup: dict[str, Tool],
     tool_timeout: float | None,
     max_observation_chars: int,
@@ -366,7 +465,6 @@ async def _execute_tool_call(
     Args:
         tc_name: Tool name requested by the LLM.
         tc_arguments: Parsed arguments for the tool.
-        tc_id: The tool call identifier.
         tool_lookup: Registry mapping tool names to :class:`Tool` instances.
         tool_timeout: Per-call timeout override (``None`` uses tool default).
         max_observation_chars: Truncation limit for the result string.

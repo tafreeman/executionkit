@@ -557,6 +557,46 @@ class TestReactLoop:
         assert isinstance(result, PatternResult)
         assert "42" in result.value
 
+    async def test_tool_calls_in_one_round_run_concurrently(self) -> None:
+        import asyncio
+        import time
+
+        from executionkit.patterns.react_loop import react_loop
+
+        async def _slow(query: str) -> str:
+            await asyncio.sleep(0.2)
+            return f"done:{query}"
+
+        slow_tool = Tool(
+            name="search",
+            description="Slow search",
+            parameters={
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+                "required": ["query"],
+            },
+            execute=_slow,
+        )
+        multi = LLMResponse(
+            content="",
+            finish_reason="tool_calls",
+            tool_calls=(
+                ToolCall(id="tc1", name="search", arguments={"query": "a"}),
+                ToolCall(id="tc2", name="search", arguments={"query": "b"}),
+                ToolCall(id="tc3", name="search", arguments={"query": "c"}),
+            ),
+            usage=MappingProxyType({"prompt_tokens": 10, "completion_tokens": 5}),
+        )
+        provider = MockProvider(responses=[multi, _make_final_response("done")])
+
+        start = time.perf_counter()
+        result = await react_loop(provider, "go", tools=[slow_tool], max_rounds=4)
+        elapsed = time.perf_counter() - start
+
+        assert result.metadata["tool_calls_made"] == 3
+        # Three 0.2s tools run concurrently (~0.2s); sequential would be ~0.6s.
+        assert elapsed < 0.45, f"tool calls ran sequentially ({elapsed:.2f}s)"
+
     async def test_multiple_tool_rounds_before_final_answer(self) -> None:
         from executionkit.patterns.react_loop import react_loop
 
@@ -1494,7 +1534,6 @@ class TestPatternInputValidation:
         result = await _execute_tool_call(
             tc_name="tiny",
             tc_arguments={},
-            tc_id="tc1",
             tool_lookup={"tiny": tool},
             tool_timeout=None,
             max_observation_chars=1,

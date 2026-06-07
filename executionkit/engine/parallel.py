@@ -33,10 +33,7 @@ async def gather_resilient(
         async with semaphore:
             return await coro
 
-    try:
-        return await asyncio.gather(*[_run(c) for c in coros], return_exceptions=True)
-    except asyncio.CancelledError:
-        raise
+    return await asyncio.gather(*[_run(c) for c in coros], return_exceptions=True)
 
 
 async def gather_strict(

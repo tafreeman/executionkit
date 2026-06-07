@@ -372,6 +372,31 @@ def _first_choice(data: dict[str, Any]) -> dict[str, Any]:
     return choice
 
 
+def _extract_text_value(text: Any) -> str | None:
+    """Return the string value nested inside a ``text`` field, or ``None``."""
+    if isinstance(text, str):
+        return text
+    if isinstance(text, dict):
+        value = text.get("value")
+        if isinstance(value, str):
+            return value
+    return None
+
+
+def _extract_content_item(item: Any) -> str | None:
+    """Return the text contribution of a single content-list item, or ``None``."""
+    if isinstance(item, str):
+        return item
+    if not isinstance(item, dict):
+        return None
+    if item.get("type") in {"text", "output_text"}:
+        return _extract_text_value(item.get("text"))
+    value = item.get("value")
+    if isinstance(value, str):
+        return value
+    return None
+
+
 def _extract_content(content: Any) -> str:
     if content is None:
         return ""
@@ -380,21 +405,9 @@ def _extract_content(content: Any) -> str:
     if isinstance(content, list):
         parts: list[str] = []
         for item in content:
-            if isinstance(item, str):
-                parts.append(item)
-                continue
-            if not isinstance(item, dict):
-                continue
-            if item.get("type") in {"text", "output_text"}:
-                text = item.get("text")
-                if isinstance(text, str):
-                    parts.append(text)
-                elif isinstance(text, dict):
-                    value = text.get("value")
-                    if isinstance(value, str):
-                        parts.append(value)
-            elif isinstance(item.get("value"), str):
-                parts.append(str(item["value"]))
+            part = _extract_content_item(item)
+            if part is not None:
+                parts.append(part)
         return "".join(parts)
     return str(content)
 
