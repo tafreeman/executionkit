@@ -52,7 +52,7 @@ def _subtract(total: TokenUsage, used: TokenUsage) -> TokenUsage:
         if budget == 0:  # unlimited field — preserve it
             return 0
         remaining = budget - spent
-        return remaining if remaining > 0 else -1  # -1 = exhausted
+        return remaining if remaining > 0 else -1  # -1 means exhausted
 
     return TokenUsage(
         input_tokens=_remaining(total.input_tokens, used.input_tokens),

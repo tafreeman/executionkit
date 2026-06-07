@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from executionkit._mock import MockProvider
 from executionkit.compose import PatternStep, pipe
@@ -42,7 +42,7 @@ from executionkit.types import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Coroutine, Sequence
 
 __version__ = "0.1.0"
 
@@ -95,7 +95,10 @@ __all__ = [
 # ---------------------------------------------------------------------------
 
 
-def _run_sync(coro: Any) -> Any:
+_T = TypeVar("_T")
+
+
+def _run_sync(coro: Coroutine[Any, Any, _T]) -> _T:
     """Run a coroutine synchronously, raising a helpful error in async contexts."""
     try:
         loop = asyncio.get_running_loop()
@@ -119,16 +122,14 @@ def consensus_sync(
     provider: LLMProvider, prompt: str, **kwargs: Any
 ) -> PatternResult[str]:
     """Synchronous wrapper for :func:`consensus`."""
-    return cast("PatternResult[str]", _run_sync(consensus(provider, prompt, **kwargs)))
+    return _run_sync(consensus(provider, prompt, **kwargs))
 
 
 def refine_loop_sync(
     provider: LLMProvider, prompt: str, **kwargs: Any
 ) -> PatternResult[str]:
     """Synchronous wrapper for :func:`refine_loop`."""
-    return cast(
-        "PatternResult[str]", _run_sync(refine_loop(provider, prompt, **kwargs))
-    )
+    return _run_sync(refine_loop(provider, prompt, **kwargs))
 
 
 def react_loop_sync(
@@ -138,26 +139,18 @@ def react_loop_sync(
     **kwargs: Any,
 ) -> PatternResult[str]:
     """Synchronous wrapper for :func:`react_loop`."""
-    return cast(
-        "PatternResult[str]",
-        _run_sync(react_loop(provider, prompt, tools, **kwargs)),
-    )
+    return _run_sync(react_loop(provider, prompt, tools, **kwargs))
 
 
 def pipe_sync(
     provider: LLMProvider, prompt: str, *steps: Any, **kwargs: Any
 ) -> PatternResult[Any]:
     """Synchronous wrapper for :func:`pipe`."""
-    return cast(
-        "PatternResult[Any]", _run_sync(pipe(provider, prompt, *steps, **kwargs))
-    )
+    return _run_sync(pipe(provider, prompt, *steps, **kwargs))
 
 
 def structured_sync(
     provider: LLMProvider, prompt: str, **kwargs: Any
 ) -> PatternResult[Any]:
     """Synchronous wrapper for :func:`structured`."""
-    return cast(
-        "PatternResult[Any]",
-        _run_sync(structured(provider, prompt, **kwargs)),
-    )
+    return _run_sync(structured(provider, prompt, **kwargs))

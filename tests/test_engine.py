@@ -629,6 +629,26 @@ class TestExtractJson:
         result = extract_json(text)
         assert result == {"x": 1}
 
+    def test_unterminated_fence_falls_back_to_balanced(self) -> None:
+        # Opening fence with no closing ``` must still recover the JSON via
+        # balanced extraction (and must not hang).
+        result = extract_json('```json\n{"a": 1}')
+        assert result == {"a": 1}
+
+    def test_unterminated_fence_large_input_is_linear(self) -> None:
+        # Regression guard for the ReDoS hotspot (python:S5852): an unterminated
+        # fence over a large whitespace run used to trigger polynomial regex
+        # backtracking. The str.find-based scan is linear, so this completes
+        # near-instantly; the generous bound only catches a backtracking
+        # regression, not normal timing jitter.
+        import time
+
+        text = "```json" + " " * 2_000_000  # unterminated fence, no JSON
+        start = time.perf_counter()
+        with pytest.raises(ValueError):
+            extract_json(text)
+        assert time.perf_counter() - start < 2.0
+
 
 # ---------------------------------------------------------------------------
 # _truncate (react_loop utility)

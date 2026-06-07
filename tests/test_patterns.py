@@ -1438,7 +1438,6 @@ class TestPatternInputValidation:
         result = await _execute_tool_call(
             tc_name="tiny",
             tc_arguments={},
-            tc_id="tc1",
             tool_lookup={"tiny": tool},
             tool_timeout=None,
             max_observation_chars=1,
