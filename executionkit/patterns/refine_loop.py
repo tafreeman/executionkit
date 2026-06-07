@@ -218,8 +218,10 @@ async def refine_loop(
     )
 
     # Build default evaluator if none provided
-    actual_evaluator: Evaluator = evaluator if evaluator is not None else (
-        _make_default_evaluator(max_eval_chars, tracker, max_cost, retry)
+    actual_evaluator: Evaluator = (
+        evaluator
+        if evaluator is not None
+        else (_make_default_evaluator(max_eval_chars, tracker, max_cost, retry))
     )
 
     # Step 1: Generate initial response

@@ -31,9 +31,7 @@ _JSON_SCHEMA_TYPE_MAP: dict[str, type | tuple[type, ...]] = {
 }
 
 
-def _check_required_args(
-    required: list[str], arguments: dict[str, Any]
-) -> str | None:
+def _check_required_args(required: list[str], arguments: dict[str, Any]) -> str | None:
     """Return an error string if any required argument is missing, else None."""
     for key in required:
         if key not in arguments:
@@ -322,7 +320,11 @@ async def react_loop(
         messages_trimmed (int): Number of rounds where history was trimmed.
     """
     _validate_react_loop_args(
-        provider, max_rounds, max_observation_chars, tool_timeout, max_tokens,
+        provider,
+        max_rounds,
+        max_observation_chars,
+        tool_timeout,
+        max_tokens,
         max_history_messages,
     )
     tracker = CostTracker()
