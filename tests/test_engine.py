@@ -649,6 +649,13 @@ class TestExtractJson:
             extract_json(text)
         assert time.perf_counter() - start < 2.0
 
+    def test_skips_invalid_braces_before_valid_json(self) -> None:
+        # A balanced-but-invalid brace block (e.g. a format hint) before the
+        # real JSON must be skipped, not cause a hard failure.
+        text = 'Use the format {key: value}. Here is the data: {"a": 1}'
+        result = extract_json(text)
+        assert result == {"a": 1}
+
 
 # ---------------------------------------------------------------------------
 # _truncate (react_loop utility)

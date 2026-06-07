@@ -94,23 +94,18 @@ def _fenced_candidates(text: str) -> list[str]:
     return candidates
 
 
-def _first_opener(text: str) -> int:
-    """Return the index of the first ``{`` or ``[`` in *text*.
+def _next_opener(text: str, start: int = 0) -> int:
+    """Return the index of the first ``{`` or ``[`` at or after *start*.
 
     Args:
         text: Raw text to search.
+        start: Index to begin searching from.
 
     Returns:
-        Index of the first opener character.
-
-    Raises:
-        ValueError: If neither ``{`` nor ``[`` appears in *text*.
+        Index of the next opener character, or ``-1`` if none remains.
     """
-    obj_start = text.find("{")
-    arr_start = text.find("[")
-
-    if obj_start == -1 and arr_start == -1:
-        raise ValueError("No JSON object or array found in text")
+    obj_start = text.find("{", start)
+    arr_start = text.find("[", start)
 
     if obj_start == -1:
         return arr_start
@@ -182,11 +177,15 @@ def _parse_balanced_candidate(candidate: str) -> dict[str, Any] | list[Any]:
 
 
 def _extract_balanced(text: str) -> dict[str, Any] | list[Any]:
-    """Find the first ``{`` or ``[`` and extract its balanced JSON substring.
+    """Extract the first balanced ``{...}``/``[...]`` block that parses as JSON.
 
-    Tracks string boundaries (including escaped quotes) and nesting depth
-    to find the correct matching closer.  Both ``{}`` and ``[]`` contribute
-    to depth tracking so that nested structures are handled correctly.
+    Scans *text* once.  For each opener it tracks string boundaries (including
+    escaped quotes) and nesting depth -- both ``{}`` and ``[]`` contribute to
+    depth -- to locate the matching closer, then tries to parse that block.  If
+    a block is balanced but not valid JSON (e.g. a ``{key: value}`` format hint
+    written before the real payload), the scan resumes from the next opener
+    *after* that block.  Blocks never overlap, so the whole pass stays linear in
+    ``len(text)`` -- it never re-scans and cannot degrade to quadratic time.
 
     Args:
         text: Raw text containing embedded JSON.
@@ -195,20 +194,40 @@ def _extract_balanced(text: str) -> dict[str, Any] | list[Any]:
         Parsed JSON dict or list.
 
     Raises:
-        ValueError: If no opener is found or braces/brackets are unbalanced.
+        ValueError: If no opener is found, or no balanced block is valid JSON.
     """
-    start = _first_opener(text)
+    found_opener = False
+    pos = 0
+    length = len(text)
 
-    depth = 0
-    in_string = False
-    escape_next = False
+    while pos < length:
+        start = _next_opener(text, pos)
+        if start == -1:
+            break
+        found_opener = True
 
-    for i in range(start, len(text)):
-        in_string, escape_next, depth_delta = _next_char_state(
-            text[i], in_string, escape_next
-        )
-        depth += depth_delta
-        if depth_delta == -1 and depth == 0:
-            return _parse_balanced_candidate(text[start : i + 1])
+        depth = 0
+        in_string = False
+        escape_next = False
+        block_end = -1
+        for i in range(start, length):
+            in_string, escape_next, depth_delta = _next_char_state(
+                text[i], in_string, escape_next
+            )
+            depth += depth_delta
+            if depth_delta == -1 and depth == 0:
+                block_end = i
+                break
 
-    raise ValueError("Unbalanced braces/brackets in text")
+        if block_end == -1:
+            # This opener never closes; nothing after it can be balanced either.
+            break
+
+        try:
+            return _parse_balanced_candidate(text[start : block_end + 1])
+        except ValueError:
+            pos = block_end + 1  # skip this block; look for the next opener
+
+    if not found_opener:
+        raise ValueError("No JSON object or array found in text")
+    raise ValueError("No valid JSON could be extracted from the text")
