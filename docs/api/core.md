@@ -52,6 +52,56 @@ Each sync wrapper takes the same arguments as its async counterpart and runs it 
 
 ::: executionkit.types.Evaluator
 
+## Evals
+
+::: executionkit.evals.EvalCase
+
+::: executionkit.evals.EvalResult
+
+::: executionkit.evals.EvalReport
+
+::: executionkit.evals.run_eval_suite
+
+::: executionkit.evals.live_provider_from_env
+
+## Observability
+
+::: executionkit.observability.TraceEvent
+
+::: executionkit.observability.TraceCallback
+
+::: executionkit.observability.emit_trace
+
+## Routing
+
+::: executionkit.routing.RouteRule
+
+::: executionkit.routing.Router
+
+## Workflow and planning
+
+::: executionkit.workflow.Step
+
+::: executionkit.workflow.Workflow
+
+::: executionkit.workflow.WorkflowResult
+
+::: executionkit.planning.PlanStep
+
+::: executionkit.planning.Plan
+
+::: executionkit.planning.PlanResult
+
+## Approval
+
+::: executionkit.approval.ApprovalRequest
+
+::: executionkit.approval.ApprovalDecision
+
+::: executionkit.approval.ApprovalGate
+
+::: executionkit.approval.ApprovalDeniedError
+
 ## Session
 
 ::: executionkit.kit.Kit

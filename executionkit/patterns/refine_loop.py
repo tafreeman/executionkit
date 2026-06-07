@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from types import MappingProxyType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from executionkit.cost import CostTracker
 from executionkit.engine.convergence import ConvergenceDetector
@@ -12,6 +12,9 @@ from executionkit.engine.retry import RetryConfig  # noqa: TC001
 from executionkit.patterns.base import checked_complete, validate_score
 from executionkit.provider import LLMProvider  # noqa: TC001
 from executionkit.types import Evaluator, PatternResult, TokenUsage
+
+if TYPE_CHECKING:
+    from executionkit.observability import TraceCallback
 
 
 def _parse_score(text: str) -> float:
@@ -67,6 +70,7 @@ async def refine_loop(
     max_tokens: int = 4096,
     max_cost: TokenUsage | None = None,
     retry: RetryConfig | None = None,
+    trace: TraceCallback | None = None,
 ) -> PatternResult[str]:
     """Iteratively refine an LLM response until convergence or budget exhaustion.
 
@@ -91,6 +95,7 @@ async def refine_loop(
         max_tokens: Maximum tokens per completion.
         max_cost: Optional token/call budget.
         retry: Optional retry configuration per call.
+        trace: Optional structured trace callback.
 
     Returns:
         A :class:`PatternResult` whose ``value`` is the best response seen,
@@ -156,6 +161,7 @@ async def refine_loop(
                 tracker,
                 max_cost,
                 retry,
+                trace,
                 temperature=0.1,
                 max_tokens=16,
             )
@@ -172,6 +178,7 @@ async def refine_loop(
         tracker,
         max_cost,
         retry,
+        trace,
         temperature=temperature,
         max_tokens=max_tokens,
     )
@@ -206,6 +213,7 @@ async def refine_loop(
                 tracker,
                 max_cost,
                 retry,
+                trace,
                 temperature=temperature,
                 max_tokens=max_tokens,
             )

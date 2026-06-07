@@ -220,13 +220,38 @@ class TestLLMResponse:
         )
         assert r.input_tokens == 5
 
-    def test_dual_format_input_tokens_zero_not_falsy(self) -> None:
-        # input_tokens=0 (e.g. cached prompt) must NOT fall back to prompt_tokens
-        r = LLMResponse(
-            content="",
-            usage=MappingProxyType({"input_tokens": 0, "prompt_tokens": 99}),
-        )
-        assert r.input_tokens == 0
+
+def test_dual_format_input_tokens_zero_not_falsy() -> None:
+    # input_tokens=0 (e.g. cached prompt) must NOT fall back to prompt_tokens
+    r = LLMResponse(
+        content="",
+        usage=MappingProxyType({"input_tokens": 0, "prompt_tokens": 99}),
+    )
+    assert r.input_tokens == 0
+
+
+def test_usage_rejects_negative_token_counts() -> None:
+    r = LLMResponse(content="", usage=MappingProxyType({"prompt_tokens": -1}))
+
+    with pytest.raises(ProviderError, match="negative"):
+        _ = r.input_tokens
+
+
+def test_usage_rejects_non_integer_token_counts() -> None:
+    r = LLMResponse(content="", usage=MappingProxyType({"completion_tokens": "many"}))
+
+    with pytest.raises(ProviderError, match="integer"):
+        _ = r.output_tokens
+
+
+def test_usage_rejects_absurd_token_counts() -> None:
+    r = LLMResponse(
+        content="",
+        usage=MappingProxyType({"input_tokens": 1_000_000_001}),
+    )
+
+    with pytest.raises(ProviderError, match="unreasonably large"):
+        _ = r.input_tokens
 
 
 # ---------------------------------------------------------------------------
@@ -390,6 +415,31 @@ def test_format_http_error_redacts_key_fragment() -> None:
 
     assert "sk-abc123xyz" not in result
     assert "[REDACTED]" in result
+
+
+@pytest.mark.parametrize(
+    "secret",
+    [
+        "ghp_1234567890abcdef",
+        "gho_1234567890abcdef",
+        "AIzaSyA1234567890abcdef",
+        "xoxb-1234567890-abcdef",
+        "xoxp-1234567890-abcdef",
+        "xoxo-1234567890-abcdef",
+        "xoxa-1234567890-abcdef",
+        "gsk_1234567890abcdef",
+        "bearer abcdef12345",
+        "Bearer abcdef12345",
+        "token abcdef12345",
+    ],
+)
+def test_redact_sensitive_covers_common_key_shapes(secret: str) -> None:
+    from executionkit.provider import _redact_sensitive
+
+    redacted = _redact_sensitive(f"credential {secret} leaked")
+
+    assert secret not in redacted
+    assert "[REDACTED]" in redacted
 
 
 # ---------------------------------------------------------------------------
@@ -1107,6 +1157,17 @@ def test_parse_tool_arguments_raises_on_invalid_json() -> None:
         _parse_tool_arguments("{bad json}")
 
 
+def test_parse_tool_arguments_redacts_invalid_json_secret() -> None:
+    from executionkit.provider import _parse_tool_arguments
+
+    with pytest.raises(ProviderError) as exc_info:
+        _parse_tool_arguments('{"api_key":"ghp_1234567890abcdef"')
+
+    message = str(exc_info.value)
+    assert "ghp_1234567890abcdef" not in message
+    assert "[REDACTED]" in message
+
+
 def test_parse_tool_arguments_raises_on_non_object_json() -> None:
     from executionkit.provider import _parse_tool_arguments
 
@@ -1152,3 +1213,66 @@ def test_format_http_error_falls_back_without_message() -> None:
     assert _format_http_error(502, {"error": {"code": "bad_gateway"}}) == (
         "Provider request failed with HTTP 502"
     )
+
+
+async def test_urllib_read_timeout_maps_to_retryable_provider_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from executionkit.cost import CostTracker
+    from executionkit.engine.retry import RetryConfig
+    from executionkit.patterns.base import checked_complete
+
+    class TimeoutResponse:
+        def __enter__(self) -> TimeoutResponse:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            raise TimeoutError("read timed out")
+
+    def fake_urlopen(*args: object, **kwargs: object) -> TimeoutResponse:
+        return TimeoutResponse()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    provider = Provider(base_url="http://example.test/v1", model="m")
+    object.__setattr__(provider, "_use_httpx", False)
+    object.__setattr__(provider, "_client", None)
+    tracker = CostTracker()
+
+    with pytest.raises(ProviderError, match="Transport failure"):
+        await checked_complete(
+            provider,
+            [{"role": "user", "content": "hi"}],
+            tracker,
+            None,
+            RetryConfig(max_retries=2, base_delay=0.0),
+        )
+
+    assert tracker.call_count == 2
+
+
+async def test_httpx_transport_failure_redacts_secret(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    if not Provider(base_url="http://x", model="m")._use_httpx:
+        pytest.skip("httpx backend not active")
+
+    provider = Provider(base_url="http://x", model="m")
+
+    class Client:
+        async def post(self, *args: object, **kwargs: object) -> object:
+            import httpx
+
+            raise httpx.TransportError("failed with ghp_1234567890abcdef")
+
+    object.__setattr__(provider, "_client", Client())
+
+    with pytest.raises(ProviderError) as exc_info:
+        await provider._post("chat/completions", {})
+
+    message = str(exc_info.value)
+    assert "ghp_1234567890abcdef" not in message
+    assert "[REDACTED]" in message

@@ -9,8 +9,10 @@ from itertools import chain
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
+from executionkit.approval import ApprovalGate, ApprovalRequest
 from executionkit.cost import CostTracker
 from executionkit.engine.retry import RetryConfig  # noqa: TC001
+from executionkit.observability import TraceCallback, TraceEvent, emit_trace
 from executionkit.patterns.base import _note_truncation, checked_complete
 from executionkit.provider import (
     MaxIterationsError,
@@ -159,6 +161,8 @@ async def react_loop(
     max_cost: TokenUsage | None = None,
     retry: RetryConfig | None = None,
     max_history_messages: int | None = None,
+    trace: TraceCallback | None = None,
+    approval_gate: ApprovalGate | None = None,
     **_: Any,
 ) -> PatternResult[str]:
     """Execute a think-act-observe tool-calling loop.
@@ -184,6 +188,8 @@ async def react_loop(
         max_history_messages: When set, trim the message history to at most
             this many entries before each LLM call. Always keeps the first
             message (the original prompt). ``None`` disables trimming.
+        trace: Optional structured trace callback.
+        approval_gate: Optional gate checked before each tool execution.
 
     Returns:
         A :class:`PatternResult` whose ``value`` is the final LLM
@@ -245,6 +251,7 @@ async def react_loop(
             tracker,
             max_cost,
             retry,
+            trace,
             temperature=temperature,
             max_tokens=max_tokens,
             tools=tool_schemas,
@@ -282,13 +289,46 @@ async def react_loop(
         # Execute each tool call and append results
         for tc in response.tool_calls:
             metadata["tool_calls_made"] = int(metadata["tool_calls_made"]) + 1
-            observation = await _execute_tool_call(
-                tc_name=tc.name,
-                tc_arguments=tc.arguments,
-                tc_id=tc.id,
-                tool_lookup=tool_lookup,
-                tool_timeout=tool_timeout,
-                max_observation_chars=max_observation_chars,
+            await emit_trace(
+                trace,
+                TraceEvent.create(
+                    "tool_call_start",
+                    {"tool_name": tc.name, "tool_call_id": tc.id},
+                ),
+            )
+            if approval_gate is not None:
+                decision = await approval_gate.request(
+                    ApprovalRequest.create(
+                        "tool_call",
+                        tc.name,
+                        {"tool_call_id": tc.id, "arguments": tc.arguments},
+                    )
+                )
+            else:
+                decision = None
+
+            if decision is not None and not decision.approved:
+                suffix = f": {decision.reason}" if decision.reason else ""
+                observation = f"Tool '{tc.name}' blocked by approval{suffix}"
+            else:
+                observation = await _execute_tool_call(
+                    tc_name=tc.name,
+                    tc_arguments=tc.arguments,
+                    tc_id=tc.id,
+                    tool_lookup=tool_lookup,
+                    tool_timeout=tool_timeout,
+                    max_observation_chars=max_observation_chars,
+                )
+            await emit_trace(
+                trace,
+                TraceEvent.create(
+                    "tool_call_end",
+                    {
+                        "tool_name": tc.name,
+                        "tool_call_id": tc.id,
+                        "blocked": decision is not None and not decision.approved,
+                    },
+                ),
             )
             if observation.endswith("\n[truncated]"):
                 metadata["truncated_observations"] = (

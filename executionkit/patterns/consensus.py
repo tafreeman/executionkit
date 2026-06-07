@@ -5,7 +5,7 @@ from __future__ import annotations
 import collections
 import re
 from types import MappingProxyType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from executionkit.cost import CostTracker
 from executionkit.engine.messages import user_message
@@ -14,6 +14,9 @@ from executionkit.engine.retry import RetryConfig  # noqa: TC001
 from executionkit.patterns.base import checked_complete
 from executionkit.provider import ConsensusFailedError, LLMProvider
 from executionkit.types import PatternResult, TokenUsage, VotingStrategy
+
+if TYPE_CHECKING:
+    from executionkit.observability import TraceCallback
 
 
 def _normalize(text: str) -> str:
@@ -35,6 +38,7 @@ async def consensus(
     # checked_complete() call below, enabling budget-aware pipe() chains.
     # See executionkit/compose.py _filter_kwargs() for propagation logic.
     max_cost: TokenUsage | None = None,
+    trace: TraceCallback | None = None,
 ) -> PatternResult[str]:
     """Run parallel LLM samples and aggregate via voting.
 
@@ -54,6 +58,7 @@ async def consensus(
         retry: Optional retry configuration per call.
         max_cost: Optional token/call budget. Passed to each individual
             ``checked_complete`` call. ``None`` means unlimited.
+        trace: Optional structured trace callback.
 
     Returns:
         A :class:`PatternResult` whose ``value`` is the winning response,
@@ -90,6 +95,7 @@ async def consensus(
             tracker,
             budget=max_cost,
             retry=retry,
+            trace=trace,
             temperature=temperature,
             max_tokens=max_tokens,
         )

@@ -13,7 +13,7 @@ description: Provider-agnostic Python library for composable LLM execution patte
 # ExecutionKit
 
 <p class="ek-tagline">Composable LLM reasoning patterns.</p>
-<p class="ek-subtagline">Consensus voting · Iterative refinement · ReAct tool loops · Structured JSON · Zero SDK lock-in.</p>
+<p class="ek-subtagline">Consensus voting · ReAct tools · Structured JSON · evals · tracing · zero SDK lock-in.</p>
 
 [Quick Start](getting-started/quickstart.md){ .ek-cta .ek-cta-primary }
 [Patterns](patterns/index.md){ .ek-cta .ek-cta-secondary }
@@ -68,7 +68,12 @@ One adapter interface. Swap providers per pattern, per call, or via env var. The
 
 <div class="ek-why-item" markdown>
 #### Composable
-Patterns are async functions. Wrap them, chain them with `pipe()`, or drop them inside a larger orchestrator like [agentic-runtime-platform](https://github.com/tafreeman/agentic-runtime-platform).
+Patterns are async functions. Wrap them, chain them with `pipe()`, route providers with `Router`, or drop them inside a larger orchestrator like [agentic-runtime-platform](https://github.com/tafreeman/agentic-runtime-platform).
+</div>
+
+<div class="ek-why-item" markdown>
+#### Observable and gated
+Use `TraceEvent` callbacks for structured runtime events, `EvalCase` for deterministic golden checks, and `ApprovalGate` before tool, workflow, or plan execution.
 </div>
 
 </div>
@@ -104,22 +109,24 @@ asyncio.run(main())
 
 ## Relationship to agentic-runtime-platform
 
-ExecutionKit is **the pattern library**. [agentic-runtime-platform](https://github.com/tafreeman/agentic-runtime-platform) is **the orchestration runtime**.
+ExecutionKit is **the execution-kernel library**: reasoning patterns plus small Python primitives for evals, tracing, routing, simple workflows, plans, and approvals. [agentic-runtime-platform](https://github.com/tafreeman/agentic-runtime-platform) is **the orchestration runtime**.
 
 Use **ExecutionKit alone** for adding reasoning patterns to an existing app — a single async call drops into any service.
 
-Use **agentic-runtime-platform** when you need DAG-based multi-step workflows with tiered model routing and evaluation gating.
+Use **agentic-runtime-platform** when you need persistent multi-agent workflows, declarative YAML, scheduling, retries across a fleet, and platform-level evaluation gating.
 
-The two are designed to compose: agentic-runtime-platform calls ExecutionKit patterns inside its workflow steps. ExecutionKit owns the *how* of one reasoning step; agentic-runtime-platform owns the *when* and *next* across many.
+The two are designed to compose: agentic-runtime-platform calls ExecutionKit patterns inside its workflow steps. ExecutionKit owns the *how* of one reasoning step and lightweight Python glue; agentic-runtime-platform owns the long-running *when* and *next* across many agents.
 
 | Need | Reach for |
 |------|-----------|
 | One-shot voting / refinement / structured extraction / tool loop in your app | ExecutionKit |
-| Multi-step DAG with state, retries, and gating | agentic-runtime-platform |
+| Simple in-process DAG or ordered plan | ExecutionKit `Workflow` / `Plan` |
+| Persistent multi-agent DAG with state, retries, and gating | agentic-runtime-platform |
 | Cost ceiling per request | ExecutionKit `max_cost=` |
 | Cost ceiling per workflow with per-step budgets | agentic-runtime-platform + ExecutionKit |
 | Custom provider — Anthropic, vLLM, llama.cpp | ExecutionKit `LLMProvider` protocol |
-| Per-step model routing (Haiku → Sonnet → Opus) | agentic-runtime-platform |
+| In-process provider routing before a pattern call | ExecutionKit `Router` |
+| Declarative fleet model routing | agentic-runtime-platform |
 
 ---
 

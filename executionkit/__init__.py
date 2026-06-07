@@ -6,17 +6,32 @@ import asyncio
 from typing import TYPE_CHECKING, Any, cast
 
 from executionkit._mock import MockProvider
+from executionkit.approval import (
+    ApprovalDecision,
+    ApprovalDeniedError,
+    ApprovalGate,
+    ApprovalRequest,
+)
 from executionkit.compose import PatternStep, pipe
 from executionkit.cost import CostTracker
 from executionkit.engine.convergence import ConvergenceDetector
 from executionkit.engine.json_extraction import extract_json
 from executionkit.engine.retry import DEFAULT_RETRY, RetryConfig
+from executionkit.evals import (
+    EvalCase,
+    EvalReport,
+    EvalResult,
+    live_provider_from_env,
+    run_eval_suite,
+)
 from executionkit.kit import Kit
+from executionkit.observability import TraceCallback, TraceEvent, emit_trace
 from executionkit.patterns.base import checked_complete, validate_score
 from executionkit.patterns.consensus import consensus
 from executionkit.patterns.react_loop import react_loop
 from executionkit.patterns.refine_loop import refine_loop
 from executionkit.patterns.structured import structured
+from executionkit.planning import Plan, PlanResult, PlanStep
 from executionkit.provider import (
     BudgetExhaustedError,
     ConsensusFailedError,
@@ -33,6 +48,7 @@ from executionkit.provider import (
     ToolCall,
     ToolCallingProvider,
 )
+from executionkit.routing import Router, RouteRule
 from executionkit.types import (
     Evaluator,
     PatternResult,
@@ -40,6 +56,7 @@ from executionkit.types import (
     Tool,
     VotingStrategy,
 )
+from executionkit.workflow import Step, Workflow, WorkflowResult
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -48,10 +65,17 @@ __version__ = "0.1.0"
 
 __all__ = [
     "DEFAULT_RETRY",
+    "ApprovalDecision",
+    "ApprovalDeniedError",
+    "ApprovalGate",
+    "ApprovalRequest",
     "BudgetExhaustedError",
     "ConsensusFailedError",
     "ConvergenceDetector",
     "CostTracker",
+    "EvalCase",
+    "EvalReport",
+    "EvalResult",
     "Evaluator",
     "ExecutionKitError",
     "Kit",
@@ -64,26 +88,39 @@ __all__ = [
     "PatternResult",
     "PatternStep",
     "PermanentError",
+    "Plan",
+    "PlanResult",
+    "PlanStep",
     "Provider",
     "ProviderError",
     "RateLimitError",
     "RetryConfig",
+    "RouteRule",
+    "Router",
+    "Step",
     "TokenUsage",
     "Tool",
     "ToolCall",
     "ToolCallingProvider",
+    "TraceCallback",
+    "TraceEvent",
     "VotingStrategy",
+    "Workflow",
+    "WorkflowResult",
     "__version__",
     "checked_complete",
     "consensus",
     "consensus_sync",
+    "emit_trace",
     "extract_json",
+    "live_provider_from_env",
     "pipe",
     "pipe_sync",
     "react_loop",
     "react_loop_sync",
     "refine_loop",
     "refine_loop_sync",
+    "run_eval_suite",
     "structured",
     "structured_sync",
     "validate_score",

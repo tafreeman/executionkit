@@ -47,6 +47,12 @@ executionkit/
 ├── compose.py           — pipe() composition helper, PatternStep protocol
 ├── kit.py               — Kit session facade (provider + cumulative usage)
 ├── _mock.py             — MockProvider test double (satisfies both protocols)
+├── evals.py             — deterministic golden evals and env-gated live eval helper
+├── observability.py     — TraceEvent, TraceCallback, and async trace emission
+├── routing.py           — Router and RouteRule provider selection primitives
+├── workflow.py          — dependency-ordered async Step/Workflow execution
+├── planning.py          — ordered Plan/PlanStep execution
+├── approval.py          — ApprovalGate, ApprovalRequest, and approval decisions
 ├── patterns/
 │   ├── base.py          — checked_complete(), validate_score(), _TrackedProvider;
 │   │                      _check_budget() uses getattr() field loop replacing per-field
@@ -69,10 +75,15 @@ executionkit/
 __init__  ──► kit, compose, patterns/*, engine/*, provider, types, _mock
 kit       ──► patterns/*, compose, provider, types, cost
 compose   ──► provider, types
-patterns/base    ──► cost, engine/retry, provider, types
+evals     ──► provider, types
+routing   ──► provider, types
+workflow  ──► approval, observability, types
+planning  ──► approval, observability, types
+approval  ──► observability
+patterns/base    ──► cost, engine/retry, provider, types, observability
 patterns/consensus  ──► cost, engine/parallel, engine/retry, patterns/base, provider, types
 patterns/refine_loop ──► cost, engine/convergence, engine/retry, patterns/base, provider, types
-patterns/react_loop  ──► cost, engine/retry, patterns/base, provider, types
+patterns/react_loop  ──► approval, cost, engine/retry, patterns/base, provider, types, observability
 patterns/structured  ──► engine/json_extraction, engine/retry, patterns/base, provider, types
 provider  ──► types, errors  (re-exports all 9 error classes from errors.py)
 errors    ──► types
@@ -107,6 +118,7 @@ checked_complete(provider, messages, tracker, budget, retry)
   │  [patterns/base.py]
   ├─► budget guard            ← raises BudgetExhaustedError if over limit
   ├─► tracker._calls += 1    ← TOCTOU-safe pre-increment
+  ├─► trace event             ← optional llm_call_start / end / error
   │
   ▼
 with_retry(provider.complete, config, messages, **kwargs)
@@ -227,9 +239,11 @@ intentional: a broken tool should not abort a reasoning loop.
 ### Credential redaction in error messages
 
 `provider.py::_redact_sensitive()` uses a regex to replace substrings that
-look like API keys (`sk-...`, `key-...`, `token-...`, etc.) with `[REDACTED]`
-in all HTTP error messages before they surface in `PermanentError` or
-`ProviderError`.
+look like API keys (`sk-...`, `ghp_...`, `gho_...`, `AIza...`, `xox...`,
+`gsk_...`, bearer/token/secret variants, etc.) with `[REDACTED]` in provider
+error messages before they surface in `PermanentError` or `ProviderError`.
+Transport failures and malformed tool-argument JSON errors pass through the
+same redaction helper before they are raised.
 
 `Provider.__repr__` masks the `api_key` field entirely — it prints `'***'` if
 non-empty, and `''` if empty. Never log provider instances at INFO level or
@@ -246,10 +260,18 @@ embedded.
 
 ### Tool argument validation
 
-`react_loop` calls `_validate_tool_args()` against the tool's JSON Schema before
-invoking the tool. Missing required fields and type mismatches are caught and
-returned as error observations rather than passed to the tool. This prevents
-malformed LLM output from causing unexpected behaviour in tool implementations.
+`react_loop` calls `_validate_tool_args()` against the tool's JSON Schema subset
+before invoking the tool. Missing required fields, `additionalProperties:
+false`, and top-level primitive type mismatches are caught and returned as error
+observations rather than passed to the tool. This prevents malformed LLM output
+from causing unexpected behaviour in tool implementations without adding a
+runtime `jsonschema` dependency.
+
+### Approval gates
+
+`ApprovalGate` can block side effects before tool bodies, workflow steps, or
+plan steps execute. Denied ReAct tool calls become observations so the model can
+recover without the side effect occurring.
 
 ### No eval or exec
 

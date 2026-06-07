@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 
 from executionkit.cost import CostTracker  # noqa: TC001
 from executionkit.engine.retry import DEFAULT_RETRY, RetryConfig, with_retry
+from executionkit.observability import TraceCallback, TraceEvent, emit_trace
 from executionkit.provider import BudgetExhaustedError, LLMProvider, LLMResponse
 from executionkit.types import TokenUsage  # noqa: TC001
 
@@ -92,6 +93,7 @@ async def checked_complete(
     tracker: CostTracker,
     budget: TokenUsage | None,
     retry: RetryConfig | None,
+    trace: TraceCallback | None = None,
     **kwargs: Any,
 ) -> LLMResponse:
     """Budget check, retry-wrapped ``complete()``, and usage recording.
@@ -107,6 +109,7 @@ async def checked_complete(
         tracker: Cost tracker to record usage.
         budget: Optional token/call budget. ``None`` means unlimited.
         retry: Retry configuration. Uses ``DEFAULT_RETRY`` if ``None``.
+        trace: Optional structured trace callback.
         **kwargs: Additional arguments forwarded to ``provider.complete()``.
 
     Returns:
@@ -137,15 +140,43 @@ async def checked_complete(
                 exceeded_suffix="before retry dispatch",
             )
         tracker.reserve_call()
+        await emit_trace(
+            trace,
+            TraceEvent.create(
+                "llm_call_start",
+                {"attempt": attempt, "cost": tracker.to_usage()},
+            ),
+        )
 
-    response = await with_retry(
-        provider.complete,
-        retry or DEFAULT_RETRY,
-        messages,
-        _before_attempt=_before_attempt,
-        **kwargs,
-    )
+    try:
+        response = await with_retry(
+            provider.complete,
+            retry or DEFAULT_RETRY,
+            messages,
+            _before_attempt=_before_attempt,
+            **kwargs,
+        )
+    except Exception as exc:
+        await emit_trace(
+            trace,
+            TraceEvent.create(
+                "llm_call_error",
+                {"error_type": type(exc).__name__, "cost": tracker.to_usage()},
+            ),
+        )
+        raise
     tracker.record_without_call(response)
+    await emit_trace(
+        trace,
+        TraceEvent.create(
+            "llm_call_end",
+            {
+                "cost": tracker.to_usage(),
+                "input_tokens": response.input_tokens,
+                "output_tokens": response.output_tokens,
+            },
+        ),
+    )
     return response
 
 
@@ -202,8 +233,8 @@ class _TrackedProvider:
         Ref F-04: https://github.com/BerriAI/litellm/issues/11370 (real-world
         failure from hardcoding capability instead of delegating).
         NOTE (F-01 verified): CostTracker._calls is never accessed directly
-        here. reserve_call() and release_call() are the only public API used.
-        See executionkit/cost.py.
+        here. reserve_call() and record_without_call() are the accounting API
+        used by checked_complete().
         """
         return getattr(self._provider, "supports_tools", False)
 

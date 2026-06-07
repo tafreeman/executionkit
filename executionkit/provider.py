@@ -57,6 +57,19 @@ except ImportError:
 # Value types
 # ---------------------------------------------------------------------------
 
+MAX_PROVIDER_REPORTED_TOKENS = 1_000_000_000
+
+
+def _usage_int(value: Any, field_name: str) -> int:
+    """Return a bounded non-negative integer token count."""
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ProviderError(f"{field_name} usage must be an integer")
+    if value < 0:
+        raise ProviderError(f"{field_name} usage cannot be negative")
+    if value > MAX_PROVIDER_REPORTED_TOKENS:
+        raise ProviderError(f"{field_name} usage is unreasonably large")
+    return value
+
 
 @dataclass(frozen=True, slots=True)
 class ToolCall:
@@ -87,15 +100,15 @@ class LLMResponse:
     def input_tokens(self) -> int:
         u = self.usage
         if "input_tokens" in u:
-            return int(u["input_tokens"])
-        return int(u.get("prompt_tokens", 0))
+            return _usage_int(u["input_tokens"], "input_tokens")
+        return _usage_int(u.get("prompt_tokens", 0), "prompt_tokens")
 
     @property
     def output_tokens(self) -> int:
         u = self.usage
         if "output_tokens" in u:
-            return int(u["output_tokens"])
-        return int(u.get("completion_tokens", 0))
+            return _usage_int(u["output_tokens"], "output_tokens")
+        return _usage_int(u.get("completion_tokens", 0), "completion_tokens")
 
     @property
     def total_tokens(self) -> int:
@@ -285,7 +298,9 @@ class Provider:
             retry_after = float(exc.response.headers.get("retry-after", "1"))
             _classify_http_error(status, raw, retry_after, cause=exc)
         except _httpx.TransportError as exc:
-            raise ProviderError(f"Transport failure: {exc}") from exc
+            raise ProviderError(
+                f"Transport failure: {_redact_sensitive(str(exc))}"
+            ) from exc
 
     async def _post_urllib(
         self,
@@ -321,7 +336,13 @@ class Provider:
                 )
                 _classify_http_error(status, raw, retry_after, cause=exc)
             except urllib.error.URLError as exc:
-                raise ProviderError(f"Transport failure: {exc.reason}") from exc
+                raise ProviderError(
+                    f"Transport failure: {_redact_sensitive(str(exc.reason))}"
+                ) from exc
+            except TimeoutError as exc:
+                raise ProviderError(
+                    f"Transport failure: {_redact_sensitive(str(exc))}"
+                ) from exc
 
         return await asyncio.to_thread(_sync)
 
@@ -416,7 +437,7 @@ def _parse_tool_arguments(arguments: Any) -> dict[str, Any]:
         parsed = json.loads(arguments)
     except json.JSONDecodeError as exc:
         raise ProviderError(
-            f"tool_call arguments were not valid JSON: {arguments}"
+            f"tool_call arguments were not valid JSON: {_redact_sensitive(arguments)}"
         ) from exc
     if not isinstance(parsed, dict):
         raise ProviderError("tool_call arguments must decode to a JSON object")
@@ -438,12 +459,19 @@ def _load_json(raw: bytes) -> dict[str, Any]:
 def _redact_sensitive(text: str) -> str:
     """Replace credential-like substrings with ``[REDACTED]``.
 
-    Matches tokens that begin with a known prefix (``sk``, ``key``, ``token``,
-    ``secret``, ``bearer``, ``auth``) followed by at least 4 non-whitespace,
-    non-quote characters — a common shape for API keys and bearer tokens.
+    Matches common API key/token shapes and authorization phrases.
     """
     return re.sub(
-        r'(?i)(sk|key|token|secret|bearer|auth)[^\s\'"]{4,}',
+        r"""(?ix)
+        \b(?:
+            gh[pousr]_[A-Za-z0-9_]{4,}
+            | AIza[A-Za-z0-9_-]{8,}
+            | xox[bpoa]-[A-Za-z0-9-]{8,}
+            | gsk_[A-Za-z0-9_]{4,}
+            | sk[-_][^\s'"<>]{4,}
+            | (?:key|token|secret|auth)[=:][^\s'"<>]{4,}
+            | (?:bearer|token|secret)\s+[A-Za-z0-9._~+/\-=]{4,}
+        )""",
         "[REDACTED]",
         text,
     )

@@ -1,6 +1,6 @@
 # Patterns Overview
 
-ExecutionKit ships **five composable pattern utilities**. Each is a single async function that takes a provider and a prompt and returns a `PatternResult` carrying the answer, a score, accumulated cost, and per-pattern metadata.
+ExecutionKit ships **five composable pattern utilities**. Each is a single async function that takes a provider and a prompt and returns a `PatternResult` carrying the answer, a score, accumulated cost, and per-pattern metadata. Lightweight orchestration helpers such as `Router`, `Workflow`, `Plan`, `ApprovalGate`, and evals live alongside these patterns in the public API.
 
 | Pattern | Use when… | Cost shape |
 |---------|-----------|------------|
@@ -55,8 +55,9 @@ The reasoning patterns accept these (all optional). `pipe()` forwards compatible
 | `max_tokens` | `4096` | Per-completion token cap. |
 | `max_cost` | `None` | `TokenUsage` budget. Raises `BudgetExhaustedError` when exceeded. |
 | `retry` | `DEFAULT_RETRY` | `RetryConfig` for transient errors (429, 5xx). |
+| `trace` | `None` | Optional `TraceCallback` receiving structured events for calls, tools, workflow steps, plan steps, approvals, cost, and latency. |
 
-`max_cost` enforcement uses two-phase accounting (`reserve_call` before the await, `record_without_call` after). This makes the budget guard TOCTOU-safe under `consensus`'s parallel calls.
+`max_cost` enforcement uses two-phase accounting (`reserve_call` before the await, `record_without_call` after). This makes the `llm_calls` guard TOCTOU-safe under `consensus`'s parallel calls and counts every dispatched wire attempt, including failed retries.
 
 ## Sync wrappers
 

@@ -10,30 +10,18 @@ Premium-tier requests go to a strong model (e.g. `gpt-4o`); cheap requests go to
 
 ## The pattern
 
-Route at the *outer* level — the pattern call. Each request carries a tier; the dispatcher picks the right `Provider`.
+Route at the *outer* level — the pattern call. Each request carries a tier; `Router` picks the right `Provider`.
 
 ```python
 import asyncio
 import os
-from dataclasses import dataclass
 from typing import Literal
-from executionkit import Provider, consensus, refine_loop
+from executionkit import Provider, RouteRule, Router, consensus, refine_loop
 
 Tier = Literal["premium", "cheap"]
 
-@dataclass(frozen=True, slots=True)
-class Routed:
-    """Holds two providers and routes by tier."""
-    premium: Provider
-    cheap: Provider
-
-    def for_tier(self, tier: Tier) -> Provider:
-        return self.premium if tier == "premium" else self.cheap
-
-
-async def answer(routed: Routed, tier: Tier, prompt: str) -> str:
-    provider = routed.for_tier(tier)
-
+async def answer(router: Router, tier: Tier, prompt: str) -> str:
+    provider = router.select(prompt, tier=tier)
     if tier == "premium":
         # High-quality path: refine until target score.
         result = await refine_loop(provider, prompt, target_score=0.9, max_iterations=3)
@@ -54,13 +42,22 @@ async def main() -> None:
         api_key=os.environ["GROQ_API_KEY"],
         model="llama-3.3-70b-versatile",
     ) as cheap:
-        routed = Routed(premium=premium, cheap=cheap)
+        router = Router(
+            rules=[
+                RouteRule(
+                    "premium-tier",
+                    premium,
+                    lambda prompt, context: context.get("tier") == "premium",
+                )
+            ],
+            fallback=cheap,
+        )
 
         # Free-tier user — fast, cheap path
-        print(await answer(routed, "cheap", "What is 7 * 8?"))
+        print(await answer(router, "cheap", "What is 7 * 8?"))
 
         # Paying customer — high-quality path
-        print(await answer(routed, "premium",
+        print(await answer(router, "premium",
                            "Draft a one-paragraph project status update for stakeholders."))
 
 asyncio.run(main())
@@ -71,26 +68,26 @@ asyncio.run(main())
 - ExecutionKit patterns take a `provider` as their first argument. Swapping providers is a single positional argument — no pattern code changes.
 - Each `Provider` has its own `base_url`, `api_key`, and `model`. They are **independent HTTP clients** (especially when `httpx` is installed — each gets its own connection pool).
 - Routing happens *before* the pattern call. The pattern doesn't know or care about the tier.
+- `Router.run(pattern, prompt, **kwargs)` is available when one selected provider should call one pattern directly. Select explicitly when you want different patterns per route, as above.
 
 ## Variations
 
 ### Per-step routing inside `pipe`
 
-You can route by *step* instead of by *request*. Use `partial` to bind a specific provider to one step of a chain — but `pipe` only passes one provider, so for true per-step provider swapping, write a thin step that uses a closure:
+You can route by *step* instead of by *request*. `pipe` only passes one provider, so for true per-step provider swapping, write a thin step that uses a closure:
 
 ```python
-from functools import partial
 from executionkit import pipe, consensus, refine_loop
 
 async def cheap_consensus(_: object, prompt: str, **kw):
-    return await consensus(routed.cheap, prompt, num_samples=3, **kw)
+    return await consensus(cheap, prompt, num_samples=3, **kw)
 
 async def premium_refine(_: object, prompt: str, **kw):
-    return await refine_loop(routed.premium, prompt, target_score=0.9, **kw)
+    return await refine_loop(premium, prompt, target_score=0.9, **kw)
 
 # The `provider` arg is unused — each step uses its bound provider.
 result = await pipe(
-    routed.cheap,                    # placeholder, unused by the steps
+    cheap,                           # placeholder, unused by the steps
     "Explain gradient descent.",
     cheap_consensus,
     premium_refine,
@@ -102,10 +99,10 @@ result = await pipe(
 Pass the routing decision through `max_cost`. If a request comes with a tight `TokenUsage` ceiling, route it to the cheap provider:
 
 ```python
-def pick(routed: Routed, budget: TokenUsage | None) -> Provider:
+def pick(cheap: Provider, premium: Provider, budget: TokenUsage | None) -> Provider:
     if budget and budget.input_tokens > 0 and budget.input_tokens < 1_000:
-        return routed.cheap
-    return routed.premium
+        return cheap
+    return premium
 ```
 
 ### Route by content
@@ -113,15 +110,15 @@ def pick(routed: Routed, budget: TokenUsage | None) -> Provider:
 For "premium-when-it-matters," classify the prompt with the cheap provider first, then route. This is `pipe` with a router step — but since pipe doesn't branch, write it as a plain async function:
 
 ```python
-async def smart_route(routed: Routed, prompt: str) -> str:
+async def smart_route(cheap: Provider, premium: Provider, prompt: str) -> str:
     # Tiny classifier call on the cheap provider
     tag = await consensus(
-        routed.cheap,
+        cheap,
         f"Classify this user request as 'simple' or 'complex'. "
         f"Answer one word.\n\n{prompt}",
         num_samples=3,
     )
-    provider = routed.premium if tag.value.strip().lower() == "complex" else routed.cheap
+    provider = premium if tag.value.strip().lower() == "complex" else cheap
     answer = await refine_loop(provider, prompt, target_score=0.85)
     return answer.value
 ```

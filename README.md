@@ -19,7 +19,7 @@ Consensus voting · Iterative refinement · ReAct tool loops · Structured JSON 
 
 ---
 
-ExecutionKit fills the gap between raw chat calls and full orchestration stacks — more power than one-off prompts, less weight than a framework. Provider-agnostic, zero runtime dependencies (stdlib only), `mypy --strict` clean.
+ExecutionKit fills the gap between raw chat calls and full orchestration stacks — more power than one-off prompts, less weight than a framework. Provider-agnostic, zero runtime dependencies (stdlib only), `mypy --strict` clean, with lightweight eval, tracing, routing, workflow, planning, and approval primitives.
 
 📚 **Full documentation: [tafreeman.github.io/executionkit](https://tafreeman.github.io/executionkit/)**
 
@@ -40,12 +40,13 @@ For implementation details, start with [`docs/architecture.md`](docs/architectur
 ```mermaid
 flowchart TB
     subgraph ARP ["agentic-runtime-platform  —  orchestration layer"]
-        W["DAG workflows · YAML · multi-agent routing"]
+        W["Persistent DAGs · YAML · multi-agent scheduling"]
     end
 
     subgraph EK ["ExecutionKit  —  pattern library  (this repo)"]
         direction LR
         C["consensus()"] ~~~ R["refine_loop()"] ~~~ RA["react_loop()"] ~~~ S["structured()"] ~~~ PI["pipe()"]
+        PI ~~~ O["Router · Workflow · Plan · ApprovalGate · TraceEvent · evals"]
     end
 
     subgraph P ["LLM Provider  —  any OpenAI-compatible endpoint"]
@@ -121,13 +122,24 @@ See the [Quick Start guide](https://tafreeman.github.io/executionkit/getting-sta
 | **[Structured Output](https://tafreeman.github.io/executionkit/patterns/structured/)** | Parse JSON responses with custom validators and automatic repair retries. |
 | **[Pipe](https://tafreeman.github.io/executionkit/patterns/pipe/)** | Chain patterns end-to-end with a shared budget. |
 
+## Lightweight primitives
+
+ExecutionKit also exposes small stdlib-only primitives for the glue code around pattern calls:
+
+- **Evals.** `EvalCase` and `run_eval_suite()` run deterministic golden checks in CI; `live_provider_from_env()` enables opt-in live checks via `EXECUTIONKIT_LIVE_EVAL=1`, `EXECUTIONKIT_BASE_URL`, and `EXECUTIONKIT_MODEL`.
+- **Observability.** `TraceEvent` callbacks can receive structured events for LLM calls, retries, tool calls, workflow steps, plan steps, approvals, cost, and latency.
+- **Routing.** `Router` and `RouteRule` select a provider before a pattern call without changing the pattern implementation.
+- **Workflow and planning.** `Workflow`/`Step` execute simple dependency-ordered fan-out DAGs; `Plan`/`PlanStep` execute ordered plan-then-act flows.
+- **Approval gates.** `ApprovalGate` can require human or policy approval before tool execution, workflow steps, or plan steps.
+
 ## Why ExecutionKit
 
 - **Provider-agnostic.** OpenAI, Ollama, vLLM, GitHub Models, Together, Groq, llama.cpp, and Azure via an OpenAI-compatible gateway.
 - **Zero SDK lock-in.** Structural `LLMProvider` protocol — any conforming object works without inheritance.
 - **Composable.** Patterns are async functions. Wrap them, chain them with `pipe()`, or drop them inside a larger orchestrator like [agentic-runtime-platform](https://github.com/tafreeman/agentic-runtime-platform).
-- **Budget-aware.** TOCTOU-safe `max_cost` enforcement across parallel calls.
-- **Secure-by-default.** API key masking, credential redaction in errors, JSON-Schema tool validation, prompt-injection-hardened default evaluator.
+- **Budget-aware.** TOCTOU-safe `max_cost` enforcement across parallel calls; `llm_calls` counts every dispatched wire attempt, including failed retries.
+- **Secure-by-default.** API key masking, broad credential redaction in errors, top-level JSON-Schema tool validation, prompt-injection-hardened default evaluator, and optional approval gates.
+- **Eval-aware.** Deterministic golden evals run in normal CI; live provider evals stay explicitly env-gated.
 
 ## Built for Platform Teams
 
@@ -137,7 +149,7 @@ ExecutionKit targets three groups who need LLM reliability without runtime coupl
 - **Solutions architects** evaluating multi-vendor strategies — the structural `LLMProvider` protocol means vendor A and vendor B are runtime-swappable with no code changes outside the constructor.
 - **AI-native teams** building beyond chat — consensus voting, iterative refinement, and ReAct tool loops are the building blocks for production-grade LLM behaviour without pulling in a full framework.
 
-If you need DAG orchestration on top, [agentic-runtime-platform](https://github.com/tafreeman/agentic-runtime-platform) layers over ExecutionKit and handles scheduling, retries, and evaluation gating.
+If you need persistent, declarative, multi-agent orchestration on top, [agentic-runtime-platform](https://github.com/tafreeman/agentic-runtime-platform) layers over ExecutionKit and handles scheduling, runtime state, and fleet-level evaluation gating.
 
 ## Relationship to agentic-runtime-platform
 
@@ -146,10 +158,10 @@ ExecutionKit and [agentic-runtime-platform](https://github.com/tafreeman/agentic
 | | ExecutionKit | agentic-runtime-platform |
 |---|---|---|
 | **Role** | Pattern library | Orchestration runtime |
-| **Scope** | Single LLM call patterns with cost tracking | Multi-agent DAG workflows with tiered model routing |
-| **Workflow authoring** | Python functions | Declarative YAML |
+| **Scope** | Reasoning patterns plus lightweight Python routing/workflow/planning primitives | Multi-agent DAG workflows with tiered model routing |
+| **Workflow authoring** | Python functions and named async steps | Declarative YAML |
 | **Dependencies** | Zero (stdlib only; `httpx` optional) | FastAPI, LangGraph, Pydantic, provider SDKs |
-| **Use when** | You need a reasoning primitive — vote, refine, tool loop | You need to orchestrate many agents with scheduling, retries, and evaluation |
+| **Use when** | You need a reasoning primitive — vote, refine, tool loop, trace, route, simple DAG | You need to orchestrate many agents with scheduling, persistence, retries, and evaluation |
 
 **agentic-runtime-platform uses ExecutionKit patterns internally** as the execution primitive for each agent step. Build atop agentic-runtime-platform for free; install ExecutionKit alone if you want the patterns without the orchestration overhead.
 
