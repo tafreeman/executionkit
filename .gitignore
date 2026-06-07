@@ -46,6 +46,12 @@ package-lock.json
 
 # Coverage artifacts
 coverage.json
+coverage.xml
+test-results.xml
+
+# SonarQube scanner
+.scannerwork/
+.sonar/
 
 # MkDocs build output
 site/

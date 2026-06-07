@@ -126,7 +126,7 @@ async def checked_complete(
             exceeded_suffix="before dispatch",
         )
 
-    async def _before_attempt(attempt: int) -> None:
+    def _before_attempt(attempt: int) -> None:
         if attempt > 1 and budget is not None:
             current = tracker.to_usage()
             _check_budget(

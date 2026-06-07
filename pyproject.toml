@@ -72,6 +72,7 @@ addopts = "--cov=executionkit --cov-report=term-missing"
 
 [tool.coverage.run]
 branch = true
+relative_files = true
 source = ["executionkit"]
 
 [tool.coverage.report]
