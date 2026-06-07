@@ -45,3 +45,21 @@ def test_sync_wrapper_raises_in_active_event_loop() -> None:
 
     with pytest.raises(RuntimeError, match="async context"):
         asyncio.run(inner())
+
+
+def test_run_sync_closes_coroutine_in_active_event_loop() -> None:
+    # Regression: the in-async-context guard must close the coroutine it was
+    # handed before raising, otherwise it is GC'd un-awaited and emits a
+    # spurious "coroutine was never awaited" RuntimeWarning.
+    import inspect
+
+    async def dummy() -> int:
+        return 1
+
+    async def inner() -> None:
+        coro = dummy()
+        with pytest.raises(RuntimeError, match="async context"):
+            executionkit._run_sync(coro)
+        assert inspect.getcoroutinestate(coro) == inspect.CORO_CLOSED
+
+    asyncio.run(inner())

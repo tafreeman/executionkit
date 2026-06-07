@@ -105,6 +105,10 @@ def _run_sync(coro: Coroutine[Any, Any, _T]) -> _T:
     except RuntimeError:
         loop = None
     if loop is not None:
+        # The caller built *coro* eagerly (it is an argument), so close it
+        # before raising — otherwise it is garbage-collected un-awaited and
+        # emits a spurious "coroutine was never awaited" RuntimeWarning.
+        coro.close()
         raise RuntimeError(
             "Cannot use sync wrappers inside an async context (e.g., Jupyter). "
             "Use 'await' instead, or install nest_asyncio and call "
