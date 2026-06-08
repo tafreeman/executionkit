@@ -8,7 +8,7 @@ description: Provider-agnostic Python library for composable LLM execution patte
 
 <div class="ek-hero" markdown>
 
-<span class="ek-eyebrow">Python · stdlib only · v0.1.0</span>
+<span class="ek-eyebrow">Python · stdlib only · v0.2.0</span>
 
 # ExecutionKit
 
