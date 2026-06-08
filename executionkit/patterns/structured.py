@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from types import MappingProxyType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from executionkit.cost import CostTracker
 from executionkit.engine.json_extraction import extract_json
@@ -14,6 +14,9 @@ from executionkit.errors import PatternError
 from executionkit.patterns.base import checked_complete
 from executionkit.provider import LLMProvider  # noqa: TC001
 from executionkit.types import PatternResult, TokenUsage
+
+if TYPE_CHECKING:
+    from executionkit.observability import TraceCallback
 
 StructuredValue = dict[str, Any] | list[Any]
 StructuredValidator = Callable[[StructuredValue], str | None | bool]
@@ -47,6 +50,7 @@ async def structured(
     max_tokens: int = 4096,
     max_cost: TokenUsage | None = None,
     retry: RetryConfig | None = None,
+    trace: TraceCallback | None = None,
 ) -> PatternResult[StructuredValue]:
     """Request JSON output, parse it, and optionally repair invalid responses.
 
@@ -73,6 +77,7 @@ async def structured(
         tracker,
         max_cost,
         retry,
+        trace,
         temperature=temperature,
         max_tokens=max_tokens,
     )
@@ -119,6 +124,7 @@ async def structured(
             tracker,
             max_cost,
             retry,
+            trace,
             temperature=temperature,
             max_tokens=max_tokens,
         )

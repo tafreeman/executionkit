@@ -96,7 +96,7 @@ asyncio.run(main())
 
 - **`O(num_samples)` LLM calls.** All calls are issued concurrently up to `max_concurrency`.
 - **Parallelizable.** Total wall-clock latency ≈ slowest sample, not the sum.
-- **Budget enforcement is TOCTOU-safe.** `checked_complete` reserves the call slot *before* awaiting, so concurrent samples cannot race past `max_cost.llm_calls`.
+- **Budget enforcement is TOCTOU-safe.** `checked_complete` reserves the call slot *before* awaiting, so concurrent samples cannot race past `max_cost.llm_calls`; failed retries count as dispatched attempts.
 - **No retry amplification by default.** Each sample uses the shared `RetryConfig`; transient failures retry the failing sample only.
 
 ## Errors

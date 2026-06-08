@@ -256,6 +256,33 @@ class TestConsensus:
         else:
             pytest.fail("Expected BudgetExhaustedError but no exception was raised")
 
+    async def test_parallel_budget_dispatches_only_reserved_call(self) -> None:
+        """Concurrent consensus must not race past a one-call budget."""
+        from executionkit.patterns.consensus import consensus
+        from executionkit.provider import BudgetExhaustedError
+
+        class SlowProvider:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            async def complete(self, messages: object, **kwargs: object) -> LLMResponse:
+                self.calls += 1
+                await asyncio.sleep(0.01)
+                return LLMResponse(content="answer")
+
+        provider = SlowProvider()
+
+        with pytest.raises((BudgetExhaustedError, ExceptionGroup)):
+            await consensus(
+                provider,  # type: ignore[arg-type]
+                "q",
+                num_samples=5,
+                max_cost=TokenUsage(llm_calls=1),
+                max_concurrency=5,
+            )
+
+        assert provider.calls == 1
+
 
 # ---------------------------------------------------------------------------
 # refine_loop()
@@ -670,6 +697,9 @@ class TestReactLoop:
             provider, "question", tools=[big_tool], max_observation_chars=100
         )
         assert isinstance(result, PatternResult)
+        assert result.metadata["tool_calls_made"] == 1
+        assert result.metadata["truncated_observations"] == 1
+        assert result.metadata["rounds"] == 2
         # Inspect the message history that was passed to the second LLM call
         assert provider.call_count == 2
         second_call_messages = provider.calls[1].messages
@@ -929,6 +959,12 @@ async def test_react_loop_message_history_trimmed() -> None:
     """max_history_messages limits messages sent to provider each round."""
     from executionkit.patterns.react_loop import react_loop
 
+    executed: list[str] = []
+
+    async def execute_search(**_: object) -> str:
+        executed.append("search")
+        return "ok"
+
     tool_response = _make_tool_response("search", "tc1", {"query": "x"})
     final_response = _make_final_response("Done")
     provider = MockProvider(
@@ -939,10 +975,10 @@ async def test_react_loop_message_history_trimmed() -> None:
         name="search",
         description="search",
         parameters={"type": "object", "properties": {"query": {"type": "string"}}},
-        execute=lambda **_: asyncio.coroutine(lambda: "ok")(),
+        execute=execute_search,
     )
 
-    await react_loop(
+    result = await react_loop(
         provider,
         "find things",
         tools=[search_tool],
@@ -950,6 +986,9 @@ async def test_react_loop_message_history_trimmed() -> None:
         max_history_messages=3,
     )
 
+    assert executed == ["search", "search", "search"]
+    assert result.metadata["tool_calls_made"] == 3
+    assert result.metadata["messages_trimmed"] > 0
     for call_messages in provider.calls:
         assert len(call_messages.messages) <= 3, (
             f"Expected <=3 messages per call, got {len(call_messages.messages)}"
@@ -960,6 +999,12 @@ async def test_react_loop_first_message_always_preserved() -> None:
     """After trimming, messages[0] always contains the original prompt."""
     from executionkit.patterns.react_loop import react_loop
 
+    executed: list[str] = []
+
+    async def execute_search(**_: object) -> str:
+        executed.append("search")
+        return "ok"
+
     tool_response = _make_tool_response("search", "tc1", {"query": "x"})
     final_response = _make_final_response("Done")
     provider = MockProvider(
@@ -970,10 +1015,10 @@ async def test_react_loop_first_message_always_preserved() -> None:
         name="search",
         description="search",
         parameters={"type": "object", "properties": {"query": {"type": "string"}}},
-        execute=lambda **_: asyncio.coroutine(lambda: "ok")(),
+        execute=execute_search,
     )
 
-    await react_loop(
+    result = await react_loop(
         provider,
         "original prompt",
         tools=[search_tool],
@@ -981,6 +1026,8 @@ async def test_react_loop_first_message_always_preserved() -> None:
         max_history_messages=3,
     )
 
+    assert executed == ["search", "search", "search"]
+    assert result.metadata["messages_trimmed"] > 0
     for call_messages in provider.calls:
         assert call_messages.messages[0]["content"] == "original prompt"
 
@@ -988,6 +1035,12 @@ async def test_react_loop_first_message_always_preserved() -> None:
 async def test_react_loop_no_trim_when_none() -> None:
     """Default max_history_messages=None does not trim messages."""
     from executionkit.patterns.react_loop import react_loop
+
+    executed: list[str] = []
+
+    async def execute_search(**_: object) -> str:
+        executed.append("search")
+        return "ok"
 
     tool_response = _make_tool_response("search", "tc1", {"query": "x"})
     final_response = _make_final_response("Done")
@@ -997,11 +1050,14 @@ async def test_react_loop_no_trim_when_none() -> None:
         name="search",
         description="search",
         parameters={"type": "object", "properties": {"query": {"type": "string"}}},
-        execute=lambda **_: asyncio.coroutine(lambda: "ok")(),
+        execute=execute_search,
     )
 
-    await react_loop(provider, "test", tools=[search_tool], max_rounds=8)
+    result = await react_loop(provider, "test", tools=[search_tool], max_rounds=8)
 
+    assert executed == ["search", "search"]
+    assert result.metadata["tool_calls_made"] == 2
+    assert result.metadata["messages_trimmed"] == 0
     # With 2 tool rounds, the final call should have > 3 messages (not trimmed)
     final_call = provider.calls[-1]
     assert len(final_call.messages) > 3, "Messages grow unbounded when trim disabled"
@@ -1348,7 +1404,7 @@ async def test_checked_complete_raises_on_input_token_budget() -> None:
         await checked_complete(provider, msgs, tracker, budget, None)
 
 
-async def test_checked_complete_releases_slot_on_failure() -> None:
+async def test_checked_complete_counts_failed_wire_attempts() -> None:
     """Failed retries still count real wire attempts in the tracker."""
     from executionkit.cost import CostTracker
     from executionkit.patterns.base import checked_complete

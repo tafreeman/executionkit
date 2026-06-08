@@ -52,6 +52,7 @@ result = await consensus(provider, "...", num_samples=5, max_cost=budget)
 | `max_concurrency` | `5` | Semaphore for parallel calls. |
 | `retry` | `DEFAULT_RETRY` | Per-call. |
 | `max_cost` | `None` | Shared across all samples. |
+| `trace` | `None` | Optional `TraceCallback`. |
 
 ### `refine_loop`
 
@@ -67,6 +68,7 @@ result = await consensus(provider, "...", num_samples=5, max_cost=budget)
 | `max_tokens` | `4096` | Per completion. |
 | `max_cost` | `None` | Across all calls. |
 | `retry` | `DEFAULT_RETRY` | Per-call. |
+| `trace` | `None` | Optional `TraceCallback`. |
 
 ### `react_loop`
 
@@ -80,6 +82,8 @@ result = await consensus(provider, "...", num_samples=5, max_cost=budget)
 | `max_cost` | `None` | Across all rounds. |
 | `retry` | `DEFAULT_RETRY` | Per-call. |
 | `max_history_messages` | `None` | When set, trims history; always preserves the original prompt. |
+| `trace` | `None` | Optional `TraceCallback`. |
+| `approval_gate` | `None` | Optional `ApprovalGate` checked before each tool body is executed. |
 
 ### `structured`
 
@@ -91,6 +95,25 @@ result = await consensus(provider, "...", num_samples=5, max_cost=budget)
 | `max_tokens` | `4096` | Per completion. Must be `>= 1`. |
 | `max_cost` | `None` | Across the initial call and repairs. |
 | `retry` | `DEFAULT_RETRY` | Per-call transport retry config. |
+| `trace` | `None` | Optional `TraceCallback`. |
+
+### `Workflow`
+
+| Parameter | Default | Notes |
+|-----------|---------|-------|
+| `steps` | — | Sequence of named `Step` objects with optional dependencies. |
+| `initial_context` | `None` | Mapping copied into the workflow output context before steps run. |
+| `trace` | `None` | Optional `TraceCallback` for `workflow_step_*` events. |
+| `approval_gate` | `None` | Optional `ApprovalGate` checked before each step. |
+
+### `Plan`
+
+| Parameter | Default | Notes |
+|-----------|---------|-------|
+| `steps` | — | Ordered sequence of named `PlanStep` objects. |
+| `initial_context` | `None` | Mapping copied into the plan output context before steps run. |
+| `trace` | `None` | Optional `TraceCallback` for `plan_step_*` events. |
+| `approval_gate` | `None` | Optional `ApprovalGate` checked before each step. |
 
 ### `pipe`
 
@@ -116,11 +139,20 @@ class Tool:
 
 ## Environment variables
 
-ExecutionKit reads no environment variables of its own. All configuration is explicit per `Provider` instance. Read `os.environ` in your application code.
+Most ExecutionKit configuration is explicit per `Provider` instance. Read `os.environ` in your application code for normal provider setup.
 
 The default `Provider` does respect:
 
 - `HTTP_PROXY`, `HTTPS_PROXY` — when using the `httpx` backend, these are picked up via `httpx.AsyncClient` defaults.
+
+The eval helper `live_provider_from_env()` reads these opt-in variables:
+
+| Variable | Meaning |
+|----------|---------|
+| `EXECUTIONKIT_LIVE_EVAL` | Must be `1` to enable live eval provider construction. |
+| `EXECUTIONKIT_BASE_URL` | Required base URL for the OpenAI-compatible endpoint. |
+| `EXECUTIONKIT_MODEL` | Required model name. |
+| `EXECUTIONKIT_API_KEY` | Optional API key. |
 
 ## Coverage and quality gates
 

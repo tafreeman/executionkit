@@ -9,8 +9,10 @@ from itertools import chain
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
+from executionkit.approval import ApprovalGate, ApprovalRequest
 from executionkit.cost import CostTracker
 from executionkit.engine.retry import RetryConfig  # noqa: TC001
+from executionkit.observability import TraceCallback, TraceEvent, emit_trace
 from executionkit.patterns.base import _note_truncation, checked_complete
 from executionkit.provider import (
     MaxIterationsError,
@@ -238,6 +240,9 @@ async def _execute_tool_calls_round(
     max_observation_chars: int,
     metadata: dict[str, Any],
     messages: list[dict[str, Any]],
+    *,
+    trace: TraceCallback | None = None,
+    approval_gate: ApprovalGate | None = None,
 ) -> None:
     """Execute one round's tool calls concurrently, appending observations.
 
@@ -247,15 +252,54 @@ async def _execute_tool_calls_round(
     (tool_calls_made, truncated_observations) and *messages* in place — both are
     owned by the caller (react_loop). ``_execute_tool_call`` never raises (it
     returns error strings), so one failing tool cannot abort the round.
+
+    When *approval_gate* is supplied, each call is checked before its body runs;
+    a denial becomes a bounded observation instead of executing the tool. When
+    *trace* is supplied, ``tool_call_start``/``tool_call_end`` events are emitted
+    around each call. Both run inside the concurrent fan-out, so trace events may
+    interleave across calls; metadata is still applied in request order below.
     """
 
     async def _run_one(tc: Any) -> tuple[Any, str]:
-        observation = await _execute_tool_call(
-            tc_name=tc.name,
-            tc_arguments=tc.arguments,
-            tool_lookup=tool_lookup,
-            tool_timeout=tool_timeout,
-            max_observation_chars=max_observation_chars,
+        await emit_trace(
+            trace,
+            TraceEvent.create(
+                "tool_call_start",
+                {"tool_name": tc.name, "tool_call_id": tc.id},
+            ),
+        )
+        decision = (
+            await approval_gate.request(
+                ApprovalRequest.create(
+                    "tool_call",
+                    tc.name,
+                    {"tool_call_id": tc.id, "arguments": tc.arguments},
+                )
+            )
+            if approval_gate is not None
+            else None
+        )
+        if decision is not None and not decision.approved:
+            suffix = f": {decision.reason}" if decision.reason else ""
+            observation = f"Tool '{tc.name}' blocked by approval{suffix}"
+        else:
+            observation = await _execute_tool_call(
+                tc_name=tc.name,
+                tc_arguments=tc.arguments,
+                tool_lookup=tool_lookup,
+                tool_timeout=tool_timeout,
+                max_observation_chars=max_observation_chars,
+            )
+        await emit_trace(
+            trace,
+            TraceEvent.create(
+                "tool_call_end",
+                {
+                    "tool_name": tc.name,
+                    "tool_call_id": tc.id,
+                    "blocked": decision is not None and not decision.approved,
+                },
+            ),
         )
         return tc, observation
 
@@ -289,6 +333,8 @@ async def react_loop(
     max_cost: TokenUsage | None = None,
     retry: RetryConfig | None = None,
     max_history_messages: int | None = None,
+    trace: TraceCallback | None = None,
+    approval_gate: ApprovalGate | None = None,
     **_: Any,
 ) -> PatternResult[str]:
     """Execute a think-act-observe tool-calling loop.
@@ -314,6 +360,8 @@ async def react_loop(
         max_history_messages: When set, trim the message history to at most
             this many entries before each LLM call. Always keeps the first
             message (the original prompt). ``None`` disables trimming.
+        trace: Optional structured trace callback.
+        approval_gate: Optional gate checked before each tool execution.
 
     Returns:
         A :class:`PatternResult` whose ``value`` is the final LLM
@@ -362,6 +410,7 @@ async def react_loop(
             tracker,
             max_cost,
             retry,
+            trace,
             temperature=temperature,
             max_tokens=max_tokens,
             tools=tool_schemas,
@@ -389,6 +438,8 @@ async def react_loop(
             max_observation_chars,
             metadata,
             messages,
+            trace=trace,
+            approval_gate=approval_gate,
         )
 
     raise MaxIterationsError(

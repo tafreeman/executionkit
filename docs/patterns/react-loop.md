@@ -6,7 +6,7 @@ tags:
 
 # ReAct Tool Loop
 
-`react_loop()` runs the standard **think → act → observe** loop with tool calling. Each round, the LLM may either return a final answer or request one or more tool calls. Tool calls are executed (with timeout and JSON-Schema argument validation), their results appended to the conversation, and the loop continues until the model answers or `max_rounds` is hit.
+`react_loop()` runs the standard **think → act → observe** loop with tool calling. Each round, the LLM may either return a final answer or request one or more tool calls. Tool calls are approved if an `ApprovalGate` is supplied, validated with the built-in JSON-Schema subset, executed with timeout, appended to the conversation, and the loop continues until the model answers or `max_rounds` is hit.
 
 ## When to use / when not to use
 
@@ -117,6 +117,8 @@ asyncio.run(main())
 | `max_cost` | `None` | `TokenUsage` budget across all rounds. |
 | `retry` | `DEFAULT_RETRY` | Per-call retry config. |
 | `max_history_messages` | `None` | Cap message history length per round. Always preserves the original prompt. |
+| `trace` | `None` | Optional callback for `llm_call_*` and `tool_call_*` events. |
+| `approval_gate` | `None` | Optional `ApprovalGate` checked before each tool body is executed. Denied calls become tool observations so the model can recover. |
 
 ## Tool definition
 
@@ -133,6 +135,25 @@ class Tool:
 Arguments are validated against `parameters` (JSON Schema) before `execute` is called. Validation covers `required`, `additionalProperties: false`, and primitive type checks (`string`, `integer`, `number`, `boolean`, `array`, `object`) — using stdlib only, no `jsonschema` dependency.
 
 `execute` must be **async** and return a **string**. Convert non-string results yourself.
+
+## Approval gates
+
+Pass an `ApprovalGate` when a human, policy service, or test double should approve tool execution before side effects happen:
+
+```python
+from executionkit import ApprovalDecision, ApprovalGate, react_loop
+
+gate = ApprovalGate(
+    lambda request: ApprovalDecision(
+        approved=request.name == "read_only_search",
+        reason="writes require review",
+    )
+)
+
+result = await react_loop(provider, prompt, tools, approval_gate=gate)
+```
+
+The gate receives the tool name and arguments. A denial does not call the tool; it appends a bounded observation such as `Tool 'name' blocked by approval: reason` and lets the model continue.
 
 ## Metadata keys
 
