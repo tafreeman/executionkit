@@ -67,6 +67,17 @@ class EvalReport:
     def failures(self) -> tuple[EvalResult, ...]:
         return tuple(result for result in self.results if not result.passed)
 
+    @property
+    def accuracy(self) -> float:
+        """Fraction of cases that passed; 0.0 when the suite is empty."""
+        if self.total == 0:
+            return 0.0
+        return self.passed_count / self.total
+
+    def summary(self) -> str:
+        """One-line human-readable result, e.g. '7/9 passed (77.8% accuracy)'."""
+        return f"{self.passed_count}/{self.total} passed ({self.accuracy:.1%} accuracy)"
+
 
 async def _run_case(case: EvalCase) -> EvalResult:
     try:

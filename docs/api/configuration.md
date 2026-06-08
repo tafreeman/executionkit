@@ -154,6 +154,17 @@ The eval helper `live_provider_from_env()` reads these opt-in variables:
 | `EXECUTIONKIT_MODEL` | Required model name. |
 | `EXECUTIONKIT_API_KEY` | Optional API key. |
 
+## Eval suite
+
+Beyond code coverage, ExecutionKit ships an **output-correctness** eval suite that runs offline in CI:
+
+- **Golden suite** (`tests/eval_datasets.py` → `golden_cases()`): deterministic per-pattern goldens (structured extraction, consensus voting, refine best-not-last, ReAct tool calls) that assert exact values *and* metadata through a `MockProvider`.
+- **Failure corpus** (`tests/eval_failure_cases.py`): curated malformed-output, prompt-injection, and bad-tool-argument cases proving each is handled gracefully (repair, blocked execution, `ProviderError`) rather than crashing.
+- **Accuracy metrics**: `EvalReport.accuracy` and `EvalReport.summary()` report pass-rate, not just pass/fail — e.g. `7/9 passed (77.8% accuracy)`.
+- **Opt-in live tiers** (`tests/test_judge_calibration.py`, `tests/test_live_regression.py`): judge-calibration and per-pattern regression against a real OpenAI-compatible endpoint, skipped unless `EXECUTIONKIT_LIVE_EVAL=1` (see the table above).
+
+The deterministic tiers run as a dedicated **Eval suite** CI step on every push; the live tiers stay env-gated so normal CI never needs a network or a key.
+
 ## Coverage and quality gates
 
 Project-level CI gates (in `pyproject.toml`):
@@ -164,3 +175,4 @@ Project-level CI gates (in `pyproject.toml`):
 | `mypy --strict` | Zero errors. |
 | `ruff check` rules | `E F W I N UP S B A C4 SIM TCH RUF`. |
 | `bandit` | No HIGH severity findings. |
+| Eval suite (goldens + failure corpus) | All cases pass. |
