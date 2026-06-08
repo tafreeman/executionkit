@@ -72,8 +72,9 @@ async def test_live_structured_validator_accepts_conforming_payload() -> None:
         max_tokens=64,
     )
 
-    assert result.value["status"] == "ok"  # type: ignore[index]
-    assert isinstance(result.value["count"], int)  # type: ignore[index]
+    assert isinstance(result.value, dict)
+    assert result.value["status"] == "ok"
+    assert isinstance(result.value["count"], int)
     assert result.metadata["validated"] is True
 
 
