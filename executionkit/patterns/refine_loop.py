@@ -16,6 +16,22 @@ from executionkit.types import Evaluator, PatternResult, TokenUsage
 if TYPE_CHECKING:
     from executionkit.observability import TraceCallback
 
+# Matches an opening or closing <response_to_rate> envelope tag (any case,
+# optional inner whitespace) so it can be stripped from untrusted candidate text.
+_EVAL_ENVELOPE_TAG_RE = re.compile(r"</?\s*response_to_rate\s*>", re.IGNORECASE)
+
+
+def _neutralize_delimiter(text: str) -> str:
+    """Strip the evaluation-envelope tag from untrusted candidate text.
+
+    The default judge wraps the candidate response in ``<response_to_rate>``
+    delimiters and tells the model to ignore instructions inside them. Removing
+    any literal envelope tags the content itself carries stops adversarial text
+    from closing the envelope early and smuggling instructions outside it
+    (prompt-injection hardening — defense-in-depth, not a guarantee).
+    """
+    return _EVAL_ENVELOPE_TAG_RE.sub("", text)
+
 
 def _validate_refine_args(
     target_score: float,
@@ -81,10 +97,11 @@ def _make_default_evaluator(
     """
 
     async def _default_evaluator(text: str, llm: LLMProvider) -> float:
-        # Truncate to prevent unbounded prompt growth and wrap in
-        # XML-delimiters so adversarial content cannot override the
+        # Truncate to prevent unbounded prompt growth, strip any envelope tags
+        # the candidate itself carries (so it cannot break out of the sandbox),
+        # then wrap in XML-delimiters so adversarial content cannot override the
         # scoring instruction (prompt-injection mitigation).
-        sanitized = text[:max_eval_chars]
+        sanitized = _neutralize_delimiter(text[:max_eval_chars])
         eval_messages: list[dict[str, Any]] = [
             {
                 "role": "system",
