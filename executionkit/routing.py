@@ -48,7 +48,27 @@ class Router:
         return self.fallback
 
     async def run(
-        self, pattern: RoutedPattern, prompt: str, **kwargs: Any
+        self,
+        pattern: RoutedPattern,
+        prompt: str,
+        *,
+        context: Mapping[str, Any] | None = None,
+        **kwargs: Any,
     ) -> PatternResult[Any]:
-        provider = self.select(prompt, **kwargs)
+        """Select a provider from *context*, then call *pattern* with it.
+
+        Routing inputs are passed explicitly via *context* and forwarded only to
+        the route predicates; ``**kwargs`` are forwarded only to *pattern*.
+        Keeping the two disjoint stops routing keys (e.g. ``tier``) from leaking
+        into the pattern call — which would raise ``TypeError`` for any pattern
+        that does not declare them.
+        """
+        # Drop a stray "prompt" key so it cannot collide with the positional
+        # ``prompt`` argument to ``select`` (``select(prompt, prompt=...)`` would
+        # raise TypeError). The predicate still receives the real prompt
+        # positionally, so nothing is lost.
+        route_context = {
+            key: value for key, value in (context or {}).items() if key != "prompt"
+        }
+        provider = self.select(prompt, **route_context)
         return await pattern(provider, prompt, **kwargs)

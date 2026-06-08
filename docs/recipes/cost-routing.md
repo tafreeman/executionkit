@@ -68,7 +68,7 @@ asyncio.run(main())
 - ExecutionKit patterns take a `provider` as their first argument. Swapping providers is a single positional argument — no pattern code changes.
 - Each `Provider` has its own `base_url`, `api_key`, and `model`. They are **independent HTTP clients** (especially when `httpx` is installed — each gets its own connection pool).
 - Routing happens *before* the pattern call. The pattern doesn't know or care about the tier.
-- `Router.run(pattern, prompt, **kwargs)` is available when one selected provider should call one pattern directly. Select explicitly when you want different patterns per route, as above.
+- `Router.run(pattern, prompt, *, context=..., **kwargs)` is available when one selected provider should call one pattern directly. Routing inputs go in `context=` (seen only by the route predicates); `**kwargs` go only to the pattern — so a routing key like `tier` never leaks into the pattern call. Select explicitly when you want different patterns per route, as above.
 
 ## Variations
 

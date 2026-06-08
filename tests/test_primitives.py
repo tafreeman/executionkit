@@ -90,6 +90,43 @@ async def test_router_selects_matching_rule_and_fallback() -> None:
     assert result.value == "premium"
 
 
+async def test_router_run_separates_context_from_pattern_kwargs() -> None:
+    """run() routes via ``context=`` and forwards ``**kwargs`` only to the
+    pattern, so a routing key (e.g. ``tier``) cannot leak into the pattern call
+    and raise ``TypeError``."""
+    from executionkit.patterns.consensus import consensus
+    from executionkit.routing import Router, RouteRule
+
+    cheap = MockProvider(responses=["cheap"])
+    premium = MockProvider(responses=["premium"])
+    router = Router(
+        rules=[
+            RouteRule(
+                name="premium-tier",
+                provider=premium,
+                predicate=lambda prompt, context: context.get("tier") == "premium",
+            )
+        ],
+        fallback=cheap,
+    )
+
+    # ``tier`` routes (via context) but is NOT forwarded to consensus, which has
+    # no ``tier`` parameter — a leak would raise TypeError on this call. A stray
+    # ``prompt`` key is also present to prove it does not collide with the
+    # positional ``prompt`` passed to ``select``.
+    routed = await router.run(
+        consensus,
+        "short",
+        context={"tier": "premium", "prompt": "ignored"},
+        num_samples=1,
+    )
+    assert routed.value == "premium"
+
+    # Without routing context, the same short prompt falls back.
+    fell_back = await router.run(consensus, "short", num_samples=1)
+    assert fell_back.value == "cheap"
+
+
 async def test_workflow_runs_branching_steps_and_aggregates_cost() -> None:
     from executionkit.workflow import Step, Workflow
 
