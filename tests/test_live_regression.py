@@ -212,7 +212,8 @@ async def test_live_refine_loop_converges_and_score_history() -> None:
     )
 
     # LIVE-REFINE-01: convergence and basic shape
-    assert 0.0 <= result.score <= 1.0  # type: ignore[operator]
+    assert result.score is not None
+    assert 0.0 <= result.score <= 1.0
     assert isinstance(result.value, str)
     assert len(result.value.strip()) > 0
     assert result.metadata["converged"] is True
