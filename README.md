@@ -139,7 +139,7 @@ ExecutionKit also exposes small stdlib-only primitives for the glue code around 
 - **Composable.** Patterns are async functions. Wrap them, chain them with `pipe()`, or drop them inside a larger orchestrator like [agentic-runtime-platform](https://github.com/tafreeman/agentic-runtime-platform).
 - **Budget-aware.** TOCTOU-safe `max_cost` enforcement across parallel calls; `llm_calls` counts every dispatched wire attempt, including failed retries.
 - **Secure-by-default.** API key masking, broad credential redaction in errors, top-level JSON-Schema tool validation, prompt-injection-hardened default evaluator, and optional approval gates.
-- **Eval-aware.** Deterministic golden evals run in normal CI; live provider evals stay explicitly env-gated.
+- **Eval-aware.** A deterministic golden suite and a model-failure corpus assert *output correctness* (not just coverage) in normal CI, with `EvalReport.accuracy`/`summary()` metrics; judge-calibration and live-provider regression tiers stay explicitly env-gated.
 
 ## Built for Platform Teams
 

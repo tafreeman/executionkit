@@ -42,6 +42,9 @@ jobs:
       - name: Tests with coverage
         run: pytest tests/ --cov=executionkit --cov-report=term-missing --cov-report=xml --cov-fail-under=80 -q
 
+      - name: Eval suite (deterministic goldens + failure corpus)
+        run: pytest tests/test_eval_goldens.py tests/test_eval_failure_corpus.py tests/test_eval_metrics.py --no-cov -p no:cacheprovider -q
+
       - name: Upload coverage to Codecov
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
         uses: codecov/codecov-action@v6
