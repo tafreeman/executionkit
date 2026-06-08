@@ -163,7 +163,7 @@ Beyond code coverage, ExecutionKit ships an **output-correctness** eval suite th
 - **Accuracy metrics**: `EvalReport.accuracy` and `EvalReport.summary()` report pass-rate, not just pass/fail — e.g. `7/9 passed (77.8% accuracy)`.
 - **Opt-in live tiers** (`tests/test_judge_calibration.py`, `tests/test_live_regression.py`): judge-calibration and per-pattern regression against a real OpenAI-compatible endpoint, skipped unless `EXECUTIONKIT_LIVE_EVAL=1` (see the table above).
 
-The deterministic tiers run as a dedicated **Eval suite** CI step on every push; the live tiers stay env-gated so normal CI never needs a network or a key.
+The deterministic tiers run as a dedicated **Eval suite** CI step on every push; the live tiers stay env-gated so normal CI never needs a network or a key. A separate **Live Eval** workflow (`.github/workflows/live-eval.yml`, manual `workflow_dispatch` + weekly) runs the live tiers against a local Ollama model and uploads the results as a `live-eval-results.xml` artifact — real-endpoint evidence without blocking any PR.
 
 ## Coverage and quality gates
 

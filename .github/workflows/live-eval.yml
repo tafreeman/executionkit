@@ -1,0 +1,68 @@
+name: Live Eval (real model)
+
+# Real-endpoint evidence for the opt-in live tiers (per-pattern regression +
+# judge calibration). This is NOT a required gate: it runs on demand and weekly
+# against a local Ollama model so the env-gated live evals actually execute and
+# their results are uploaded as an artifact. It never runs on pull_request, so a
+# flaky model response can never block a PR.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 7 * * 1" # Mondays 07:00 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  live-eval:
+    name: "Live provider eval (Ollama)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      EXECUTIONKIT_LIVE_EVAL: "1"
+      EXECUTIONKIT_BASE_URL: "http://localhost:11434/v1"
+      # Small, tool-calling-capable instruct model (the ReAct eval needs tools).
+      EXECUTIONKIT_MODEL: "llama3.2:3b"
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Install and start Ollama
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          # The installer starts ollama via systemd; fall back to a detached
+          # server if the API is not reachable, then wait for readiness.
+          if ! curl -sf http://localhost:11434/api/version >/dev/null 2>&1; then
+            nohup ollama serve >/tmp/ollama.log 2>&1 &
+          fi
+          for _ in $(seq 1 30); do
+            curl -sf http://localhost:11434/api/version >/dev/null 2>&1 && break
+            sleep 2
+          done
+          curl -sf http://localhost:11434/api/version >/dev/null 2>&1 \
+            || { echo "Ollama failed to start"; cat /tmp/ollama.log 2>/dev/null; exit 1; }
+
+      - name: Pull model
+        run: ollama pull "$EXECUTIONKIT_MODEL"
+
+      - name: Run live eval tier
+        run: |
+          pytest tests/test_live_regression.py tests/test_judge_calibration.py \
+            -v --no-cov -p no:cacheprovider --junitxml=live-eval-results.xml
+
+      - name: Upload eval results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-eval-results
+          path: live-eval-results.xml
+          if-no-files-found: warn
