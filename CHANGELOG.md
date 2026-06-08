@@ -6,10 +6,35 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-<!-- 2026-05-28 -->
-### Maintenance
-- Repository hygiene pass; no functional changes.
-- Pinned at 835c839 following CI green confirmation.
+## [0.2.0] - 2026-06-08
+
+### Added
+
+- Add lightweight orchestration primitives: `Router`/`RouteRule` for provider selection before a pattern call, `Workflow`/`Step` for dependency-ordered async fan-out, and `Plan`/`PlanStep` for ordered plan-then-act execution
+- Add approval gates — `ApprovalGate`, `ApprovalRequest`, `ApprovalDecision`, and `ApprovalDeniedError` — that require human or policy approval before tool execution, workflow steps, or plan steps; wired into `react_loop` (a denial becomes a tool observation) and into `Workflow`/`Plan` (a denial aborts)
+- Add observability hooks — `TraceEvent`, `TraceCallback`, and `emit_trace` — emitting structured sync-or-async events for LLM call start/end/error, tool calls, workflow steps, plan steps, and approvals; add a `trace=` parameter to `consensus`, `refine_loop`, `react_loop`, and `structured`
+- Add an eval harness — `EvalCase`, `EvalResult`, `EvalReport`, and `run_eval_suite()` for deterministic golden checks, plus `live_provider_from_env()` for opt-in live evals gated on `EXECUTIONKIT_LIVE_EVAL`; `EvalReport` reports `accuracy` and `summary()`
+- Add an output-correctness eval suite: deterministic per-pattern golden datasets and a curated model-failure corpus that run offline in CI under a dedicated "Eval suite" gate, plus opt-in judge-calibration and per-pattern live-provider regression tiers and a scheduled/manual `Live Eval` workflow that runs them against a local Ollama model
+- Add an `approval_gate=` parameter to `react_loop`, `Workflow.run`, and `Plan.execute`
+
+### Changed
+
+- Budget accounting now counts every dispatched wire attempt — including failed retries — toward `llm_calls`, and the dead `release_call()` slot-release path was removed; a `max_cost` `llm_calls` ceiling now caps total attempts, not just successes **(behavior change)**
+- `Router.run(pattern, prompt, *, context=..., **kwargs)` takes routing inputs through an explicit `context` mapping disjoint from the pattern's keyword arguments, so a routing key (e.g. `tier`) can no longer leak into the pattern call and raise `TypeError`
+- Broaden credential redaction to match common keyless token shapes (`ghp_`/`gho_`, `AIza`, `xox[bpoa]-`, `gsk_`, and `key=`/`token:`/`bearer …` variants) and apply it to transport-failure messages and malformed tool-argument echoes as well as HTTP error bodies
+
+### Security
+
+- Harden the `refine_loop` default judge: embedded `</response_to_rate>` envelope tags are stripped from candidate text so adversarial content cannot break out of the scoring sandbox
+- Bounds-check provider-reported token usage (`_usage_int`): reject booleans, negatives, and absurdly large counts as `ProviderError` so a hostile or buggy endpoint cannot under-count and bypass `max_cost`
+- Add `ApprovalGate` as an opt-in control for human/policy review before tool, workflow, or plan side effects
+
+### Fixed
+
+- Map urllib read-phase `TimeoutError` to a retryable `ProviderError` on the default (no-`httpx`) transport path, matching the `httpx` backend
+- `Kit.usage` now records the partial cost carried by a raised `ExecutionKitError` (e.g. `BudgetExhaustedError`, `MaxIterationsError`) instead of dropping it when a pattern aborts
+- Harden `Router.run` against a `prompt` key in the routing context colliding with the positional `prompt` argument to `select()`
+- Strengthen ReAct history-trimming tests (remove `asyncio.coroutine`, unavailable since Python 3.11) and assert on `rounds`/`tool_calls_made`/`truncated_observations`/`messages_trimmed` metadata
 
 ## [0.1.0] - 2026-05-22
 

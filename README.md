@@ -8,7 +8,7 @@ Consensus voting · Iterative refinement · ReAct tool loops · Structured JSON 
 [![Python 3.11-3.13](https://img.shields.io/badge/python-3.11--3.13-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/executionkit)](https://pypi.org/project/executionkit/)
-[![Releases](https://img.shields.io/badge/releases-v0.1.0-orange)](https://github.com/tafreeman/executionkit/releases)
+[![Releases](https://img.shields.io/badge/releases-v0.2.0-orange)](https://github.com/tafreeman/executionkit/releases)
 [![CI](https://github.com/tafreeman/executionkit/actions/workflows/ci.yml/badge.svg)](https://github.com/tafreeman/executionkit/actions/workflows/ci.yml)
 [![coverage](https://img.shields.io/badge/coverage-%E2%89%A580%25-brightgreen)](https://github.com/tafreeman/executionkit/actions/workflows/ci.yml)
 [![Linting: ruff](https://img.shields.io/badge/linting-ruff-261230.svg)](https://github.com/astral-sh/ruff)
@@ -66,7 +66,7 @@ flowchart TB
 > hierarchy live directly in `executionkit/` today. ADR-023 reserves a future
 > extraction path if agentic-runtime-platform ever needs a separate contracts
 > package, but there is no standalone `executionkit-contracts` distribution in
-> v0.1.0.
+> v0.2.0.
 
 > **Development note:** Built with AI-assisted development under human review; architecture, tests,
 > release gates, and public documentation remain maintainer-owned and verified through the repo's
