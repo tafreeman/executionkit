@@ -134,6 +134,9 @@ class Tool:
 
 Arguments are validated against `parameters` (JSON Schema) before `execute` is called. Validation covers `required`, `additionalProperties: false`, and primitive type checks (`string`, `integer`, `number`, `boolean`, `array`, `object`) — using stdlib only, no `jsonschema` dependency.
 
+!!! warning "Validation is shape-only — content safety is the tool's job"
+    This is a deliberate JSON-Schema **subset**. It does **not** recurse into nested object/array contents, and it ignores `format`, `enum`, `pattern`, and numeric/length range constraints (`minimum`, `maxLength`, …). It confirms the argument *shape*, not that values are safe or in range — your `execute` must still validate and sanitize the arguments it receives (e.g. path/SQL/shell inputs) before acting on them.
+
 `execute` must be **async** and return a **string**. Convert non-string results yourself.
 
 ## Approval gates

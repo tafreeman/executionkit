@@ -270,6 +270,53 @@ async def test_kit_usage_accumulates_across_different_patterns(
 
 
 # ---------------------------------------------------------------------------
+# Cost recording when a pattern raises
+# ---------------------------------------------------------------------------
+
+
+async def test_kit_records_partial_cost_when_pattern_raises(
+    provider: MockProvider,
+) -> None:
+    """A raised ExecutionKit error carries the cost accrued before it aborted;
+    Kit.usage must reflect that spend instead of silently dropping it."""
+    from executionkit.provider import BudgetExhaustedError
+
+    err = BudgetExhaustedError(
+        "over budget",
+        cost=TokenUsage(input_tokens=12, output_tokens=4, llm_calls=2),
+    )
+    with patch("executionkit.kit.consensus", new=AsyncMock(side_effect=err)):
+        kit = Kit(provider)
+        with pytest.raises(BudgetExhaustedError):
+            await kit.consensus("p")
+
+    assert kit.usage.llm_calls == 2
+    assert kit.usage.input_tokens == 12
+    assert kit.usage.output_tokens == 4
+
+
+async def test_kit_records_cost_on_failure_end_to_end() -> None:
+    """Through the real refine pattern: the budget trips mid-run, and the one
+    call dispatched before it is still counted in Kit.usage."""
+    from executionkit.provider import BudgetExhaustedError
+
+    async def never_good(value: str, _provider: object) -> float:
+        return 0.0
+
+    kit = Kit(MockProvider(responses=["draft", "again"]))
+    with pytest.raises(BudgetExhaustedError):
+        await kit.refine(
+            "improve",
+            evaluator=never_good,
+            max_cost=TokenUsage(llm_calls=1),
+            max_iterations=3,
+        )
+
+    # The initial generation reserved one call before the budget tripped.
+    assert kit.usage.llm_calls == 1
+
+
+# ---------------------------------------------------------------------------
 # Deterministic smoke tests (use real MockProvider without patching)
 # ---------------------------------------------------------------------------
 
