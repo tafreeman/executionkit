@@ -63,5 +63,12 @@ class Router:
         into the pattern call — which would raise ``TypeError`` for any pattern
         that does not declare them.
         """
-        provider = self.select(prompt, **dict(context or {}))
+        # Drop a stray "prompt" key so it cannot collide with the positional
+        # ``prompt`` argument to ``select`` (``select(prompt, prompt=...)`` would
+        # raise TypeError). The predicate still receives the real prompt
+        # positionally, so nothing is lost.
+        route_context = {
+            key: value for key, value in (context or {}).items() if key != "prompt"
+        }
+        provider = self.select(prompt, **route_context)
         return await pattern(provider, prompt, **kwargs)

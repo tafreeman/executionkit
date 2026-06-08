@@ -111,11 +111,13 @@ async def test_router_run_separates_context_from_pattern_kwargs() -> None:
     )
 
     # ``tier`` routes (via context) but is NOT forwarded to consensus, which has
-    # no ``tier`` parameter — a leak would raise TypeError on this call.
+    # no ``tier`` parameter — a leak would raise TypeError on this call. A stray
+    # ``prompt`` key is also present to prove it does not collide with the
+    # positional ``prompt`` passed to ``select``.
     routed = await router.run(
         consensus,
         "short",
-        context={"tier": "premium"},
+        context={"tier": "premium", "prompt": "ignored"},
         num_samples=1,
     )
     assert routed.value == "premium"
