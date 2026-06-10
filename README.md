@@ -89,7 +89,7 @@ async def main() -> None:
         api_key=os.environ["OPENAI_API_KEY"],
         model="gpt-4o-mini",
     ) as provider:
-        result = await consensus(provider, "What is the capital of France?", num_samples=5)
+        result = await consensus(provider, "What is the capital of France?", num_samples=3)
         print(result.value, result.metadata["agreement_ratio"], result.cost)
 
 asyncio.run(main())
