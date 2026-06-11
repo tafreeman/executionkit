@@ -513,16 +513,28 @@ def _classify_http_error(
 
     Raises:
         RateLimitError: For HTTP 429.
-        PermanentError: For HTTP 401, 403, 404.
-        ProviderError: For all other non-2xx status codes.
+        PermanentError: For HTTP 401, 403, 404, 400, 405, 409, 413, 422.
+            These statuses indicate a permanent client error — the request
+            cannot succeed as-is regardless of how many times it is retried.
+            Mapping them to ``PermanentError`` (which is not in the default
+            ``RetryConfig.retryable`` tuple) prevents burning the LLM call
+            budget on outcomes that cannot change (e.g. malformed request,
+            unprocessable entity, payload too large).
+        ProviderError: For 5xx and all other non-2xx status codes, which may
+            be transient and are therefore retryable under the default config.
     """
     if status == 429:
         raise RateLimitError(
             "Rate limited (HTTP 429)",
             retry_after=retry_after,
         ) from cause
-    if status in {401, 403, 404}:
+    # Non-retryable client errors: the request cannot succeed as-is.
+    # 400 = bad request, 405 = method not allowed, 409 = conflict,
+    # 413 = payload too large, 422 = unprocessable entity.
+    if status in {400, 401, 403, 404, 405, 409, 413, 422}:
         raise PermanentError(_format_http_error(status, raw)) from cause
+    # 5xx and other unknown statuses may be transient — keep as ProviderError
+    # so they remain retryable under the default RetryConfig.
     raise ProviderError(_format_http_error(status, raw)) from cause
 
 
