@@ -66,8 +66,12 @@ class CostTracker:
     def record_without_call(self, response: LLMResponse) -> None:
         """Record token usage from a response without incrementing the call counter.
 
-        Used by :func:`checked_complete` which pre-increments ``_calls`` before
-        the ``await`` to prevent TOCTOU races in concurrent budget checks.
+        Used by :func:`~executionkit.patterns.base.checked_complete` because
+        :meth:`reserve_call` (called from ``_before_attempt``) pre-increments
+        ``_calls`` before the ``await`` to uphold the asyncio concurrency
+        contract described in the module-level docstring.  Token totals are
+        therefore recorded here, after the provider returns, without a second
+        increment to the call counter.
         """
         self._input += response.input_tokens
         self._output += response.output_tokens

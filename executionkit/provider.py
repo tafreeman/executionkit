@@ -310,10 +310,12 @@ class Provider:
     ) -> dict[str, Any]:
         """HTTP POST via stdlib ``urllib`` in a thread.
 
-        Maps HTTP errors to the appropriate error class:
+        Maps HTTP errors to the appropriate error class via
+        :func:`_classify_http_error`:
         - 429 -> RateLimitError
-        - 401 -> PermanentError
-        - >=400 -> ProviderError
+        - {400, 401, 403, 404, 405, 409, 413, 422} -> PermanentError
+          (non-retryable client errors whose outcome cannot change on retry)
+        - everything else >=400 -> ProviderError (retryable by default)
         """
         request_timeout = self.timeout
 
@@ -531,6 +533,9 @@ def _classify_http_error(
     # Non-retryable client errors: the request cannot succeed as-is.
     # 400 = bad request, 405 = method not allowed, 409 = conflict,
     # 413 = payload too large, 422 = unprocessable entity.
+    # Note: 408 (Request Timeout) is intentionally excluded — it is a
+    # transient server-side timeout and therefore retryable as ProviderError.
+    # Note: 429 is handled above as RateLimitError, not PermanentError.
     if status in {400, 401, 403, 404, 405, 409, 413, 422}:
         raise PermanentError(_format_http_error(status, raw)) from cause
     # 5xx and other unknown statuses may be transient — keep as ProviderError

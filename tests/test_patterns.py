@@ -1720,7 +1720,12 @@ def test_no_await_between_check_and_reserve() -> None:
     assert before_start != -1, (
         "_before_attempt closure not found in checked_complete source"
     )
-    # The outer try-block always follows _before_attempt in the current layout.
+    # Layout assumption: the outer ``try:`` block (indented with 4 spaces)
+    # immediately follows the _before_attempt closure in checked_complete's
+    # source.  The literal "\n    try:" is used as the closure boundary
+    # sentinel.  If checked_complete is refactored to move that try block
+    # (e.g. by inserting another nested function or early-return before it),
+    # update this sentinel string accordingly.
     try_pos = source.find("\n    try:", before_start)
     closure_source = (
         source[before_start:try_pos] if try_pos != -1 else source[before_start:]

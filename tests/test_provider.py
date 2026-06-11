@@ -1154,7 +1154,7 @@ async def test_422_raises_permanent_error_after_single_attempt() -> None:
 async def test_500_retries_under_default_retry() -> None:
     """Provider returning HTTP 500 (ProviderError) retries under DEFAULT_RETRY."""
     from executionkit.cost import CostTracker
-    from executionkit.engine.retry import DEFAULT_RETRY, RetryConfig
+    from executionkit.engine.retry import RetryConfig
     from executionkit.patterns.base import checked_complete
     from executionkit.provider import ProviderError
 
@@ -1179,8 +1179,8 @@ async def test_500_retries_under_default_retry() -> None:
         )
 
     # ProviderError is retryable — must attempt max_retries times
-    assert call_count == DEFAULT_RETRY.max_retries, (
-        f"Expected {DEFAULT_RETRY.max_retries} attempts, got {call_count}"
+    assert call_count == fast_retry.max_retries, (
+        f"Expected {fast_retry.max_retries} attempts, got {call_count}"
     )
 
 
