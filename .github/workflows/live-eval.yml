@@ -24,6 +24,8 @@ jobs:
       EXECUTIONKIT_BASE_URL: "http://localhost:11434/v1"
       # Small, tool-calling-capable instruct model (the ReAct eval needs tools).
       EXECUTIONKIT_MODEL: "llama3.2:3b"
+      OLLAMA_VERSION: "0.30.7"
+      OLLAMA_LINUX_AMD64_SHA256: "88c110a6c9a9130e5ed0aa90f47e8ddb013cb638d834e11ddf1517615704d34c"
 
     steps:
       - uses: actions/checkout@v6
@@ -36,13 +38,20 @@ jobs:
       - name: Install dependencies
         run: pip install -e ".[dev]"
 
-      - name: Install and start Ollama
+      - name: Install and start pinned Ollama
         run: |
-          curl -fsSL https://ollama.com/install.sh | sh
-          # The installer starts ollama via systemd; fall back to a detached
-          # server if the API is not reachable, then wait for readiness.
+          sudo apt-get update
+          sudo apt-get install -y zstd
+          curl -fsSLo /tmp/ollama-linux-amd64.tar.zst \
+            "https://github.com/ollama/ollama/releases/download/v${OLLAMA_VERSION}/ollama-linux-amd64.tar.zst"
+          echo "${OLLAMA_LINUX_AMD64_SHA256}  /tmp/ollama-linux-amd64.tar.zst" | sha256sum -c -
+          sudo tar --use-compress-program=unzstd -xf /tmp/ollama-linux-amd64.tar.zst -C /usr/local
+          ollama --version
+
+          # Start a detached server and wait for readiness.
+          nohup ollama serve >/tmp/ollama.log 2>&1 &
           if ! curl -sf http://localhost:11434/api/version >/dev/null 2>&1; then
-            nohup ollama serve >/tmp/ollama.log 2>&1 &
+            sleep 2
           fi
           for _ in $(seq 1 30); do
             curl -sf http://localhost:11434/api/version >/dev/null 2>&1 && break
