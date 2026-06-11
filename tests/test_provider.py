@@ -1119,8 +1119,7 @@ def test_extract_content_handles_mixed_content_list() -> None:
 
 
 async def test_422_raises_permanent_error_after_single_attempt() -> None:
-    """Provider returning HTTP 422 makes exactly one wire attempt under DEFAULT_RETRY."""
-    from executionkit._mock import MockProvider
+    """Provider returning HTTP 422 makes exactly one wire attempt (DEFAULT_RETRY)."""
     from executionkit.cost import CostTracker
     from executionkit.engine.retry import DEFAULT_RETRY
     from executionkit.patterns.base import checked_complete
@@ -1147,7 +1146,9 @@ async def test_422_raises_permanent_error_after_single_attempt() -> None:
     # PermanentError is not retryable — must stop after the first attempt.
     assert call_count == 1, f"Expected 1 attempt, got {call_count}"
     # reserve_call() is called once before the attempt
-    assert tracker.call_count == 1, f"Expected tracker.call_count==1, got {tracker.call_count}"
+    assert tracker.call_count == 1, (
+        f"Expected tracker.call_count==1, got {tracker.call_count}"
+    )
 
 
 async def test_500_retries_under_default_retry() -> None:
