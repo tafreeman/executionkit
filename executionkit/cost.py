@@ -2,6 +2,25 @@
 
 ``CostTracker`` accumulates token usage across multiple LLM calls and
 produces a ``TokenUsage`` snapshot on demand.
+
+Concurrency model
+-----------------
+``CostTracker`` is **NOT thread-safe**.  Its counters are plain Python
+``int`` attributes with no locking.  Under ``threading``, multiple threads
+can race past budget checks and cause the budget to be overshot.
+
+For asyncio (cooperative scheduling), ``CostTracker`` is safe **only when
+the budget check and the subsequent ``reserve_call()`` execute within the
+same synchronous run-segment** — i.e. without an ``await`` between them.
+:func:`~executionkit.patterns.base.checked_complete` upholds this invariant
+by design (see that function's ``_before_attempt`` closure): the check and
+``reserve_call()`` are co-located with no ``await`` between them, so no
+other coroutine can be scheduled between the two operations.
+
+If this code is ever refactored to insert an ``await`` between
+``_check_budget`` and ``reserve_call()``, the budget guarantee breaks.  A
+CI test in ``tests/test_patterns.py`` (``test_no_await_between_check_and_reserve``)
+uses ``inspect.getsource`` to assert this invariant is preserved.
 """
 
 from __future__ import annotations
@@ -29,11 +48,18 @@ class CostTracker:
         self._calls += 1
 
     def reserve_call(self) -> None:
-        """Reserve a call slot before dispatching (for TOCTOU-safe budget checks).
+        """Reserve a call slot before dispatching (for budget-safe accounting).
 
-        Called by :func:`checked_complete` before awaiting the provider call.
-        Reservations intentionally count every wire attempt, including failed
-        attempts, so call budgets cap retries as well as successes.
+        Called by :func:`~executionkit.patterns.base.checked_complete` before
+        awaiting the provider call.  Reservations intentionally count every
+        wire attempt, including failed attempts, so call budgets cap retries
+        as well as successes.
+
+        **Concurrency contract**: this method must be called in the same
+        synchronous run-segment as the preceding budget check — with no
+        ``await`` between them — to prevent concurrent asyncio coroutines
+        from racing past the check.  See module-level docstring for details.
+        This guarantee does NOT hold under threading.
         """
         self._calls += 1
 

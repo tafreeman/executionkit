@@ -1805,3 +1805,77 @@ class TestTrackedProviderSupportsDelegation:
             context="test",
         )
         assert tp.supports_tools is False
+
+
+# ---------------------------------------------------------------------------
+# FIX #4: CostTracker concurrency model — no-await ordering regression test.
+#
+# The budget check (_check_budget) and call reservation (reserve_call) in
+# checked_complete's _before_attempt closure must remain in the same
+# synchronous run-segment with no ``await`` between them.  If an await is
+# inserted between them, concurrent asyncio coroutines sharing a CostTracker
+# could both pass the budget check before either has incremented the counter,
+# causing the budget to be overshot.
+#
+# This test uses inspect.getsource to statically assert the ordering
+# invariant.  It will fail CI if an await is accidentally introduced.
+# ---------------------------------------------------------------------------
+
+
+def test_no_await_between_check_and_reserve() -> None:
+    """No ``await`` must appear between _check_budget and reserve_call() in
+    checked_complete's _before_attempt closure.
+
+    This is a source-inspection regression test that guards the asyncio
+    budget-safety guarantee documented in executionkit/cost.py and
+    executionkit/patterns/base.py.  If this test fails after a refactor,
+    re-evaluate the concurrency contract before merging.
+    """
+    import inspect
+
+    from executionkit.patterns.base import checked_complete
+
+    source = inspect.getsource(checked_complete)
+
+    # Isolate the _before_attempt closure.  It starts at the nested
+    # ``async def _before_attempt`` and ends just before the outer ``try:``
+    # block that follows it.
+    before_start = source.find("async def _before_attempt")
+    assert before_start != -1, (
+        "_before_attempt closure not found in checked_complete source"
+    )
+    # The outer try-block always follows _before_attempt in the current layout.
+    try_pos = source.find("\n    try:", before_start)
+    closure_source = source[before_start:try_pos] if try_pos != -1 else source[before_start:]
+
+    # Strip comment lines before searching for call positions so that tokens
+    # that appear in comments (e.g. ``reserve_call()`` in a ``# No await ...``
+    # comment) are not mistaken for real call sites.
+    code_lines = [
+        line
+        for line in closure_source.splitlines(keepends=True)
+        if not line.lstrip().startswith("#")
+    ]
+    code_only = "".join(code_lines)
+
+    # Within the closure (code only), find both key calls.
+    check_pos = code_only.find("_check_budget(")
+    reserve_pos = code_only.find("reserve_call()")
+
+    assert reserve_pos != -1, "reserve_call() not found inside _before_attempt closure"
+    assert check_pos != -1, (
+        "_check_budget() not found inside _before_attempt closure"
+    )
+    assert check_pos < reserve_pos, (
+        "_check_budget() must appear before reserve_call() in _before_attempt"
+    )
+
+    # The critical section: the substring between the end of the _check_budget
+    # call and reserve_call() must not contain an ``await`` keyword.
+    between = code_only[check_pos:reserve_pos]
+    assert "await" not in between, (
+        "An ``await`` was found between _check_budget and reserve_call() in "
+        "checked_complete._before_attempt.  This breaks the asyncio budget-safety "
+        "guarantee — no other coroutine must be schedulable between the budget check "
+        "and the call reservation.  See executionkit/cost.py module docstring."
+    )
