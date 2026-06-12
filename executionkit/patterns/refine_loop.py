@@ -170,11 +170,13 @@ def _parse_score(text: str) -> float:
             raise ValueError(
                 f"Evaluator score {score} is outside the expected 0-10 range"
             )
+        # stacklevel=4: _parse_score → _default_evaluator → refine_loop → caller
         warnings.warn(
             f"Evaluator response was not a bare number; extracted {score!r} via "
             f"regex from: {stripped!r}. Configure the evaluator to return only a "
             "numeric score to suppress this warning.",
-            stacklevel=3,
+            UserWarning,
+            stacklevel=4,
         )
         return score
 

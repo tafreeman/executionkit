@@ -47,7 +47,9 @@ def estimate_cost(
     Args:
         usage: Token-usage snapshot (e.g. from :meth:`CostTracker.to_usage`).
         input_rate: Cost per *input* token (e.g. ``3e-6`` for $3 per million).
+            Assumed non-negative and finite; no validation is performed.
         output_rate: Cost per *output* token (e.g. ``15e-6`` for $15 per million).
+            Assumed non-negative and finite; no validation is performed.
 
     Returns:
         Estimated cost in the same currency unit as the supplied rates.

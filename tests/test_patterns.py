@@ -1154,16 +1154,18 @@ class TestParseScore:
         assert _parse_score("  6  ") == 6.0
 
     def test_parse_score_regex_fallback(self) -> None:
-        """Text that fails float() must fall through to the regex branch."""
+        """Text that fails float() must fall through to regex and emit a warning."""
 
         # "Score: 9 out of 10" cannot be parsed by float() directly
-        result = _parse_score("Score: 9 out of 10")
+        with pytest.warns(UserWarning, match="not a bare number"):
+            result = _parse_score("Score: 9 out of 10")
         assert result == 9.0
 
     def test_parse_score_regex_fallback_decimal(self) -> None:
-        """Decimal number embedded in non-numeric text is extracted via regex."""
+        """Decimal in non-numeric text is extracted via regex with a warning."""
 
-        result = _parse_score("quality=7.5/10")
+        with pytest.warns(UserWarning, match="not a bare number"):
+            result = _parse_score("quality=7.5/10")
         assert result == 7.5
 
     def test_parse_score_raises_on_garbage(self) -> None:
