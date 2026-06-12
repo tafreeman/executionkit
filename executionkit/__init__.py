@@ -13,7 +13,7 @@ from executionkit.approval import (
     ApprovalRequest,
 )
 from executionkit.compose import PatternStep, pipe
-from executionkit.cost import CostTracker
+from executionkit.cost import CostTracker, estimate_cost
 from executionkit.engine.convergence import ConvergenceDetector
 from executionkit.engine.json_extraction import extract_json
 from executionkit.engine.retry import DEFAULT_RETRY, RetryConfig
@@ -112,6 +112,7 @@ __all__ = [
     "consensus",
     "consensus_sync",
     "emit_trace",
+    "estimate_cost",
     "extract_json",
     "live_provider_from_env",
     "pipe",
