@@ -118,7 +118,7 @@ async def checked_complete(
     the full concurrency contract.
 
     A CI test (``test_no_await_between_check_and_reserve`` in
-    ``tests/test_patterns.py``) uses ``inspect.getsource`` to assert that no
+    ``tests/test_patterns.py``) uses AST inspection to assert that no
     ``await`` is inserted between the two operations.  If that test fails
     after a refactor, the budget safety guarantee must be re-evaluated before
     merging.
@@ -139,15 +139,6 @@ async def checked_complete(
         BudgetExhaustedError: If the budget has been exceeded before the call.
         asyncio.CancelledError: Always propagated (via ``with_retry``).
     """
-    if budget is not None:
-        current = tracker.to_usage()
-        _check_budget(
-            budget,
-            current,
-            tuple(_BUDGET_FIELD_LABELS),
-            sentinel_suffix="(forwarded from pipe)",
-            exceeded_suffix="before dispatch",
-        )
 
     async def _before_attempt(attempt: int) -> None:
         # ---- no-await critical section: check then reserve ----
@@ -158,15 +149,24 @@ async def checked_complete(
         # docstring for the full concurrency contract.
         # A source-inspection test (test_no_await_between_check_and_reserve)
         # will fail CI if an await is accidentally introduced here.
-        if attempt > 1 and budget is not None:
+        if budget is not None:
             current = tracker.to_usage()
-            _check_budget(
-                budget,
-                current,
-                ("llm_calls",),
-                sentinel_suffix="before retry (forwarded from pipe)",
-                exceeded_suffix="before retry dispatch",
-            )
+            if attempt == 1:
+                _check_budget(
+                    budget,
+                    current,
+                    tuple(_BUDGET_FIELD_LABELS),
+                    sentinel_suffix="(forwarded from pipe)",
+                    exceeded_suffix="before dispatch",
+                )
+            else:
+                _check_budget(
+                    budget,
+                    current,
+                    ("llm_calls",),
+                    sentinel_suffix="before retry (forwarded from pipe)",
+                    exceeded_suffix="before retry dispatch",
+                )
         tracker.reserve_call()
         # ---- end critical section ----
         await emit_trace(
