@@ -99,9 +99,29 @@ async def checked_complete(
     """Budget check, retry-wrapped ``complete()``, and usage recording.
 
     Performs three steps in order:
+
     1. Check whether the token/call budget has been exhausted.
     2. Call ``provider.complete()`` wrapped in ``with_retry()``.
     3. Record the response usage on the tracker.
+
+    **Concurrency model**: the budget check and ``reserve_call()`` in
+    ``_before_attempt`` are a *no-await critical section* — there is
+    deliberately no ``await`` between ``_check_budget`` and
+    ``tracker.reserve_call()``.  Under cooperative asyncio scheduling this
+    means no other coroutine can be scheduled between the check and the
+    reservation, so concurrent coroutines sharing the same ``CostTracker``
+    cannot both pass the budget check before either has incremented the
+    counter.
+
+    This guarantee relies on cooperative scheduling (single event loop) and
+    does **NOT** hold under ``threading``.  See :mod:`executionkit.cost` for
+    the full concurrency contract.
+
+    A CI test (``test_no_await_between_check_and_reserve`` in
+    ``tests/test_patterns.py``) uses AST inspection to assert that no
+    ``await`` is inserted between the two operations.  If that test fails
+    after a refactor, the budget safety guarantee must be re-evaluated before
+    merging.
 
     Args:
         provider: LLM provider to call.
@@ -119,27 +139,36 @@ async def checked_complete(
         BudgetExhaustedError: If the budget has been exceeded before the call.
         asyncio.CancelledError: Always propagated (via ``with_retry``).
     """
-    if budget is not None:
-        current = tracker.to_usage()
-        _check_budget(
-            budget,
-            current,
-            tuple(_BUDGET_FIELD_LABELS),
-            sentinel_suffix="(forwarded from pipe)",
-            exceeded_suffix="before dispatch",
-        )
 
     async def _before_attempt(attempt: int) -> None:
-        if attempt > 1 and budget is not None:
+        # ---- no-await critical section: check then reserve ----
+        # No ``await`` must be inserted between _check_budget and
+        # reserve_call().  The asyncio budget-safety guarantee depends on
+        # these two operations running in the same synchronous run-segment.
+        # See checked_complete() docstring and executionkit/cost.py module
+        # docstring for the full concurrency contract.
+        # A source-inspection test (test_no_await_between_check_and_reserve)
+        # will fail CI if an await is accidentally introduced here.
+        if budget is not None:
             current = tracker.to_usage()
-            _check_budget(
-                budget,
-                current,
-                ("llm_calls",),
-                sentinel_suffix="before retry (forwarded from pipe)",
-                exceeded_suffix="before retry dispatch",
-            )
+            if attempt == 1:
+                _check_budget(
+                    budget,
+                    current,
+                    tuple(_BUDGET_FIELD_LABELS),
+                    sentinel_suffix="(forwarded from pipe)",
+                    exceeded_suffix="before dispatch",
+                )
+            else:
+                _check_budget(
+                    budget,
+                    current,
+                    ("llm_calls",),
+                    sentinel_suffix="before retry (forwarded from pipe)",
+                    exceeded_suffix="before retry dispatch",
+                )
         tracker.reserve_call()
+        # ---- end critical section ----
         await emit_trace(
             trace,
             TraceEvent.create(

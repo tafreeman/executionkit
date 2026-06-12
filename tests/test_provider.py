@@ -719,6 +719,37 @@ class TestClassifyHttpError:
         with pytest.raises(ProviderError):
             _classify_http_error(503, {}, 1.0, cause=Exception())
 
+    # FIX #1: non-retryable client errors must map to PermanentError
+    @pytest.mark.parametrize("status", [400, 405, 413, 422])
+    def test_non_retryable_4xx_raises_permanent_error(self, status: int) -> None:
+        """HTTP 400/405/413/422 must raise PermanentError, not ProviderError."""
+        from executionkit.provider import _classify_http_error
+
+        with pytest.raises(PermanentError):
+            _classify_http_error(status, {}, 1.0, cause=Exception())
+
+    @pytest.mark.parametrize("status", [400, 405, 413, 422])
+    def test_non_retryable_4xx_is_not_provider_error(self, status: int) -> None:
+        """PermanentError must not be a ProviderError (would make it retryable)."""
+        from executionkit.provider import _classify_http_error
+
+        with pytest.raises(PermanentError) as exc_info:
+            _classify_http_error(status, {}, 1.0, cause=Exception())
+        assert not isinstance(exc_info.value, ProviderError)
+
+    def test_409_raises_retryable_provider_error(self) -> None:
+        """HTTP 409 (Conflict) must raise ProviderError (retryable), not PermanentError.
+
+        OpenAI-compatible endpoints can return 409 for transient lock/conflict
+        situations that official clients retry; keeping it as ProviderError
+        ensures DEFAULT_RETRY handles it.
+        """
+        from executionkit.provider import _classify_http_error
+
+        with pytest.raises(ProviderError) as exc_info:
+            _classify_http_error(409, {}, 1.0, cause=Exception())
+        assert not isinstance(exc_info.value, PermanentError)
+
     def test_exception_is_chained_via_cause(self) -> None:
         """raise ... from cause must set __cause__, not just __context__."""
         from executionkit.provider import _classify_http_error
@@ -1090,6 +1121,80 @@ def test_extract_content_handles_mixed_content_list() -> None:
     )
 
     assert result == "alphabetagammadelta"
+
+
+# ---------------------------------------------------------------------------
+# FIX #1 acceptance test: HTTP 422 → one wire attempt, no backoff sleeps
+# Asserts that a provider returning HTTP 422 raises PermanentError after a
+# single complete() attempt.  Because PermanentError is not in the default
+# RetryConfig.retryable tuple, the retry loop must not sleep or retry.
+# ---------------------------------------------------------------------------
+
+
+async def test_422_raises_permanent_error_after_single_attempt() -> None:
+    """Provider returning HTTP 422 makes exactly one wire attempt (DEFAULT_RETRY)."""
+    from executionkit.cost import CostTracker
+    from executionkit.engine.retry import DEFAULT_RETRY
+    from executionkit.patterns.base import checked_complete
+    from executionkit.provider import PermanentError
+
+    call_count = 0
+
+    class Provider422:
+        async def complete(self, messages: object, **kwargs: object) -> object:
+            nonlocal call_count
+            call_count += 1
+            raise PermanentError("Provider request failed with HTTP 422")
+
+    tracker = CostTracker()
+    with pytest.raises(PermanentError):
+        await checked_complete(
+            Provider422(),  # type: ignore[arg-type]
+            [{"role": "user", "content": "hi"}],
+            tracker,
+            budget=None,
+            retry=DEFAULT_RETRY,
+        )
+
+    # PermanentError is not retryable — must stop after the first attempt.
+    assert call_count == 1, f"Expected 1 attempt, got {call_count}"
+    # reserve_call() is called once before the attempt
+    assert tracker.call_count == 1, (
+        f"Expected tracker.call_count==1, got {tracker.call_count}"
+    )
+
+
+async def test_500_retries_under_default_retry() -> None:
+    """Provider returning HTTP 500 (ProviderError) retries under DEFAULT_RETRY."""
+    from executionkit.cost import CostTracker
+    from executionkit.engine.retry import RetryConfig
+    from executionkit.patterns.base import checked_complete
+    from executionkit.provider import ProviderError
+
+    call_count = 0
+
+    class Provider500:
+        async def complete(self, messages: object, **kwargs: object) -> object:
+            nonlocal call_count
+            call_count += 1
+            raise ProviderError("Provider request failed with HTTP 500")
+
+    tracker = CostTracker()
+    # Use a no-sleep retry config to keep the test fast
+    fast_retry = RetryConfig(max_retries=3, base_delay=0.0)
+    with pytest.raises(ProviderError):
+        await checked_complete(
+            Provider500(),  # type: ignore[arg-type]
+            [{"role": "user", "content": "hi"}],
+            tracker,
+            budget=None,
+            retry=fast_retry,
+        )
+
+    # ProviderError is retryable — must attempt max_retries times
+    assert call_count == fast_retry.max_retries, (
+        f"Expected {fast_retry.max_retries} attempts, got {call_count}"
+    )
 
 
 def test_extract_content_stringifies_non_list_non_string() -> None:
