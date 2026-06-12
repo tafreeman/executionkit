@@ -313,7 +313,7 @@ class Provider:
         Maps HTTP errors to the appropriate error class via
         :func:`_classify_http_error`:
         - 429 -> RateLimitError
-        - {400, 401, 403, 404, 405, 409, 413, 422} -> PermanentError
+        - {400, 401, 403, 404, 405, 413, 422} -> PermanentError
           (non-retryable client errors whose outcome cannot change on retry)
         - everything else >=400 -> ProviderError (retryable by default)
         """
@@ -515,7 +515,7 @@ def _classify_http_error(
 
     Raises:
         RateLimitError: For HTTP 429.
-        PermanentError: For HTTP 401, 403, 404, 400, 405, 409, 413, 422.
+        PermanentError: For HTTP 401, 403, 404, 400, 405, 413, 422.
             These statuses indicate a permanent client error — the request
             cannot succeed as-is regardless of how many times it is retried.
             Mapping them to ``PermanentError`` (which is not in the default
@@ -531,12 +531,14 @@ def _classify_http_error(
             retry_after=retry_after,
         ) from cause
     # Non-retryable client errors: the request cannot succeed as-is.
-    # 400 = bad request, 405 = method not allowed, 409 = conflict,
+    # 400 = bad request, 405 = method not allowed,
     # 413 = payload too large, 422 = unprocessable entity.
-    # Note: 408 (Request Timeout) is intentionally excluded — it is a
-    # transient server-side timeout and therefore retryable as ProviderError.
+    # Note: 408 (Request Timeout) and 409 (Conflict) are intentionally
+    # excluded — 408 is a transient server-side timeout, and 409 can be a
+    # transient lock/conflict that OpenAI-compatible clients retry; both
+    # remain retryable as ProviderError.
     # Note: 429 is handled above as RateLimitError, not PermanentError.
-    if status in {400, 401, 403, 404, 405, 409, 413, 422}:
+    if status in {400, 401, 403, 404, 405, 413, 422}:
         raise PermanentError(_format_http_error(status, raw)) from cause
     # 5xx and other unknown statuses may be transient — keep as ProviderError
     # so they remain retryable under the default RetryConfig.
