@@ -359,7 +359,6 @@ class TestEstimateCost:
     def test_llm_calls_not_counted_in_cost(self) -> None:
         low_calls = TokenUsage(input_tokens=100, output_tokens=100, llm_calls=1)
         high_calls = TokenUsage(input_tokens=100, output_tokens=100, llm_calls=100)
-        assert (
-            estimate_cost(low_calls, input_rate=1e-6, output_rate=1e-6)
-            == estimate_cost(high_calls, input_rate=1e-6, output_rate=1e-6)
-        )
+        assert estimate_cost(
+            low_calls, input_rate=1e-6, output_rate=1e-6
+        ) == estimate_cost(high_calls, input_rate=1e-6, output_rate=1e-6)
