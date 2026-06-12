@@ -720,15 +720,15 @@ class TestClassifyHttpError:
             _classify_http_error(503, {}, 1.0, cause=Exception())
 
     # FIX #1: non-retryable client errors must map to PermanentError
-    @pytest.mark.parametrize("status", [400, 405, 409, 413, 422])
+    @pytest.mark.parametrize("status", [400, 405, 413, 422])
     def test_non_retryable_4xx_raises_permanent_error(self, status: int) -> None:
-        """HTTP 400/405/409/413/422 must raise PermanentError, not ProviderError."""
+        """HTTP 400/405/413/422 must raise PermanentError, not ProviderError."""
         from executionkit.provider import _classify_http_error
 
         with pytest.raises(PermanentError):
             _classify_http_error(status, {}, 1.0, cause=Exception())
 
-    @pytest.mark.parametrize("status", [400, 405, 409, 413, 422])
+    @pytest.mark.parametrize("status", [400, 405, 413, 422])
     def test_non_retryable_4xx_is_not_provider_error(self, status: int) -> None:
         """PermanentError must not be a ProviderError (would make it retryable)."""
         from executionkit.provider import _classify_http_error
@@ -736,6 +736,19 @@ class TestClassifyHttpError:
         with pytest.raises(PermanentError) as exc_info:
             _classify_http_error(status, {}, 1.0, cause=Exception())
         assert not isinstance(exc_info.value, ProviderError)
+
+    def test_409_raises_retryable_provider_error(self) -> None:
+        """HTTP 409 (Conflict) must raise ProviderError (retryable), not PermanentError.
+
+        OpenAI-compatible endpoints can return 409 for transient lock/conflict
+        situations that official clients retry; keeping it as ProviderError
+        ensures DEFAULT_RETRY handles it.
+        """
+        from executionkit.provider import _classify_http_error
+
+        with pytest.raises(ProviderError) as exc_info:
+            _classify_http_error(409, {}, 1.0, cause=Exception())
+        assert not isinstance(exc_info.value, PermanentError)
 
     def test_exception_is_chained_via_cause(self) -> None:
         """raise ... from cause must set __cause__, not just __context__."""

@@ -9,6 +9,7 @@ tool-call dispatch, score normalisation, and structured JSON extraction.
 
 from __future__ import annotations
 
+import ast
 import asyncio
 from types import MappingProxyType
 from typing import Any
@@ -1704,57 +1705,83 @@ def test_no_await_between_check_and_reserve() -> None:
     """No ``await`` must appear between _check_budget and reserve_call() in
     checked_complete's _before_attempt closure.
 
-    This is a source-inspection regression test that guards the asyncio
-    budget-safety guarantee documented in executionkit/cost.py and
+    This is an AST-based regression test that guards the asyncio budget-safety
+    guarantee documented in executionkit/cost.py and
     executionkit/patterns/base.py.  If this test fails after a refactor,
     re-evaluate the concurrency contract before merging.
+
+    The visitor walks the _before_attempt AsyncFunctionDef in source order and
+    records events for each _check_budget call ("check"), each .reserve_call()
+    call ("reserve"), and any Await node ("await").  It then asserts:
+      - at least one "check" and exactly one "reserve" are present,
+      - the first "check" precedes "reserve",
+      - no "await" appears between the first "check" and "reserve".
+
+    With two _check_budget branches (attempt==1 and else) before a single
+    reserve_call(), the event list looks like [check, check, reserve, await...]
+    which satisfies all assertions.
     """
     import inspect
+    import textwrap
 
     source = inspect.getsource(checked_complete)
 
-    # Isolate the _before_attempt closure.  It starts at the nested
-    # ``async def _before_attempt`` and ends just before the outer ``try:``
-    # block that follows it.
-    before_start = source.find("async def _before_attempt")
-    assert before_start != -1, (
+    # Parse the full checked_complete source into an AST.
+    # dedent first so the nested function parses cleanly as a module.
+    tree = ast.parse(textwrap.dedent(source))
+
+    # Locate the _before_attempt AsyncFunctionDef node.
+    before_attempt_node: ast.AsyncFunctionDef | None = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "_before_attempt":
+            before_attempt_node = node
+            break
+
+    assert before_attempt_node is not None, (
         "_before_attempt closure not found in checked_complete source"
     )
-    # Layout assumption: the outer ``try:`` block (indented with 4 spaces)
-    # immediately follows the _before_attempt closure in checked_complete's
-    # source.  The literal "\n    try:" is used as the closure boundary
-    # sentinel.  If checked_complete is refactored to move that try block
-    # (e.g. by inserting another nested function or early-return before it),
-    # update this sentinel string accordingly.
-    try_pos = source.find("\n    try:", before_start)
-    closure_source = (
-        source[before_start:try_pos] if try_pos != -1 else source[before_start:]
+
+    class _OrderedEventVisitor(ast.NodeVisitor):
+        """Walk AST in source order, recording check/reserve/await events."""
+
+        def __init__(self) -> None:
+            self.events: list[str] = []
+
+        def visit_Call(self, node: ast.Call) -> None:
+            # _check_budget(...) — bare name call
+            if isinstance(node.func, ast.Name) and node.func.id == "_check_budget":
+                self.events.append("check")
+            # tracker.reserve_call() — attribute call ending in reserve_call
+            elif (
+                isinstance(node.func, ast.Attribute)
+                and node.func.attr == "reserve_call"
+            ):
+                self.events.append("reserve")
+            self.generic_visit(node)
+
+        def visit_Await(self, node: ast.Await) -> None:
+            self.events.append("await")
+            self.generic_visit(node)
+
+    visitor = _OrderedEventVisitor()
+    visitor.visit(before_attempt_node)
+    events = visitor.events
+
+    assert "reserve" in events, (
+        "reserve_call() not found inside _before_attempt closure"
     )
+    assert "check" in events, "_check_budget() not found inside _before_attempt closure"
 
-    # Strip comment lines before searching for call positions so that tokens
-    # that appear in comments (e.g. ``reserve_call()`` in a ``# No await ...``
-    # comment) are not mistaken for real call sites.
-    code_lines = [
-        line
-        for line in closure_source.splitlines(keepends=True)
-        if not line.lstrip().startswith("#")
-    ]
-    code_only = "".join(code_lines)
+    first_check_idx = events.index("check")
+    reserve_idx = events.index("reserve")
 
-    # Within the closure (code only), find both key calls.
-    check_pos = code_only.find("_check_budget(")
-    reserve_pos = code_only.find("reserve_call()")
-
-    assert reserve_pos != -1, "reserve_call() not found inside _before_attempt closure"
-    assert check_pos != -1, "_check_budget() not found inside _before_attempt closure"
-    assert check_pos < reserve_pos, (
+    assert first_check_idx < reserve_idx, (
         "_check_budget() must appear before reserve_call() in _before_attempt"
     )
 
-    # The critical section: the substring between the end of the _check_budget
-    # call and reserve_call() must not contain an ``await`` keyword.
-    between = code_only[check_pos:reserve_pos]
-    assert "await" not in between, (
+    # No await must appear between the first check and the reserve.
+    between_events = events[first_check_idx:reserve_idx]
+    assert "await" not in between_events, (
         "An ``await`` was found between _check_budget and reserve_call() in "
         "checked_complete._before_attempt.  This breaks the asyncio budget-safety "
         "guarantee — no other coroutine must be schedulable between the budget check "
