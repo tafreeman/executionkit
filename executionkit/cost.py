@@ -33,6 +33,37 @@ if TYPE_CHECKING:
     from executionkit.provider import LLMResponse
 
 
+def estimate_cost(
+    usage: TokenUsage,
+    *,
+    input_rate: float,
+    output_rate: float,
+) -> float:
+    """Estimate the dollar cost of a :class:`~executionkit.types.TokenUsage` snapshot.
+
+    ExecutionKit ships **no price table** — rates change and differ by account
+    tier.  Pass per-token rates from your provider's pricing page.
+
+    Args:
+        usage: Token-usage snapshot (e.g. from :meth:`CostTracker.to_usage`).
+        input_rate: Cost per *input* token (e.g. ``3e-6`` for $3 per million).
+            Assumed non-negative and finite; no validation is performed.
+        output_rate: Cost per *output* token (e.g. ``15e-6`` for $15 per million).
+            Assumed non-negative and finite; no validation is performed.
+
+    Returns:
+        Estimated cost in the same currency unit as the supplied rates.
+
+    Example::
+
+        tracker = CostTracker()
+        # … run some patterns …
+        cost = estimate_cost(tracker.to_usage(), input_rate=3e-6, output_rate=15e-6)
+        print(f"Estimated cost: ${cost:.4f}")
+    """
+    return usage.input_tokens * input_rate + usage.output_tokens * output_rate
+
+
 class CostTracker:
     """Mutable accumulator for token and call counts."""
 

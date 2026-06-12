@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 
+from executionkit.cost import estimate_cost
 from executionkit.types import (
     Evaluator,
     PatternResult,
@@ -325,3 +326,39 @@ class TestEvaluator:
         # but calling it should work
         result = await my_evaluator("test", MockProvider(responses=["hi"]))
         assert result == 0.8
+
+
+# ---------------------------------------------------------------------------
+# estimate_cost
+# ---------------------------------------------------------------------------
+
+
+class TestEstimateCost:
+    def test_basic_calculation(self) -> None:
+        usage = TokenUsage(input_tokens=1000, output_tokens=500, llm_calls=1)
+        cost = estimate_cost(usage, input_rate=3e-6, output_rate=15e-6)
+        assert cost == 1000 * 3e-6 + 500 * 15e-6
+
+    def test_zero_usage_returns_zero(self) -> None:
+        usage = TokenUsage(input_tokens=0, output_tokens=0, llm_calls=0)
+        assert estimate_cost(usage, input_rate=3e-6, output_rate=15e-6) == 0.0
+
+    def test_output_only_tokens(self) -> None:
+        usage = TokenUsage(input_tokens=0, output_tokens=200, llm_calls=1)
+        assert estimate_cost(usage, input_rate=3e-6, output_rate=10e-6) == 200 * 10e-6
+
+    def test_input_only_tokens(self) -> None:
+        usage = TokenUsage(input_tokens=500, output_tokens=0, llm_calls=1)
+        assert estimate_cost(usage, input_rate=5e-6, output_rate=15e-6) == 500 * 5e-6
+
+    def test_equal_rates(self) -> None:
+        usage = TokenUsage(input_tokens=100, output_tokens=100, llm_calls=1)
+        rate = 10e-6
+        assert estimate_cost(usage, input_rate=rate, output_rate=rate) == 200 * rate
+
+    def test_llm_calls_not_counted_in_cost(self) -> None:
+        low_calls = TokenUsage(input_tokens=100, output_tokens=100, llm_calls=1)
+        high_calls = TokenUsage(input_tokens=100, output_tokens=100, llm_calls=100)
+        assert estimate_cost(
+            low_calls, input_rate=1e-6, output_rate=1e-6
+        ) == estimate_cost(high_calls, input_rate=1e-6, output_rate=1e-6)

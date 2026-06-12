@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import warnings
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
@@ -169,6 +170,16 @@ def _parse_score(text: str) -> float:
             raise ValueError(
                 f"Evaluator score {score} is outside the expected 0-10 range"
             )
+        # stacklevel=2: _parse_score → _default_evaluator
+        # refine_loop is suspended at `await evaluator(...)` and is not on the
+        # synchronous call stack; stacklevel=4 would reach asyncio internals.
+        warnings.warn(
+            f"Evaluator response was not a bare number; extracted {score!r} via "
+            f"regex from: {stripped!r}. Configure the evaluator to return only a "
+            "numeric score to suppress this warning.",
+            UserWarning,
+            stacklevel=2,
+        )
         return score
 
     raise ValueError(f"Cannot parse score from evaluator response: {stripped!r}")

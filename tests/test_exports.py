@@ -13,6 +13,7 @@ def test_public_api_surface() -> None:
         "DEFAULT_RETRY",
         "Evaluator",
         "ExecutionKitError",
+        "estimate_cost",
         "Kit",
         "LLMError",
         "LLMProvider",
