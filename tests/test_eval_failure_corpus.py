@@ -295,7 +295,7 @@ async def test_failure_corpus_eval_suite_runs_without_crash() -> None:
     from executionkit.evals import run_eval_suite
 
     report = await run_eval_suite(FAILURE_CORPUS)
-    assert report.total == 13
+    assert report.total == len(FAILURE_CORPUS)
     # All cases should pass; surface any failures for debugging
     if not report.passed:
         failures = [f"{r.name}: {r.reason}" for r in report.failures]
