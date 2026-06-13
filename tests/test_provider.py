@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import http.client
 import io
 import unittest.mock
 from dataclasses import FrozenInstanceError
@@ -370,7 +371,7 @@ async def test_post_maps_5xx_errors(monkeypatch: pytest.MonkeyPatch) -> None:
             url="https://example.com/v1/chat/completions",
             code=500,
             msg="Internal Server Error",
-            hdrs={},
+            hdrs=http.client.HTTPMessage(),
             fp=io.BytesIO(b'{"error":{"message":"server error"}}'),
         )
 
@@ -1017,8 +1018,8 @@ async def test_post_urllib_success_returns_json_dict(
         def __enter__(self) -> FakeResponse:
             return self
 
-        def __exit__(self, exc_type: object, exc: object, tb: object) -> bool:
-            return False
+        def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+            return None
 
         def read(self) -> bytes:
             return b'{"choices":[{"message":{"content":"hi"}}]}'
@@ -1047,7 +1048,7 @@ async def test_post_urllib_invalid_error_body_falls_back_to_empty_payload(
             url="https://example.com/v1/chat/completions",
             code=500,
             msg="Internal Server Error",
-            hdrs={},
+            hdrs=http.client.HTTPMessage(),
             fp=io.BytesIO(b"not-json"),
         )
 
@@ -1381,3 +1382,70 @@ async def test_httpx_transport_failure_redacts_secret(
     message = str(exc_info.value)
     assert "ghp_1234567890abcdef" not in message
     assert "[REDACTED]" in message
+
+
+# ---------------------------------------------------------------------------
+# _parse_retry_after: RFC 7231 header parsing
+# ---------------------------------------------------------------------------
+
+
+class TestParseRetryAfter:
+    """_parse_retry_after handles numeric seconds, HTTP-dates, and garbage."""
+
+    def _call(self, value: str) -> float:
+        from executionkit.provider import _parse_retry_after
+
+        return _parse_retry_after(value)
+
+    def test_numeric_integer_seconds(self) -> None:
+        """Integer-string Retry-After header returns that many seconds."""
+        result = self._call("30")
+        assert result == 30.0
+
+    def test_numeric_float_seconds(self) -> None:
+        """Float-string Retry-After header returns the float value."""
+        result = self._call("2.5")
+        assert result == 2.5
+
+    def test_numeric_zero_seconds(self) -> None:
+        """Zero-second Retry-After header returns 0.0 (non-negative)."""
+        result = self._call("0")
+        assert result == 0.0
+
+    def test_http_date_returns_positive_delta(self) -> None:
+        """An HTTP-date far in the future produces a positive delay in seconds."""
+        import email.utils
+        from datetime import UTC, datetime, timedelta
+
+        future = datetime.now(tz=UTC) + timedelta(seconds=120)
+        http_date = email.utils.format_datetime(future)
+        result = self._call(http_date)
+        # Allow a 5-second window for test execution time
+        assert 115.0 <= result <= 125.0
+
+    def test_garbage_value_returns_default(self) -> None:
+        """Unrecognised header value falls back to the default (1.0)."""
+        result = self._call("not-a-date-or-number")
+        assert result == 1.0
+
+    def test_garbage_with_custom_default(self) -> None:
+        """Garbage header value returns the caller-supplied default."""
+        from executionkit.provider import _parse_retry_after
+
+        result = _parse_retry_after("??", default=5.0)
+        assert result == 5.0
+
+    def test_positive_infinity_returns_default(self) -> None:
+        """``"inf"`` is non-finite and must not become an unbounded sleep delay."""
+        result = self._call("inf")
+        assert result == 1.0
+
+    def test_nan_returns_default(self) -> None:
+        """``"nan"`` is non-finite and falls back to the default delay."""
+        result = self._call("nan")
+        assert result == 1.0
+
+    def test_negative_infinity_returns_default(self) -> None:
+        """``"-inf"`` is non-finite and falls back to the default delay."""
+        result = self._call("-inf")
+        assert result == 1.0

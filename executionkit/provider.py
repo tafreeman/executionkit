@@ -9,7 +9,10 @@ Implements a single ``Provider`` class that speaks the OpenAI-compatible
 from __future__ import annotations
 
 import asyncio
+import datetime as _dt
+import email.utils
 import json
+import math
 import re
 import urllib.error
 import urllib.request
@@ -295,7 +298,9 @@ class Provider:
                     raw = {}
             except Exception:
                 raw = {}
-            retry_after = float(exc.response.headers.get("retry-after", "1"))
+            retry_after = _parse_retry_after(
+                exc.response.headers.get("retry-after", "1")
+            )
             _classify_http_error(status, raw, retry_after, cause=exc)
         except _httpx.TransportError as exc:
             raise ProviderError(
@@ -333,8 +338,8 @@ class Provider:
                 except ProviderError:
                     raw = {}
                 status = exc.code
-                retry_after = float(
-                    exc.headers.get("retry-after", "1") if exc.headers else 1
+                retry_after = _parse_retry_after(
+                    exc.headers.get("retry-after", "1") if exc.headers else "1"
                 )
                 _classify_http_error(status, raw, retry_after, cause=exc)
             except urllib.error.URLError as exc:
@@ -490,6 +495,48 @@ def _redact_sensitive(text: str) -> str:
         "[REDACTED]",
         text,
     )
+
+
+def _parse_retry_after(header_value: str, default: float = 1.0) -> float:
+    """Parse a ``Retry-After`` header value into a non-negative delay in seconds.
+
+    RFC 7231 allows the value to be either a decimal number of seconds or an
+    HTTP-date string (e.g. ``"Wed, 18 Jun 2026 07:28:00 GMT"``).  A bare
+    ``float()`` call raises ``ValueError`` on dates, crashing the error path.
+
+    Resolution order:
+    1. Integer / float seconds — the common case.
+    2. HTTP-date parsed with ``email.utils.parsedate_to_datetime`` — RFC 7231
+       compliant dates.
+    3. ``default`` — when both parses fail (garbage value).
+
+    Args:
+        header_value: Raw string from the ``Retry-After`` response header.
+        default: Fallback delay in seconds (default 1.0).
+
+    Returns:
+        Non-negative float seconds to wait before the next attempt.
+    """
+    # 1. Try numeric seconds first (the common case).  ``float()`` also parses
+    #    "inf"/"-inf"/"nan"; a non-finite delay would flow into asyncio.sleep
+    #    and hang the retry coroutine forever, so reject it and fall through.
+    try:
+        value = float(header_value)
+    except ValueError:
+        pass
+    else:
+        if math.isfinite(value):
+            return max(0.0, value)
+
+    # 2. RFC 7231 HTTP-date; any parse/compute failure falls back to the default.
+    #    parsedate_to_datetime raises ValueError on malformed input, and a naive
+    #    result would raise TypeError on the aware-datetime subtraction below.
+    try:
+        retry_dt = email.utils.parsedate_to_datetime(header_value)
+        delta = (retry_dt - _dt.datetime.now(tz=_dt.UTC)).total_seconds()
+    except (TypeError, ValueError):
+        return default
+    return max(0.0, delta)
 
 
 def _classify_http_error(

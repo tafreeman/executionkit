@@ -167,3 +167,15 @@ If in doubt, open an issue before writing code.
 
 Open a GitHub issue. Tag it `question` for support, `bug` for defects,
 `enhancement` for feature requests.
+
+---
+
+## Development Provenance & Verification
+
+This repository is built solo with AI-assisted tooling. Because there is no second human reviewer, correctness is gated by **automated evidence**, not peer sign-off:
+
+- **CI gates (every push / PR):** ruff, ruff-format, `mypy --strict`, `pytest --cov-fail-under=80`, Bandit, and pip-audit (2-OS × 3-Python matrix). Merges block on a red pipeline.
+- **Behavioral verification:** the deterministic golden suite and the model-failure corpus (`tests/test_eval_goldens.py`, `tests/test_eval_failure_corpus.py`) run in normal CI and assert output correctness, not just coverage.
+- **Provenance:** AI-assisted changes are verified against these gates before merge; the CI and evaluation output is the verification artifact of record.
+
+Contributions are welcome via PR; CI must pass and changes should add or update tests.
