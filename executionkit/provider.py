@@ -12,6 +12,7 @@ import asyncio
 import datetime as _dt
 import email.utils
 import json
+import math
 import re
 import urllib.error
 import urllib.request
@@ -516,11 +517,16 @@ def _parse_retry_after(header_value: str, default: float = 1.0) -> float:
     Returns:
         Non-negative float seconds to wait before the next attempt.
     """
-    # 1. Try numeric seconds first (the common case).
+    # 1. Try numeric seconds first (the common case).  ``float()`` also parses
+    #    "inf"/"-inf"/"nan"; a non-finite delay would flow into asyncio.sleep
+    #    and hang the retry coroutine forever, so reject it and fall through.
     try:
-        return max(0.0, float(header_value))
+        value = float(header_value)
     except ValueError:
         pass
+    else:
+        if math.isfinite(value):
+            return max(0.0, value)
 
     # 2. RFC 7231 HTTP-date; any parse/compute failure falls back to the default.
     #    parsedate_to_datetime raises ValueError on malformed input, and a naive

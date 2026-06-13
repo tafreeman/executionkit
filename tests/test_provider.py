@@ -1434,3 +1434,18 @@ class TestParseRetryAfter:
 
         result = _parse_retry_after("??", default=5.0)
         assert result == 5.0
+
+    def test_positive_infinity_returns_default(self) -> None:
+        """``"inf"`` is non-finite and must not become an unbounded sleep delay."""
+        result = self._call("inf")
+        assert result == 1.0
+
+    def test_nan_returns_default(self) -> None:
+        """``"nan"`` is non-finite and falls back to the default delay."""
+        result = self._call("nan")
+        assert result == 1.0
+
+    def test_negative_infinity_returns_default(self) -> None:
+        """``"-inf"`` is non-finite and falls back to the default delay."""
+        result = self._call("-inf")
+        assert result == 1.0
