@@ -522,17 +522,15 @@ def _parse_retry_after(header_value: str, default: float = 1.0) -> float:
     except ValueError:
         pass
 
-    # 2. Try RFC 7231 HTTP-date.
+    # 2. RFC 7231 HTTP-date; any parse/compute failure falls back to the default.
+    #    parsedate_to_datetime raises ValueError on malformed input, and a naive
+    #    result would raise TypeError on the aware-datetime subtraction below.
     try:
         retry_dt = email.utils.parsedate_to_datetime(header_value)
-        now = _dt.datetime.now(tz=_dt.UTC)
-        delta = (retry_dt - now).total_seconds()
-        return max(0.0, delta)
-    except Exception:  # noqa: S110
-        pass
-
-    # 3. Unrecognised format — fall back to default.
-    return default
+        delta = (retry_dt - _dt.datetime.now(tz=_dt.UTC)).total_seconds()
+    except (TypeError, ValueError):
+        return default
+    return max(0.0, delta)
 
 
 def _classify_http_error(
