@@ -17,6 +17,7 @@ from typing import Any
 import pytest
 
 from executionkit._mock import MockProvider
+from executionkit.approval import ApprovalGate
 from executionkit.cost import CostTracker
 from executionkit.engine.retry import RetryConfig
 from executionkit.errors import BudgetExhaustedError
@@ -629,6 +630,90 @@ class TestReactLoop:
         result = await react_loop(provider, "question", tools=[tool])
         assert isinstance(result, PatternResult)
 
+        # The unknown-tool error must be fed back to the LLM as a tool observation
+        second_call_messages = provider.calls[1].messages
+        tool_msgs = [m for m in second_call_messages if m.get("role") == "tool"]
+        assert tool_msgs, "Expected at least one tool observation message"
+        observation = tool_msgs[0]["content"]
+        assert "Unknown tool 'nonexistent_tool'" in observation
+
+    async def test_denying_approval_gate_blocks_tool_execution(self) -> None:
+
+        # A denied tool call must NOT run; it becomes a bounded observation that
+        # is fed back to the LLM. This is the core ApprovalGate safety contract.
+        executed: list[str] = []
+
+        async def _execute(query: str) -> str:
+            executed.append(query)
+            return "should never run"
+
+        guarded_tool = Tool(
+            name="search",
+            description="Search the web",
+            parameters={
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+                "required": ["query"],
+            },
+            execute=_execute,
+        )
+
+        tool_call = _make_tool_response("search", "tc1", {"query": "secret"})
+        final = _make_final_response("Acknowledged the block")
+        provider = MockProvider(responses=[tool_call, final])
+
+        result = await react_loop(
+            provider,
+            "do something",
+            tools=[guarded_tool],
+            approval_gate=ApprovalGate.deny_all(reason="not permitted"),
+        )
+        assert isinstance(result, PatternResult)
+
+        # The tool body must never have executed.
+        assert executed == [], "denied tool call must not execute"
+
+        # The denial must surface to the LLM as a bounded tool observation.
+        second_call_messages = provider.calls[1].messages
+        tool_msgs = [m for m in second_call_messages if m.get("role") == "tool"]
+        assert tool_msgs, "Expected a tool observation message"
+        observation = tool_msgs[0]["content"]
+        assert "blocked by approval" in observation
+        assert "not permitted" in observation
+
+    async def test_approving_approval_gate_allows_tool_execution(self) -> None:
+
+        # Contrast with the denial path: an approving gate lets the tool run.
+        executed: list[str] = []
+
+        async def _execute(query: str) -> str:
+            executed.append(query)
+            return "ran ok"
+
+        guarded_tool = Tool(
+            name="search",
+            description="Search the web",
+            parameters={
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+                "required": ["query"],
+            },
+            execute=_execute,
+        )
+
+        tool_call = _make_tool_response("search", "tc1", {"query": "ok"})
+        final = _make_final_response("done")
+        provider = MockProvider(responses=[tool_call, final])
+
+        result = await react_loop(
+            provider,
+            "do something",
+            tools=[guarded_tool],
+            approval_gate=ApprovalGate.allow_all(),
+        )
+        assert isinstance(result, PatternResult)
+        assert executed == ["ok"], "approved tool call must execute"
+
     async def test_max_rounds_exhaustion_raises_max_iterations_error(self) -> None:
 
         # Always returns a tool call → never reaches a final answer
@@ -669,6 +754,13 @@ class TestReactLoop:
             provider, "question", tools=[slow_tool], tool_timeout=0.01
         )
         assert isinstance(result, PatternResult)
+
+        # The timeout notice must be fed back to the LLM as a tool observation
+        second_call_messages = provider.calls[1].messages
+        tool_msgs = [m for m in second_call_messages if m.get("role") == "tool"]
+        assert tool_msgs, "Expected at least one tool observation message"
+        observation = tool_msgs[0]["content"]
+        assert "timed out" in observation
 
     async def test_tool_result_truncated_when_too_long(self) -> None:
 
