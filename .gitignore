@@ -73,3 +73,6 @@ docs/analysis/
 
 # Internal C4 analysis (contains local paths, not for public repo)
 docs/c4/
+
+# Claude Code local settings (machine-specific permissions)
+.claude/settings.local.json
