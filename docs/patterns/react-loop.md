@@ -148,7 +148,7 @@ from executionkit import ApprovalDecision, ApprovalGate, react_loop
 
 gate = ApprovalGate(
     lambda request: ApprovalDecision(
-        approved=request.name == "read_only_search",
+        approved=request.subject == "read_only_search",
         reason="writes require review",
     )
 )
@@ -156,7 +156,7 @@ gate = ApprovalGate(
 result = await react_loop(provider, prompt, tools, approval_gate=gate)
 ```
 
-The gate receives the tool name and arguments. A denial does not call the tool; it appends a bounded observation such as `Tool 'name' blocked by approval: reason` and lets the model continue.
+The gate receives an `ApprovalRequest` whose `subject` is the tool name and whose `metadata["arguments"]` holds the parsed tool arguments (with `metadata["tool_call_id"]` for correlation). A denial does not call the tool; it appends a bounded observation such as `Tool 'name' blocked by approval: reason` and lets the model continue.
 
 ## Metadata keys
 
