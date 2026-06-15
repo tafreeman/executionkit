@@ -122,6 +122,8 @@ Add a `TestMyPattern` class to `tests/test_patterns.py` (or a new `tests/test_my
 Use `MockProvider` — no real API calls.
 
 ```python
+import pytest
+
 from executionkit._mock import MockProvider
 from executionkit.patterns.my_pattern import my_pattern
 
