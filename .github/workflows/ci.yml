@@ -28,7 +28,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        run: pip install --require-hashes -r requirements.lock && pip install -e "." --no-deps
 
       - name: Lint (ruff)
         run: ruff check executionkit/ tests/

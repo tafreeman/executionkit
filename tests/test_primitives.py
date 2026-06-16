@@ -245,6 +245,44 @@ async def test_approval_gate_blocks_react_tool_execution() -> None:
     assert "needs review" in tool_messages[0]
 
 
+async def test_workflow_cycle_raises_execution_kit_error() -> None:
+    """A dependency cycle (a→b, b→a) must never resolve; the deadlock branch
+    at workflow.py:106 raises ExecutionKitError rather than looping forever."""
+    from executionkit.errors import ExecutionKitError
+    from executionkit.workflow import Step, Workflow
+
+    workflow = Workflow(
+        [
+            Step("a", lambda ctx: "a", depends_on=("b",)),
+            Step("b", lambda ctx: "b", depends_on=("a",)),
+        ]
+    )
+
+    with pytest.raises(ExecutionKitError, match="could not be resolved"):
+        await workflow.run()
+
+
+async def test_workflow_orphan_dep_raises_execution_kit_error() -> None:
+    """An orphaned dependency that passes _validate (because the dep step
+    exists) but can never become ready because its own dep is in the cycle."""
+    from executionkit.errors import ExecutionKitError
+    from executionkit.workflow import Step, Workflow
+
+    # "root" runs fine; "a" depends on "b" which depends on "a" — two steps
+    # are permanently stuck even though they are known step names.
+    workflow = Workflow(
+        [
+            Step("root", lambda ctx: "root"),
+            Step("a", lambda ctx: "a", depends_on=("b",)),
+            Step("b", lambda ctx: "b", depends_on=("a",)),
+        ]
+    )
+
+    # root completes, then the pending set {a, b} cannot be resolved.
+    with pytest.raises(ExecutionKitError, match="could not be resolved"):
+        await workflow.run()
+
+
 async def test_approval_gate_allows_react_tool_execution() -> None:
     from executionkit.approval import ApprovalDecision, ApprovalGate
     from executionkit.patterns.react_loop import react_loop

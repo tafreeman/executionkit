@@ -11,6 +11,11 @@ from typing import Any, TypeAlias
 
 from executionkit.provider import Provider
 
+# Minimum accuracy required for LIVE / non-deterministic eval suites.
+# Deterministic golden suites must still achieve 100% (report.passed).
+# This named constant avoids magic numbers and makes the threshold auditable.
+LIVE_EVAL_MIN_ACCURACY: float = 0.9
+
 EvalRun: TypeAlias = Callable[[], Awaitable[Any] | Any]
 EvalCheck: TypeAlias = Callable[[Any], bool | str | None]
 
@@ -43,9 +48,18 @@ class EvalResult:
 
 @dataclass(frozen=True, slots=True)
 class EvalReport:
-    """Aggregate eval report."""
+    """Aggregate eval report.
+
+    Attributes:
+        results: Per-case outcomes.
+        min_accuracy: Optional accuracy threshold used by
+            :func:`run_eval_suite` for live / non-deterministic suites.
+            When set, callers gate on :attr:`accuracy_passed` instead of
+            :attr:`passed` to allow a small number of tolerated failures.
+    """
 
     results: tuple[EvalResult, ...]
+    min_accuracy: float | None = None
 
     @property
     def total(self) -> int:
@@ -53,6 +67,7 @@ class EvalReport:
 
     @property
     def passed(self) -> bool:
+        """True when *every* case passed (100% — required for deterministic suites)."""
         return all(result.passed for result in self.results)
 
     @property
@@ -73,6 +88,18 @@ class EvalReport:
         if self.total == 0:
             return 0.0
         return self.passed_count / self.total
+
+    @property
+    def accuracy_passed(self) -> bool:
+        """True when ``accuracy >= min_accuracy`` (live-suite gate).
+
+        Falls back to :attr:`passed` when no ``min_accuracy`` was configured,
+        so callers can always use this property as the single gate regardless
+        of suite type.
+        """
+        if self.min_accuracy is None:
+            return self.passed
+        return self.accuracy >= self.min_accuracy
 
     def summary(self) -> str:
         """One-line human-readable result, e.g. '7/9 passed (77.8% accuracy)'."""
@@ -110,10 +137,32 @@ async def _run_case(case: EvalCase) -> EvalResult:
     )
 
 
-async def run_eval_suite(cases: Sequence[EvalCase]) -> EvalReport:
-    """Run eval cases in order and return pass/fail results."""
+async def run_eval_suite(
+    cases: Sequence[EvalCase],
+    *,
+    min_accuracy: float | None = None,
+) -> EvalReport:
+    """Run eval cases in order and return pass/fail results.
 
-    return EvalReport(results=tuple([await _run_case(case) for case in cases]))
+    Args:
+        cases: Eval cases to run.
+        min_accuracy: When provided, the report is considered passing when
+            ``report.accuracy >= min_accuracy`` rather than requiring every
+            case to pass (``report.passed``).  Use :data:`LIVE_EVAL_MIN_ACCURACY`
+            for non-deterministic / live-provider suites that tolerate a small
+            number of failures.  Deterministic golden suites should omit this
+            parameter so they continue to require 100% pass rate via
+            ``report.passed``.
+
+    Returns:
+        :class:`EvalReport` with per-case results.  The caller gates on either
+        ``report.passed`` (deterministic) or
+        ``report.accuracy >= min_accuracy`` (live).
+    """
+    return EvalReport(
+        results=tuple([await _run_case(case) for case in cases]),
+        min_accuracy=min_accuracy,
+    )
 
 
 def live_provider_from_env() -> Provider | None:
