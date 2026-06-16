@@ -162,6 +162,21 @@ class ToolCallingProvider(LLMProvider, Protocol):
     supports_tools: Literal[True]
 
 
+def _provider_supports_tools(provider: object) -> bool:
+    """Return True only when *provider* both structurally satisfies
+    ``ToolCallingProvider`` AND has ``supports_tools`` set to ``True``.
+
+    ``@runtime_checkable`` protocols only verify that the required
+    attribute *exists*, not that its value is ``True``.  A wrapper with
+    ``supports_tools = False`` would pass ``isinstance(p, ToolCallingProvider)``
+    — this helper closes that gap so both ``kit.py`` and ``react_loop.py``
+    use a single, consistent capability check.
+    """
+    return isinstance(provider, ToolCallingProvider) and (
+        getattr(provider, "supports_tools", False) is True
+    )
+
+
 # ---------------------------------------------------------------------------
 # Concrete provider
 # ---------------------------------------------------------------------------

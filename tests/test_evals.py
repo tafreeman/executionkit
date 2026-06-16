@@ -171,6 +171,64 @@ def test_live_provider_from_env_builds_provider(
     assert provider.model == "llama3.2"
 
 
+async def test_live_eval_min_accuracy_constant_is_defined() -> None:
+    """LIVE_EVAL_MIN_ACCURACY must be a float in (0, 1] so it is usable as a
+    meaningful accuracy gate for non-deterministic suites."""
+    from executionkit.evals import LIVE_EVAL_MIN_ACCURACY
+
+    assert isinstance(LIVE_EVAL_MIN_ACCURACY, float)
+    assert 0.0 < LIVE_EVAL_MIN_ACCURACY <= 1.0
+
+
+async def test_run_eval_suite_live_tier_passes_on_partial_accuracy() -> None:
+    """A suite with one tolerated failure still passes when accuracy >= threshold.
+
+    This validates the live-tier gating path: report.accuracy_passed is True
+    even though report.passed is False, as long as accuracy >= min_accuracy.
+    """
+    from executionkit.evals import LIVE_EVAL_MIN_ACCURACY, EvalCase, run_eval_suite
+
+    # 9 pass, 1 fail → accuracy = 0.9 which should be >= LIVE_EVAL_MIN_ACCURACY (0.9).
+    passing_case = EvalCase(name="ok", run=lambda: "ok", check=lambda v: v == "ok")
+    failing_case = EvalCase(
+        name="flaky", run=lambda: "wrong", check=lambda v: v == "ok"
+    )
+    cases = [passing_case] * 9 + [failing_case]
+
+    report = await run_eval_suite(cases, min_accuracy=LIVE_EVAL_MIN_ACCURACY)
+
+    # The suite has one failure — the strict all-or-nothing gate would reject it.
+    assert report.passed is False
+    # But the accuracy gate approves it.
+    assert report.accuracy_passed is True
+    assert report.accuracy >= LIVE_EVAL_MIN_ACCURACY
+
+
+async def test_run_eval_suite_live_tier_fails_below_threshold() -> None:
+    """Accuracy below min_accuracy must make accuracy_passed return False."""
+    from executionkit.evals import EvalCase, run_eval_suite
+
+    passing_case = EvalCase(name="ok", run=lambda: "ok", check=lambda v: v == "ok")
+    failing_case = EvalCase(name="bad", run=lambda: "wrong", check=lambda v: v == "ok")
+    # 1 pass, 1 fail → accuracy = 0.5 which is below 0.9
+    report = await run_eval_suite([passing_case, failing_case], min_accuracy=0.9)
+
+    assert report.accuracy_passed is False
+
+
+async def test_run_eval_suite_deterministic_requires_all_passed() -> None:
+    """Without min_accuracy, accuracy_passed falls back to passed (100%)."""
+    from executionkit.evals import EvalCase, run_eval_suite
+
+    passing_case = EvalCase(name="ok", run=lambda: "ok", check=lambda v: v == "ok")
+    failing_case = EvalCase(name="bad", run=lambda: "wrong", check=lambda v: v == "ok")
+    report = await run_eval_suite([passing_case, failing_case])
+
+    # No min_accuracy set — accuracy_passed mirrors passed.
+    assert report.accuracy_passed is report.passed
+    assert report.accuracy_passed is False
+
+
 @pytest.mark.skipif(
     os.getenv("EXECUTIONKIT_LIVE_EVAL") != "1",
     reason="set EXECUTIONKIT_LIVE_EVAL=1 to run live endpoint evals",

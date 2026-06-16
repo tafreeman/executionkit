@@ -17,6 +17,7 @@ from executionkit.patterns.base import _note_truncation, checked_complete
 from executionkit.provider import (
     MaxIterationsError,
     ToolCallingProvider,
+    _provider_supports_tools,
 )
 from executionkit.types import PatternResult, TokenUsage, Tool
 
@@ -191,9 +192,7 @@ def _validate_react_loop_args(
     max_history_messages: int | None,
 ) -> None:
     """Raise ValueError / TypeError for invalid react_loop arguments."""
-    if not isinstance(provider, ToolCallingProvider) or not getattr(
-        provider, "supports_tools", False
-    ):
+    if not _provider_supports_tools(provider):
         raise TypeError(
             "react_loop() requires a ToolCallingProvider. "
             "Ensure the provider has supports_tools = True."

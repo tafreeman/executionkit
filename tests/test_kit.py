@@ -211,6 +211,44 @@ async def test_kit_react_rejects_non_tool_calling_provider() -> None:
         await kit.react("prompt", [])
 
 
+async def test_kit_react_rejects_provider_with_supports_tools_false() -> None:
+    """react() must also reject a provider that has supports_tools=False.
+
+    @runtime_checkable only checks that the attribute *exists*, so a provider
+    with supports_tools=False would pass isinstance() — _provider_supports_tools
+    closes this gap.  Both kit.py and react_loop.py must use the helper.
+    """
+    from executionkit.patterns.react_loop import react_loop
+
+    class FalseToolsProvider:
+        """Has supports_tools attribute but set to False — structural isinstance
+        check passes; value check must catch it."""
+
+        supports_tools: bool = False
+
+        async def complete(
+            self,
+            messages: Sequence[dict[str, Any]],
+            *,
+            temperature: float | None = None,
+            max_tokens: int | None = None,
+            tools: Sequence[dict[str, Any]] | None = None,
+            **kwargs: Any,
+        ) -> LLMResponse:
+            raise NotImplementedError
+
+    bad_provider = FalseToolsProvider()
+
+    # kit.py path
+    kit = Kit(bad_provider)  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="ToolCallingProvider"):
+        await kit.react("prompt", [])
+
+    # react_loop.py path — _validate_react_loop_args called directly
+    with pytest.raises(TypeError, match="ToolCallingProvider"):
+        await react_loop(bad_provider, "prompt", [])  # type: ignore[arg-type]
+
+
 # ---------------------------------------------------------------------------
 # pipe delegation
 # ---------------------------------------------------------------------------

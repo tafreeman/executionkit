@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from executionkit.compose import pipe
 from executionkit.cost import CostTracker
@@ -10,7 +10,11 @@ from executionkit.errors import ExecutionKitError
 from executionkit.patterns.consensus import consensus
 from executionkit.patterns.react_loop import react_loop
 from executionkit.patterns.refine_loop import refine_loop
-from executionkit.provider import LLMProvider, ToolCallingProvider
+from executionkit.provider import (
+    LLMProvider,
+    ToolCallingProvider,
+    _provider_supports_tools,
+)
 from executionkit.types import PatternResult, TokenUsage, Tool
 
 if TYPE_CHECKING:
@@ -85,13 +89,18 @@ class Kit:
         a :exc:`TypeError` is raised if it does not.
         """
         provider = self.provider
-        if not isinstance(provider, ToolCallingProvider):
+        if not _provider_supports_tools(provider):
             msg = (
                 f"react() requires a ToolCallingProvider; "
                 f"{type(provider).__name__} does not support tool calling."
             )
             raise TypeError(msg)
-        return await self._run_tracked(react_loop(provider, prompt, tools, **kwargs))
+        # _provider_supports_tools verified isinstance + supports_tools=True;
+        # cast is safe here because mypy cannot narrow through the helper.
+        tool_provider = cast("ToolCallingProvider", provider)
+        return await self._run_tracked(
+            react_loop(tool_provider, prompt, tools, **kwargs)
+        )
 
     async def pipe(
         self, prompt: str, *steps: Callable[..., Any], **kwargs: Any
