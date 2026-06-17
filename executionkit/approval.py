@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-from collections.abc import Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Any, Literal, TypeAlias
+from typing import Any, Literal, TypeAlias, cast
 
 from executionkit.errors import ExecutionKitError
 
@@ -83,24 +83,33 @@ class ApprovalGate:
         self._on_timeout = on_timeout
 
     async def request(self, request: ApprovalRequest) -> ApprovalDecision:
-        maybe_decision = self._callback(request)
-        coro = (
-            maybe_decision
-            if inspect.isawaitable(maybe_decision)
-            else _wrap_sync(maybe_decision)
-        )
+        awaitable = self._invoke(request)
 
         if self._timeout_seconds is None:
-            decision = await coro
+            decision = await awaitable
         else:
             try:
-                decision = await asyncio.wait_for(coro, timeout=self._timeout_seconds)
+                decision = await asyncio.wait_for(
+                    awaitable, timeout=self._timeout_seconds
+                )
             except TimeoutError:
                 return self._handle_timeout(request)
 
         if isinstance(decision, ApprovalDecision):
             return decision
         return ApprovalDecision(approved=bool(decision))
+
+    def _invoke(self, request: ApprovalRequest) -> Awaitable[Any]:
+        """Return an awaitable for the callback without blocking the event loop.
+
+        Async callbacks are invoked directly (they yield control immediately).
+        A synchronous callback may block (e.g. ``input()``); running it inline
+        here would complete *before* ``wait_for`` is reached, silently defeating
+        the timeout — so sync callbacks are dispatched to a worker thread.
+        """
+        if _is_async_callable(self._callback):
+            return cast("Awaitable[Any]", self._callback(request))
+        return asyncio.to_thread(self._callback, request)
 
     def _handle_timeout(self, request: ApprovalRequest) -> ApprovalDecision:
         """Apply the *on_timeout* policy after the wait deadline elapses."""
@@ -131,10 +140,8 @@ class ApprovalGate:
         return cls(lambda request: ApprovalDecision(approved=False, reason=reason))
 
 
-async def _wrap_sync(value: Any) -> Any:
-    """Coroutine that immediately returns a synchronous value.
-
-    Used so that ``asyncio.wait_for`` can always receive an awaitable even
-    when the callback is synchronous.
-    """
-    return value
+def _is_async_callable(callback: ApprovalCallback) -> bool:
+    """True when *callback* (or its ``__call__``) is a coroutine function."""
+    if inspect.iscoroutinefunction(callback):
+        return True
+    return inspect.iscoroutinefunction(type(callback).__call__)

@@ -107,3 +107,10 @@ skips = [
 python_version = "3.11"
 strict = true
 exclude = ["tests/"]
+
+[[tool.mypy.overrides]]
+# opentelemetry-api is an optional extra ([otel]); CI's minimal install omits
+# it, so treat it as a missing-OK import. When installed, its real (py.typed)
+# types are still used — this only suppresses the unresolved-import error.
+module = ["opentelemetry.*"]
+ignore_missing_imports = true

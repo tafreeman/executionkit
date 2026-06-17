@@ -137,14 +137,11 @@ def record_llm_span_attributes(
     if span is None:
         return
 
-    # Guard against non-recording spans (e.g. sampled-out spans from the SDK).
-    # NonRecordingSpan.set_attribute is a no-op, but the is_recording() check
-    # makes the intent explicit and avoids the attribute call entirely.
-    if _OTEL_AVAILABLE:
-        from opentelemetry.trace import NonRecordingSpan
-
-        if isinstance(span, NonRecordingSpan):
-            return
+    # Skip non-recording spans (sampled-out / no-op). ``is_recording()`` is the
+    # public OTel API and avoids importing SDK-internal span classes — which
+    # also keeps this module import-clean when opentelemetry is not installed.
+    if hasattr(span, "is_recording") and not span.is_recording():
+        return
 
     span.set_attribute("llm.model", model)
     span.set_attribute("llm.input_tokens", input_tokens)
