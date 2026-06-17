@@ -26,7 +26,7 @@ from executionkit.provider import (
     PatternError,
     ToolCall,
 )
-from executionkit.types import PatternResult, Tool
+from executionkit.types import PatternResult, TerminationReason, Tool
 
 # ---------------------------------------------------------------------------
 # Local response-builder helpers (mirror the module-level helpers in the
@@ -745,3 +745,83 @@ class TestTrimMessages:
         ]
         result = _trim_messages(msgs, 4)
         assert result == msgs
+
+
+# ---------------------------------------------------------------------------
+# TerminationReason (EK-5)
+# ---------------------------------------------------------------------------
+
+
+class TestTerminationReason:
+    """EK-5: react_loop must distinguish natural completion from iteration cap."""
+
+    def _make_search_tool(self) -> Tool:
+        async def _execute(query: str) -> str:
+            return "result"
+
+        return Tool(
+            name="search",
+            description="Search the web",
+            parameters={
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+                "required": ["query"],
+            },
+            execute=_execute,
+        )
+
+    async def test_natural_completion_sets_termination_reason_natural(self) -> None:
+        """When LLM returns a final answer, termination_reason == NATURAL."""
+        tool_resp = _make_tool_response("search", "tc1", {"query": "q"})
+        final_resp = _make_final_response("done")
+        provider = MockProvider(responses=[tool_resp, final_resp])
+        tool = self._make_search_tool()
+
+        result = await react_loop(provider, "question", tools=[tool])
+
+        assert result.metadata["termination_reason"] is TerminationReason.NATURAL
+
+    async def test_natural_completion_not_flagged_as_max_iterations(self) -> None:
+        """Natural completion must NOT carry MAX_ITERATIONS in termination_reason."""
+        provider = MockProvider(responses=[_make_final_response("immediate answer")])
+        tool = self._make_search_tool()
+
+        result = await react_loop(provider, "question", tools=[tool])
+
+        actual = result.metadata["termination_reason"]
+        assert actual is not TerminationReason.MAX_ITERATIONS
+
+    async def test_max_rounds_sets_termination_reason_max_iterations(self) -> None:
+        """When max_rounds exhausted, MaxIterationsError.metadata has MAX_ITERATIONS."""
+        # 2 rounds, each requesting a tool call — loop never finishes naturally.
+        tool_resp = _make_tool_response("search", "tc1", {"query": "q"})
+        provider = MockProvider(responses=[tool_resp, tool_resp])
+        tool = self._make_search_tool()
+
+        with pytest.raises(MaxIterationsError) as exc_info:
+            await react_loop(provider, "question", tools=[tool], max_rounds=2)
+
+        err = exc_info.value
+        assert err.metadata["termination_reason"] is TerminationReason.MAX_ITERATIONS
+
+    async def test_max_rounds_not_flagged_as_natural(self) -> None:
+        """When max_rounds is hit, the exception must NOT carry NATURAL."""
+        tool_resp = _make_tool_response("search", "tc2", {"query": "x"})
+        provider = MockProvider(responses=[tool_resp])
+        tool = self._make_search_tool()
+
+        with pytest.raises(MaxIterationsError) as exc_info:
+            await react_loop(provider, "question", tools=[tool], max_rounds=1)
+
+        err = exc_info.value
+        assert err.metadata.get("termination_reason") is not TerminationReason.NATURAL
+
+    async def test_termination_reason_is_string_comparable(self) -> None:
+        """TerminationReason is a StrEnum — string comparison also works."""
+        provider = MockProvider(responses=[_make_final_response("ok")])
+        tool = self._make_search_tool()
+
+        result = await react_loop(provider, "hi", tools=[tool])
+
+        # StrEnum: TerminationReason.NATURAL == "natural"
+        assert result.metadata["termination_reason"] == "natural"

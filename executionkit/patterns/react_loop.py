@@ -19,7 +19,7 @@ from executionkit.provider import (
     ToolCallingProvider,
     _provider_supports_tools,
 )
-from executionkit.types import PatternResult, TokenUsage, Tool
+from executionkit.types import PatternResult, TerminationReason, TokenUsage, Tool
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -375,6 +375,12 @@ async def react_loop(
         truncated_observations (int): Tool results truncated due to
             ``max_observation_chars``.
         messages_trimmed (int): Number of rounds where history was trimmed.
+        termination_reason (TerminationReason | None): How the loop ended.
+            ``TerminationReason.NATURAL`` when the LLM returned a final
+            answer; ``TerminationReason.MAX_ITERATIONS`` when ``max_rounds``
+            was exhausted (also present on the raised
+            :exc:`~executionkit.provider.MaxIterationsError`'s ``.metadata``).
+            ``None`` only during error paths that abort early.
     """
     _validate_react_loop_args(
         provider,
@@ -391,6 +397,7 @@ async def react_loop(
         "truncated_responses": 0,
         "truncated_observations": 0,
         "messages_trimmed": 0,
+        "termination_reason": None,
     }
     tool_schemas = [tool.to_schema() for tool in tools]
     tool_lookup: dict[str, Tool] = {tool.name: tool for tool in tools}
@@ -419,6 +426,7 @@ async def react_loop(
 
         # No tool calls means the LLM is done — return the content.
         if not response.has_tool_calls:
+            metadata["termination_reason"] = TerminationReason.NATURAL
             return PatternResult[str](
                 value=response.content,
                 score=None,
@@ -441,6 +449,7 @@ async def react_loop(
             approval_gate=approval_gate,
         )
 
+    metadata["termination_reason"] = TerminationReason.MAX_ITERATIONS
     raise MaxIterationsError(
         "react_loop() reached max_rounds without a final answer",
         cost=tracker.to_usage(),
