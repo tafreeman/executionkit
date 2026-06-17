@@ -1,0 +1,747 @@
+"""Tests for the react_loop() pattern and its helpers.
+
+All tests use MockProvider exclusively — no real API calls are made.
+Covers: tool dispatch, concurrency, approval gates, message history trimming,
+budget enforcement, arg validation, and the _trim_messages helper.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import time
+from types import MappingProxyType
+from typing import Any
+
+import pytest
+
+from executionkit._mock import MockProvider
+from executionkit.approval import ApprovalGate
+from executionkit.patterns.react_loop import (
+    _trim_messages,
+    react_loop,
+)
+from executionkit.provider import (
+    LLMResponse,
+    MaxIterationsError,
+    PatternError,
+    ToolCall,
+)
+from executionkit.types import PatternResult, Tool
+
+# ---------------------------------------------------------------------------
+# Local response-builder helpers (mirror the module-level helpers in the
+# original file so tests in this module stay self-contained).
+# ---------------------------------------------------------------------------
+
+
+def _make_tool_response(
+    tool_name: str, tool_id: str, args: dict[str, Any]
+) -> LLMResponse:
+    """Helper: create an LLMResponse that requests a tool call."""
+    return LLMResponse(
+        content="",
+        finish_reason="tool_calls",
+        tool_calls=(ToolCall(id=tool_id, name=tool_name, arguments=args),),
+        usage=MappingProxyType({"prompt_tokens": 10, "completion_tokens": 5}),
+    )
+
+
+def _make_final_response(content: str) -> LLMResponse:
+    """Helper: create an LLMResponse with a final text answer (no tool calls)."""
+    return LLMResponse(
+        content=content,
+        finish_reason="stop",
+        tool_calls=(),
+        usage=MappingProxyType({"prompt_tokens": 10, "completion_tokens": 20}),
+    )
+
+
+# ---------------------------------------------------------------------------
+# react_loop()
+# ---------------------------------------------------------------------------
+
+
+class TestReactLoop:
+    def _make_search_tool(self, return_value: str = "search result") -> Tool:
+        async def _execute(query: str) -> str:
+            return return_value
+
+        return Tool(
+            name="search",
+            description="Search the web",
+            parameters={
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+                "required": ["query"],
+            },
+            execute=_execute,
+        )
+
+    async def test_simple_tool_call_produces_final_answer(self) -> None:
+
+        tool_response = _make_tool_response("search", "tc1", {"query": "hello"})
+        final_response = _make_final_response("The answer is 42")
+
+        provider = MockProvider(responses=[tool_response, final_response])
+        tool = self._make_search_tool("search result")
+
+        result = await react_loop(provider, "find hello", tools=[tool])
+        assert isinstance(result, PatternResult)
+        assert "42" in result.value
+
+    async def test_tool_calls_in_one_round_run_concurrently(self) -> None:
+
+        async def _slow(query: str) -> str:
+            await asyncio.sleep(0.2)
+            return f"done:{query}"
+
+        slow_tool = Tool(
+            name="search",
+            description="Slow search",
+            parameters={
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+                "required": ["query"],
+            },
+            execute=_slow,
+        )
+        multi = LLMResponse(
+            content="",
+            finish_reason="tool_calls",
+            tool_calls=(
+                ToolCall(id="tc1", name="search", arguments={"query": "a"}),
+                ToolCall(id="tc2", name="search", arguments={"query": "b"}),
+                ToolCall(id="tc3", name="search", arguments={"query": "c"}),
+            ),
+            usage=MappingProxyType({"prompt_tokens": 10, "completion_tokens": 5}),
+        )
+        provider = MockProvider(responses=[multi, _make_final_response("done")])
+
+        start = time.perf_counter()
+        result = await react_loop(provider, "go", tools=[slow_tool], max_rounds=4)
+        elapsed = time.perf_counter() - start
+
+        assert result.metadata["tool_calls_made"] == 3
+        # Three 0.2s tools run concurrently (~0.2s); sequential would be ~0.6s.
+        assert elapsed < 0.45, f"tool calls ran sequentially ({elapsed:.2f}s)"
+
+    async def test_multiple_tool_rounds_before_final_answer(self) -> None:
+
+        call1 = _make_tool_response("search", "tc1", {"query": "first"})
+        call2 = _make_tool_response("search", "tc2", {"query": "second"})
+        final = _make_final_response("Final synthesis")
+
+        provider = MockProvider(responses=[call1, call2, final])
+        tool = self._make_search_tool("data")
+
+        result = await react_loop(provider, "multi-step", tools=[tool], max_rounds=8)
+        assert "Final synthesis" in result.value
+
+    async def test_tool_not_found_returns_error_message_in_observation(self) -> None:
+
+        # LLM calls a tool that doesn't exist
+        bad_call = _make_tool_response("nonexistent_tool", "tc1", {})
+        final = _make_final_response("I couldn't find that tool")
+
+        provider = MockProvider(responses=[bad_call, final])
+        tool = self._make_search_tool()
+
+        # Should NOT raise — error becomes an observation and loop continues
+        result = await react_loop(provider, "question", tools=[tool])
+        assert isinstance(result, PatternResult)
+
+        # The unknown-tool error must be fed back to the LLM as a tool observation
+        second_call_messages = provider.calls[1].messages
+        tool_msgs = [m for m in second_call_messages if m.get("role") == "tool"]
+        assert tool_msgs, "Expected at least one tool observation message"
+        observation = tool_msgs[0]["content"]
+        assert "Unknown tool 'nonexistent_tool'" in observation
+
+    async def test_denying_approval_gate_blocks_tool_execution(self) -> None:
+
+        # A denied tool call must NOT run; it becomes a bounded observation that
+        # is fed back to the LLM. This is the core ApprovalGate safety contract.
+        executed: list[str] = []
+
+        async def _execute(query: str) -> str:
+            executed.append(query)
+            return "should never run"
+
+        guarded_tool = Tool(
+            name="search",
+            description="Search the web",
+            parameters={
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+                "required": ["query"],
+            },
+            execute=_execute,
+        )
+
+        tool_call = _make_tool_response("search", "tc1", {"query": "secret"})
+        final = _make_final_response("Acknowledged the block")
+        provider = MockProvider(responses=[tool_call, final])
+
+        result = await react_loop(
+            provider,
+            "do something",
+            tools=[guarded_tool],
+            approval_gate=ApprovalGate.deny_all(reason="not permitted"),
+        )
+        assert isinstance(result, PatternResult)
+
+        # The tool body must never have executed.
+        assert executed == [], "denied tool call must not execute"
+
+        # The denial must surface to the LLM as a bounded tool observation.
+        second_call_messages = provider.calls[1].messages
+        tool_msgs = [m for m in second_call_messages if m.get("role") == "tool"]
+        assert tool_msgs, "Expected a tool observation message"
+        observation = tool_msgs[0]["content"]
+        assert "blocked by approval" in observation
+        assert "not permitted" in observation
+
+    async def test_approving_approval_gate_allows_tool_execution(self) -> None:
+
+        # Contrast with the denial path: an approving gate lets the tool run.
+        executed: list[str] = []
+
+        async def _execute(query: str) -> str:
+            executed.append(query)
+            return "ran ok"
+
+        guarded_tool = Tool(
+            name="search",
+            description="Search the web",
+            parameters={
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+                "required": ["query"],
+            },
+            execute=_execute,
+        )
+
+        tool_call = _make_tool_response("search", "tc1", {"query": "ok"})
+        final = _make_final_response("done")
+        provider = MockProvider(responses=[tool_call, final])
+
+        result = await react_loop(
+            provider,
+            "do something",
+            tools=[guarded_tool],
+            approval_gate=ApprovalGate.allow_all(),
+        )
+        assert isinstance(result, PatternResult)
+        assert executed == ["ok"], "approved tool call must execute"
+
+    async def test_max_rounds_exhaustion_raises_max_iterations_error(self) -> None:
+
+        # Always returns a tool call → never reaches a final answer
+        always_tool = _make_tool_response("search", "tc1", {"query": "q"})
+
+        provider = MockProvider(responses=[always_tool] * 10)
+        tool = self._make_search_tool()
+
+        # Should raise MaxIterationsError after max_rounds
+        with pytest.raises(MaxIterationsError):
+            await react_loop(provider, "question", tools=[tool], max_rounds=3)
+
+    async def test_tool_timeout_observation_contains_timeout_info(self) -> None:
+
+        async def slow_execute(query: str) -> str:
+            await asyncio.sleep(10)
+            return "never"
+
+        slow_tool = Tool(
+            name="slow",
+            description="A slow tool",
+            parameters={
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+                "required": ["query"],
+            },
+            execute=slow_execute,
+            timeout=0.01,  # Very short timeout
+        )
+
+        tool_call = _make_tool_response("slow", "tc1", {"query": "q"})
+        final = _make_final_response("Timed out response")
+
+        provider = MockProvider(responses=[tool_call, final])
+
+        # Should not raise TimeoutError — timeout is handled as observation
+        result = await react_loop(
+            provider, "question", tools=[slow_tool], tool_timeout=0.01
+        )
+        assert isinstance(result, PatternResult)
+
+        # The timeout notice must be fed back to the LLM as a tool observation
+        second_call_messages = provider.calls[1].messages
+        tool_msgs = [m for m in second_call_messages if m.get("role") == "tool"]
+        assert tool_msgs, "Expected at least one tool observation message"
+        observation = tool_msgs[0]["content"]
+        assert "timed out" in observation
+
+    async def test_tool_result_truncated_when_too_long(self) -> None:
+
+        long_result = "x" * 20000  # Exceeds default max_observation_chars=12000
+
+        async def _execute(query: str) -> str:
+            return long_result
+
+        big_tool = Tool(
+            name="big",
+            description="Returns lots of data",
+            parameters={
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+                "required": ["query"],
+            },
+            execute=_execute,
+        )
+
+        tool_call = _make_tool_response("big", "tc1", {"query": "q"})
+        final = _make_final_response("Done")
+
+        provider = MockProvider(responses=[tool_call, final])
+
+        # Verify the second call to the provider has a truncated observation
+        result = await react_loop(
+            provider, "question", tools=[big_tool], max_observation_chars=100
+        )
+        assert isinstance(result, PatternResult)
+        assert result.metadata["tool_calls_made"] == 1
+        assert result.metadata["truncated_observations"] == 1
+        assert result.metadata["rounds"] == 2
+        # Inspect the message history that was passed to the second LLM call
+        assert provider.call_count == 2
+        second_call_messages = provider.calls[1].messages
+        # Find the tool result message
+        tool_msgs = [m for m in second_call_messages if m.get("role") == "tool"]
+        if tool_msgs:
+            content = tool_msgs[0].get("content", "")
+            assert len(content) <= 200  # truncated + possible truncation notice
+
+    async def test_result_is_pattern_result_str(self) -> None:
+
+        final = _make_final_response("Answer here")
+        provider = MockProvider(responses=[final])
+        tool = self._make_search_tool()
+
+        result = await react_loop(provider, "question", tools=[tool])
+        assert isinstance(result, PatternResult)
+        assert isinstance(result.value, str)
+
+    async def test_no_tool_calls_returns_immediately(self) -> None:
+
+        final = _make_final_response("Direct answer, no tools needed")
+        provider = MockProvider(responses=[final])
+        tool = self._make_search_tool()
+
+        result = await react_loop(provider, "simple question", tools=[tool])
+        assert result.value == "Direct answer, no tools needed"
+
+    async def test_cost_tracks_llm_calls(self) -> None:
+
+        call1 = _make_tool_response("search", "tc1", {"query": "q"})
+        final = _make_final_response("Answer")
+
+        provider = MockProvider(responses=[call1, final])
+        tool = self._make_search_tool()
+
+        result = await react_loop(provider, "question", tools=[tool])
+        assert result.cost.llm_calls == 2
+
+    async def test_finish_reason_stop_on_first_call_terminates_in_one_llm_call(
+        self,
+    ) -> None:
+        """LLM returning finish_reason='stop' immediately exits with 1 LLM call."""
+
+        stop_response = _make_final_response("Immediate answer")
+        provider = MockProvider(responses=[stop_response])
+        tool = self._make_search_tool()
+
+        result = await react_loop(provider, "direct question", tools=[tool])
+        assert result.value == "Immediate answer"
+        assert result.cost.llm_calls == 1
+
+    async def test_tool_call_missing_required_arg(self) -> None:
+        """Schema requires 'query'; LLM sends empty args -> error observation."""
+
+        bad_call = _make_tool_response("search", "tc1", {})
+        final = _make_final_response("Done")
+
+        provider = MockProvider(responses=[bad_call, final])
+        tool = self._make_search_tool()
+
+        result = await react_loop(provider, "question", tools=[tool])
+        assert isinstance(result, PatternResult)
+        second_call_messages = provider.calls[1].messages
+        tool_msgs = [m for m in second_call_messages if m.get("role") == "tool"]
+        assert tool_msgs, "Expected a tool observation message"
+        observation = tool_msgs[0]["content"]
+        assert "missing" in observation.lower() or "required" in observation.lower()
+
+    async def test_tool_call_extra_arg_blocked(self) -> None:
+        """Schema has additionalProperties: false; extra key -> error observation."""
+
+        async def _execute(query: str) -> str:
+            return "result"
+
+        strict_tool = Tool(
+            name="strict",
+            description="No extras allowed",
+            parameters={
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+                "required": ["query"],
+                "additionalProperties": False,
+            },
+            execute=_execute,
+        )
+
+        bad_call = _make_tool_response(
+            "strict", "tc1", {"query": "hello", "extra": "oops"}
+        )
+        final = _make_final_response("Done")
+
+        provider = MockProvider(responses=[bad_call, final])
+
+        result = await react_loop(provider, "question", tools=[strict_tool])
+        assert isinstance(result, PatternResult)
+        second_call_messages = provider.calls[1].messages
+        tool_msgs = [m for m in second_call_messages if m.get("role") == "tool"]
+        assert tool_msgs, "Expected a tool observation message"
+        observation = tool_msgs[0]["content"]
+        obs_lower = observation.lower()
+        assert "unexpected" in obs_lower or "additional" in obs_lower
+
+    async def test_tool_call_wrong_type(self) -> None:
+        """Schema expects integer for 'count'; LLM passes string -> error."""
+
+        async def _execute(count: int) -> str:
+            return f"count={count}"
+
+        typed_tool = Tool(
+            name="counter",
+            description="Needs an integer",
+            parameters={
+                "type": "object",
+                "properties": {"count": {"type": "integer"}},
+                "required": ["count"],
+            },
+            execute=_execute,
+        )
+
+        bad_call = _make_tool_response("counter", "tc1", {"count": "five"})
+        final = _make_final_response("Done")
+
+        provider = MockProvider(responses=[bad_call, final])
+
+        result = await react_loop(provider, "question", tools=[typed_tool])
+        assert isinstance(result, PatternResult)
+        second_call_messages = provider.calls[1].messages
+        tool_msgs = [m for m in second_call_messages if m.get("role") == "tool"]
+        assert tool_msgs, "Expected a tool observation message"
+        observation = tool_msgs[0]["content"]
+        assert "integer" in observation.lower() or "type" in observation.lower()
+
+    async def test_tool_call_valid_args_pass_through(self) -> None:
+        """Valid args bypass validation and reach tool.execute normally."""
+
+        executed: list[str] = []
+
+        async def _execute(query: str) -> str:
+            executed.append(query)
+            return "found it"
+
+        search_tool = Tool(
+            name="search",
+            description="Search the web",
+            parameters={
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+                "required": ["query"],
+            },
+            execute=_execute,
+        )
+
+        good_call = _make_tool_response("search", "tc1", {"query": "hello"})
+        final = _make_final_response("The answer is here")
+
+        provider = MockProvider(responses=[good_call, final])
+
+        result = await react_loop(provider, "question", tools=[search_tool])
+        assert isinstance(result, PatternResult)
+        assert executed == ["hello"], "execute must have been called with valid args"
+
+    async def test_tool_call_bool_rejected_as_integer(self) -> None:
+        """bool True/False must not pass as integer — bool is int subclass in Python."""
+
+        async def _execute(count: int) -> str:
+            return f"count={count}"
+
+        typed_tool = Tool(
+            name="counter",
+            description="Needs an integer",
+            parameters={
+                "type": "object",
+                "properties": {"count": {"type": "integer"}},
+                "required": ["count"],
+            },
+            execute=_execute,
+        )
+
+        bool_call = _make_tool_response("counter", "tc1", {"count": True})
+        final = _make_final_response("Done")
+
+        provider = MockProvider(responses=[bool_call, final])
+
+        result = await react_loop(provider, "question", tools=[typed_tool])
+        assert isinstance(result, PatternResult)
+        second_call_messages = provider.calls[1].messages
+        tool_msgs = [m for m in second_call_messages if m.get("role") == "tool"]
+        assert tool_msgs, "Expected a tool observation message"
+        observation = tool_msgs[0]["content"]
+        assert "bool" in observation.lower() or "integer" in observation.lower()
+
+
+# ---------------------------------------------------------------------------
+# react_loop() — MB-009 additional tests
+# ---------------------------------------------------------------------------
+
+
+async def test_react_loop_rejects_plain_llm_provider() -> None:
+    """react_loop must raise PatternError when provider lacks supports_tools."""
+
+    class PlainProvider:
+        async def complete(self, messages: list, **kwargs: object) -> LLMResponse:
+            return LLMResponse(
+                content="hi",
+                usage=MappingProxyType({"prompt_tokens": 1, "completion_tokens": 1}),
+                finish_reason="stop",
+                tool_calls=(),
+            )
+
+    provider = PlainProvider()
+    with pytest.raises((PatternError, TypeError)):
+        await react_loop(provider, "hello", tools=[])  # type: ignore[arg-type]
+
+
+async def test_react_loop_raises_max_iterations_error() -> None:
+    """react_loop must raise MaxIterationsError after max_rounds."""
+
+    # Provide LLMResponse objects that always request a (nonexistent) tool call.
+    # With tools=[], the tool lookup always returns "Error: Unknown tool",
+    # the loop never gets a final answer, and MaxIterationsError is raised.
+    looping_response = _make_tool_response("some_tool", "tc1", {"arg": "val"})
+    provider = MockProvider(responses=[looping_response] * 20)
+    with pytest.raises(MaxIterationsError):
+        await react_loop(provider, "loop forever", tools=[], max_rounds=2)
+
+
+async def test_react_loop_returns_final_answer() -> None:
+    """react_loop with no tool calls returns the model's response immediately."""
+
+    provider = MockProvider(responses=[_make_final_response("The answer is 42.")])
+    result = await react_loop(provider, "What is 6 * 7?", tools=[])
+    assert "42" in result.value
+    assert result.cost.llm_calls >= 0
+
+
+# ---------------------------------------------------------------------------
+# react_loop message history trimming — P2-PERF-07
+# ---------------------------------------------------------------------------
+
+
+async def test_react_loop_message_history_trimmed() -> None:
+    """max_history_messages limits messages sent to provider each round."""
+
+    executed: list[str] = []
+
+    async def execute_search(**_: object) -> str:
+        executed.append("search")
+        return "ok"
+
+    tool_response = _make_tool_response("search", "tc1", {"query": "x"})
+    final_response = _make_final_response("Done")
+    provider = MockProvider(
+        responses=[tool_response, tool_response, tool_response, final_response]
+    )
+
+    search_tool = Tool(
+        name="search",
+        description="search",
+        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+        execute=execute_search,
+    )
+
+    result = await react_loop(
+        provider,
+        "find things",
+        tools=[search_tool],
+        max_rounds=8,
+        max_history_messages=3,
+    )
+
+    assert executed == ["search", "search", "search"]
+    assert result.metadata["tool_calls_made"] == 3
+    assert result.metadata["messages_trimmed"] > 0
+    for call_messages in provider.calls:
+        assert len(call_messages.messages) <= 3, (
+            f"Expected <=3 messages per call, got {len(call_messages.messages)}"
+        )
+
+
+async def test_react_loop_first_message_always_preserved() -> None:
+    """After trimming, messages[0] always contains the original prompt."""
+
+    executed: list[str] = []
+
+    async def execute_search(**_: object) -> str:
+        executed.append("search")
+        return "ok"
+
+    tool_response = _make_tool_response("search", "tc1", {"query": "x"})
+    final_response = _make_final_response("Done")
+    provider = MockProvider(
+        responses=[tool_response, tool_response, tool_response, final_response]
+    )
+
+    search_tool = Tool(
+        name="search",
+        description="search",
+        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+        execute=execute_search,
+    )
+
+    result = await react_loop(
+        provider,
+        "original prompt",
+        tools=[search_tool],
+        max_rounds=8,
+        max_history_messages=3,
+    )
+
+    assert executed == ["search", "search", "search"]
+    assert result.metadata["messages_trimmed"] > 0
+    for call_messages in provider.calls:
+        assert call_messages.messages[0]["content"] == "original prompt"
+
+
+async def test_react_loop_no_trim_when_none() -> None:
+    """Default max_history_messages=None does not trim messages."""
+
+    executed: list[str] = []
+
+    async def execute_search(**_: object) -> str:
+        executed.append("search")
+        return "ok"
+
+    tool_response = _make_tool_response("search", "tc1", {"query": "x"})
+    final_response = _make_final_response("Done")
+    provider = MockProvider(responses=[tool_response, tool_response, final_response])
+
+    search_tool = Tool(
+        name="search",
+        description="search",
+        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+        execute=execute_search,
+    )
+
+    result = await react_loop(provider, "test", tools=[search_tool], max_rounds=8)
+
+    assert executed == ["search", "search"]
+    assert result.metadata["tool_calls_made"] == 2
+    assert result.metadata["messages_trimmed"] == 0
+    # With 2 tool rounds, the final call should have > 3 messages (not trimmed)
+    final_call = provider.calls[-1]
+    assert len(final_call.messages) > 3, "Messages grow unbounded when trim disabled"
+
+
+# ---------------------------------------------------------------------------
+# _trim_messages unit tests
+# ---------------------------------------------------------------------------
+
+
+class TestTrimMessages:
+    """Unit tests for the _trim_messages helper."""
+
+    def _msgs(self, n: int) -> list[dict[str, Any]]:
+        """Return a list of n distinct message dicts."""
+        return [{"role": "user", "content": f"msg{i}"} for i in range(n)]
+
+    def test_no_trim_when_within_limit(self) -> None:
+
+        msgs = self._msgs(3)
+        result = _trim_messages(msgs, 5)
+        assert result is msgs  # same object — no copy needed
+
+    def test_trim_keeps_first_and_recent(self) -> None:
+
+        msgs = self._msgs(6)
+        result = _trim_messages(msgs, 3)
+        assert len(result) == 3
+        assert result[0] is msgs[0]
+        assert result[1] is msgs[4]
+        assert result[2] is msgs[5]
+
+    def test_max_messages_equal_to_length_no_trim(self) -> None:
+
+        msgs = self._msgs(4)
+        result = _trim_messages(msgs, 4)
+        assert result is msgs
+
+    def test_max_messages_one_returns_only_first(self) -> None:
+
+        msgs = self._msgs(5)
+        result = _trim_messages(msgs, 1)
+        assert result == [msgs[0]]
+        assert len(result) == 1
+
+    def test_max_messages_one_single_element_list(self) -> None:
+
+        msgs = self._msgs(1)
+        result = _trim_messages(msgs, 1)
+        assert result == [msgs[0]]
+
+    def test_max_messages_zero_raises_value_error(self) -> None:
+
+        msgs = self._msgs(3)
+        with pytest.raises(ValueError, match="max_messages must be >= 1"):
+            _trim_messages(msgs, 0)
+
+    def test_negative_max_messages_raises_value_error(self) -> None:
+
+        msgs = self._msgs(3)
+        with pytest.raises(ValueError, match="max_messages must be >= 1"):
+            _trim_messages(msgs, -5)
+
+    def test_does_not_mutate_input(self) -> None:
+
+        msgs = self._msgs(6)
+        original_len = len(msgs)
+        _trim_messages(msgs, 3)
+        assert len(msgs) == original_len
+
+    def test_trim_does_not_split_tool_call_pair(self) -> None:
+
+        msgs = [
+            {"role": "user", "content": "prompt"},
+            {"role": "assistant", "content": None, "tool_calls": [{"id": "tc1"}]},
+            {"role": "tool", "tool_call_id": "tc1", "content": "result"},
+            {"role": "assistant", "content": "final"},
+        ]
+        result = _trim_messages(msgs, 3)
+        assert result == [msgs[0], msgs[3]]
+
+    def test_trim_keeps_complete_tool_block_when_it_fits(self) -> None:
+
+        msgs = [
+            {"role": "user", "content": "prompt"},
+            {"role": "assistant", "content": None, "tool_calls": [{"id": "tc1"}]},
+            {"role": "tool", "tool_call_id": "tc1", "content": "result"},
+            {"role": "assistant", "content": "final"},
+        ]
+        result = _trim_messages(msgs, 4)
+        assert result == msgs
