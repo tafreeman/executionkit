@@ -11,6 +11,7 @@ from executionkit.approval import (
     ApprovalDeniedError,
     ApprovalGate,
     ApprovalRequest,
+    ApprovalTimeoutError,
 )
 from executionkit.compose import PatternStep, pipe
 from executionkit.cost import CostTracker, estimate_cost
@@ -28,6 +29,7 @@ from executionkit.kit import Kit
 from executionkit.observability import TraceCallback, TraceEvent, emit_trace
 from executionkit.patterns.base import checked_complete, validate_score
 from executionkit.patterns.consensus import consensus
+from executionkit.patterns.map_reduce import map_reduce
 from executionkit.patterns.react_loop import react_loop
 from executionkit.patterns.refine_loop import refine_loop
 from executionkit.patterns.structured import structured
@@ -52,11 +54,12 @@ from executionkit.routing import Router, RouteRule
 from executionkit.types import (
     Evaluator,
     PatternResult,
+    TerminationReason,
     TokenUsage,
     Tool,
     VotingStrategy,
 )
-from executionkit.workflow import Step, Workflow, WorkflowResult
+from executionkit.workflow import Step, Workflow, WorkflowCheckpoint, WorkflowResult
 
 if TYPE_CHECKING:
     from collections.abc import Coroutine, Sequence
@@ -69,6 +72,7 @@ __all__ = [
     "ApprovalDeniedError",
     "ApprovalGate",
     "ApprovalRequest",
+    "ApprovalTimeoutError",
     "BudgetExhaustedError",
     "ConsensusFailedError",
     "ConvergenceDetector",
@@ -98,6 +102,7 @@ __all__ = [
     "RouteRule",
     "Router",
     "Step",
+    "TerminationReason",
     "TokenUsage",
     "Tool",
     "ToolCall",
@@ -106,6 +111,7 @@ __all__ = [
     "TraceEvent",
     "VotingStrategy",
     "Workflow",
+    "WorkflowCheckpoint",
     "WorkflowResult",
     "__version__",
     "checked_complete",
@@ -115,6 +121,7 @@ __all__ = [
     "estimate_cost",
     "extract_json",
     "live_provider_from_env",
+    "map_reduce",
     "pipe",
     "pipe_sync",
     "react_loop",

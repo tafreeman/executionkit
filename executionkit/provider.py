@@ -37,6 +37,7 @@ from executionkit.errors import PatternError as PatternError
 from executionkit.errors import PermanentError as PermanentError
 from executionkit.errors import ProviderError as ProviderError
 from executionkit.errors import RateLimitError as RateLimitError
+from executionkit.observability import llm_span, record_llm_span_attributes
 
 # ---------------------------------------------------------------------------
 # httpx availability probe (done once at import time)
@@ -277,8 +278,17 @@ class Provider:
         if tools:
             payload["tools"] = list(tools)
         payload.update(kwargs)
-        data = await self._post("chat/completions", payload)
-        return self._parse_response(data)
+
+        with llm_span(self.model) as span:
+            data = await self._post("chat/completions", payload)
+            response = self._parse_response(data)
+            record_llm_span_attributes(
+                span,
+                self.model,
+                response.input_tokens,
+                response.output_tokens,
+            )
+            return response
 
     async def _post(self, endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
         """Route to the appropriate HTTP backend."""

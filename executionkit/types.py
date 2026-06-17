@@ -115,6 +115,30 @@ class VotingStrategy(StrEnum):
 
 
 # ---------------------------------------------------------------------------
+# TerminationReason
+# ---------------------------------------------------------------------------
+
+
+class TerminationReason(StrEnum):
+    """Why a loop pattern stopped iterating.
+
+    Surfaced in :class:`PatternResult` ``metadata["termination_reason"]`` so
+    callers can distinguish a clean finish from an iteration-cap truncation
+    without catching exceptions.
+
+    Members:
+        NATURAL: The loop reached a stopping condition before the cap
+            (e.g. the LLM returned no tool calls in ``react_loop``).
+        MAX_ITERATIONS: The iteration cap was reached before the loop
+            stopped naturally.  For ``react_loop`` this means the LLM never
+            returned a tool-call-free response within ``max_rounds``.
+    """
+
+    NATURAL = "natural"
+    MAX_ITERATIONS = "max_iterations"
+
+
+# ---------------------------------------------------------------------------
 # Evaluator
 # ---------------------------------------------------------------------------
 
