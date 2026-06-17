@@ -11,6 +11,7 @@ from executionkit.approval import (
     ApprovalDeniedError,
     ApprovalGate,
     ApprovalRequest,
+    ApprovalTimeoutError,
 )
 from executionkit.compose import PatternStep, pipe
 from executionkit.cost import CostTracker, estimate_cost
@@ -56,7 +57,7 @@ from executionkit.types import (
     Tool,
     VotingStrategy,
 )
-from executionkit.workflow import Step, Workflow, WorkflowResult
+from executionkit.workflow import Step, Workflow, WorkflowCheckpoint, WorkflowResult
 
 if TYPE_CHECKING:
     from collections.abc import Coroutine, Sequence
@@ -69,6 +70,7 @@ __all__ = [
     "ApprovalDeniedError",
     "ApprovalGate",
     "ApprovalRequest",
+    "ApprovalTimeoutError",
     "BudgetExhaustedError",
     "ConsensusFailedError",
     "ConvergenceDetector",
@@ -106,6 +108,7 @@ __all__ = [
     "TraceEvent",
     "VotingStrategy",
     "Workflow",
+    "WorkflowCheckpoint",
     "WorkflowResult",
     "__version__",
     "checked_complete",
