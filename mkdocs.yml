@@ -128,6 +128,10 @@ nav:
           - Structural Protocols: adr/001-structural-protocols.md
           - Flat Package Layout: adr/002-flat-layout.md
           - Single Provider: adr/003-single-provider.md
+          - Zero Runtime Dependencies: adr/004-zero-runtime-dependencies.md
+          - Caller-Supplied Cost Rates: adr/005-caller-supplied-cost-rates.md
+          - Eval Failure Corpus: adr/006-eval-failure-corpus.md
+          - Async-First Design: adr/007-async-first-sync-wrappers.md
       - Changelog: changelog.md
       - Contributing: contributing.md
       - License: license.md
