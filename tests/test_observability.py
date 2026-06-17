@@ -37,7 +37,14 @@ _RESPONSE_WITH_USAGE = LLMResponse(
 # SDK availability probe (used for skipif markers and fixtures)
 # ---------------------------------------------------------------------------
 
-_SDK_AVAILABLE = importlib.util.find_spec("opentelemetry.sdk") is not None
+try:
+    # find_spec on a *submodule* imports the parent and raises
+    # ModuleNotFoundError when it is absent (it only returns None for a missing
+    # top-level module). CI installs without the optional [otel] extra, so an
+    # unguarded probe would crash collection.
+    _SDK_AVAILABLE = importlib.util.find_spec("opentelemetry.sdk") is not None
+except ModuleNotFoundError:
+    _SDK_AVAILABLE = False
 
 # ---------------------------------------------------------------------------
 # Shared OTel fixture — set the global TracerProvider ONCE per test session.
