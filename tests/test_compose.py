@@ -9,6 +9,7 @@ import pytest
 
 from executionkit._mock import MockProvider
 from executionkit.compose import _filter_kwargs, _subtract, pipe
+from executionkit.cost import CostTracker
 from executionkit.errors import BudgetExhaustedError
 from executionkit.provider import LLMResponse
 from executionkit.types import PatternResult, TokenUsage
@@ -380,3 +381,61 @@ def test_filter_kwargs_uninspectable_callable_passes_all_kwargs() -> None:
     assert result == kwargs, (
         "_filter_kwargs must return all kwargs unchanged for uninspectable callables"
     )
+
+
+# ---------------------------------------------------------------------------
+# Item B — per-step cost attribution, snapshot(), and TokenUsage.__sub__
+# ---------------------------------------------------------------------------
+
+
+async def test_two_step_pipe_step_costs_has_two_entries() -> None:
+    provider = MockProvider(responses=[])
+    result = await pipe(provider, "hello", _echo_step, _upper_step)
+    step_costs = result.metadata["step_costs"]
+    assert isinstance(step_costs, tuple)
+    assert len(step_costs) == 2
+    assert step_costs[0] == TokenUsage(input_tokens=10, output_tokens=5, llm_calls=1)
+    assert step_costs[1] == TokenUsage(input_tokens=8, output_tokens=4, llm_calls=1)
+
+
+async def test_step_costs_sum_equals_total_cost() -> None:
+    provider = MockProvider(responses=[])
+    result = await pipe(provider, "hello", _echo_step, _upper_step, _append_step)
+    summed = TokenUsage()
+    for cost in result.metadata["step_costs"]:
+        summed = summed + cost
+    assert summed == result.cost
+
+
+async def test_budget_exhausted_step_costs_contains_partial_spend() -> None:
+    provider = MockProvider(responses=[])
+    with pytest.raises(BudgetExhaustedError) as exc_info:
+        await pipe(provider, "hello", _echo_step, _raising_step)
+    step_costs = exc_info.value.metadata["step_costs"]
+    assert len(step_costs) == 2
+    # First entry: the completed echo step. Last: the failing step's partial spend.
+    assert step_costs[0] == TokenUsage(input_tokens=10, output_tokens=5, llm_calls=1)
+    assert step_costs[-1] == TokenUsage(input_tokens=3, output_tokens=2, llm_calls=1)
+
+
+async def test_zero_step_pipe_step_costs_is_empty_tuple() -> None:
+    provider = MockProvider(responses=[])
+    result = await pipe(provider, "hello")
+    # No steps run, so there are no per-step costs to report.
+    assert result.metadata.get("step_costs", ()) == ()
+
+
+def test_snapshot_does_not_mutate_tracker() -> None:
+    tracker = CostTracker()
+    tracker.add_usage(TokenUsage(input_tokens=5, output_tokens=3, llm_calls=1))
+    first = tracker.snapshot()
+    second = tracker.snapshot()
+    assert first == second == TokenUsage(input_tokens=5, output_tokens=3, llm_calls=1)
+    # Taking a snapshot must not advance any counter.
+    assert tracker.snapshot() == first
+
+
+def test_token_usage_sub_returns_field_wise_difference() -> None:
+    later = TokenUsage(input_tokens=10, output_tokens=7, llm_calls=3)
+    earlier = TokenUsage(input_tokens=4, output_tokens=2, llm_calls=1)
+    assert later - earlier == TokenUsage(input_tokens=6, output_tokens=5, llm_calls=2)

@@ -51,6 +51,7 @@ async def structured(
     max_cost: TokenUsage | None = None,
     retry: RetryConfig | None = None,
     trace: TraceCallback | None = None,
+    stream: bool = False,
 ) -> PatternResult[StructuredValue]:
     """Request JSON output, parse it, and optionally repair invalid responses.
 
@@ -59,6 +60,11 @@ async def structured(
     prompt. ``max_retries=0`` is supported and means "make one parse attempt
     with no repair call".
     """
+    if stream:
+        raise ValueError(
+            "stream=True is not supported for structured: this pattern "
+            "aggregates intermediate results before returning."
+        )
     if max_retries < 0:
         raise ValueError(f"max_retries must be >= 0, got {max_retries}")
     if max_tokens < 1:

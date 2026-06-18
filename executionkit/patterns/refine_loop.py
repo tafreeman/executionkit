@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import re
 import warnings
 from types import MappingProxyType
@@ -11,12 +12,17 @@ from executionkit._constants import DEFAULT_MAX_TOKENS
 from executionkit.cost import CostTracker
 from executionkit.engine.convergence import ConvergenceDetector
 from executionkit.engine.retry import RetryConfig  # noqa: TC001
-from executionkit.patterns.base import checked_complete, validate_score
+from executionkit.patterns.base import (
+    checked_complete,
+    run_checkpoint,
+    validate_score,
+)
 from executionkit.provider import LLMProvider  # noqa: TC001
 from executionkit.types import Evaluator, PatternResult, TokenUsage
 
 if TYPE_CHECKING:
     from executionkit.observability import TraceCallback
+    from executionkit.types import CheckpointCallback
 
 _DEFAULT_EVALUATOR_TEMPERATURE: float = 0.1
 """Sampling temperature used by the built-in LLM evaluator closure."""
@@ -210,6 +216,7 @@ async def refine_loop(
     max_cost: TokenUsage | None = None,
     retry: RetryConfig | None = None,
     trace: TraceCallback | None = None,
+    on_checkpoint: CheckpointCallback | None = None,
 ) -> PatternResult[str]:
     """Iteratively refine an LLM response until convergence or budget exhaustion.
 
@@ -235,6 +242,12 @@ async def refine_loop(
         max_cost: Optional token/call budget.
         retry: Optional retry configuration per call.
         trace: Optional structured trace callback.
+        on_checkpoint: Optional callback invoked after scoring each candidate
+            (the initial generation as iteration 0, then each refinement
+            iteration), receiving ``(iteration, state)`` where ``state`` is a
+            JSON-serializable dict with keys ``iteration``, ``current_text``,
+            ``current_score``, and ``cost``. May be sync or async; exceptions are
+            logged and swallowed so a failing checkpoint never aborts the loop.
 
     Returns:
         A :class:`PatternResult` whose ``value`` is the best response seen,
@@ -287,6 +300,18 @@ async def refine_loop(
     best_text = initial_response.content
     best_score = await actual_evaluator(best_text, provider)
     score_history: list[float] = [best_score]
+    if on_checkpoint is not None:
+        await run_checkpoint(
+            on_checkpoint,
+            0,
+            {
+                "iteration": 0,
+                "current_text": best_text,
+                "current_score": best_score,
+                "cost": dataclasses.asdict(tracker.snapshot()),
+            },
+            context="refine_loop",
+        )
     converged = convergence.should_stop(best_score)
     iterations = 0
 
@@ -327,6 +352,19 @@ async def refine_loop(
             if refined_score > best_score:
                 best_text = refined_text
                 best_score = refined_score
+
+            if on_checkpoint is not None:
+                await run_checkpoint(
+                    on_checkpoint,
+                    iteration,
+                    {
+                        "iteration": iteration,
+                        "current_text": refined_text,
+                        "current_score": refined_score,
+                        "cost": dataclasses.asdict(tracker.snapshot()),
+                    },
+                    context="refine_loop",
+                )
 
             converged = convergence.should_stop(refined_score)
             if converged:

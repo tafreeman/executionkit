@@ -4,23 +4,38 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
 
+from executionkit._constants import DEFAULT_MAX_TOKENS
 from executionkit.compose import pipe
 from executionkit.cost import CostTracker
+from executionkit.engine.messages import user_message
 from executionkit.errors import ExecutionKitError
+from executionkit.patterns.base import checked_stream
 from executionkit.patterns.consensus import consensus
 from executionkit.patterns.map_reduce import map_reduce
 from executionkit.patterns.react_loop import react_loop
 from executionkit.patterns.refine_loop import refine_loop
 from executionkit.provider import (
     LLMProvider,
+    StreamingProvider,
     ToolCallingProvider,
     _provider_supports_tools,
 )
-from executionkit.types import PatternResult, TokenUsage, Tool
+from executionkit.types import (
+    PatternResult,
+    StreamingPatternResult,
+    TokenUsage,
+    Tool,
+)
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable, Sequence
+    from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
     from types import TracebackType
+
+    from executionkit.observability import TraceCallback
+
+
+_STREAM_CONSENSUS_TEMPERATURE = 0.9
+_STREAM_REACT_TEMPERATURE = 0.3
 
 
 class Kit:
@@ -122,6 +137,103 @@ class Kit:
         All keyword arguments are forwarded unchanged to :func:`pipe`.
         """
         return await self._run_tracked(pipe(self.provider, prompt, *steps, **kwargs))
+
+    async def stream_consensus(
+        self,
+        prompt: str,
+        *,
+        temperature: float = _STREAM_CONSENSUS_TEMPERATURE,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
+        max_cost: TokenUsage | None = None,
+        trace: TraceCallback | None = None,
+    ) -> StreamingPatternResult:
+        """Stream a single live completion of *prompt*.
+
+        Consensus voting needs complete responses to compare, so the full
+        pattern has no coherent token stream; this convenience method streams
+        **one** generation (no voting).  Token deltas arrive live and
+        ``result.cost`` becomes accurate once the stream is drained, at which
+        point the spend is folded into this Kit's cumulative :attr:`usage`.
+        """
+        return await self._stream_single(
+            prompt,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            max_cost=max_cost,
+            trace=trace,
+        )
+
+    async def stream_react_loop(
+        self,
+        prompt: str,
+        tools: Sequence[Tool] = (),
+        *,
+        temperature: float = _STREAM_REACT_TEMPERATURE,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
+        max_cost: TokenUsage | None = None,
+        trace: TraceCallback | None = None,
+    ) -> StreamingPatternResult:
+        """Stream a single live model turn for *prompt*.
+
+        The full ReAct loop runs tools across multiple rounds and cannot be
+        expressed as one token stream, so this convenience method streams a
+        single model generation.  *tools* is accepted for parity with
+        :meth:`react` but is **not** executed (tool-call deltas carry no
+        message content).  ``result.cost`` is accurate after the stream drains
+        and folds into this Kit's :attr:`usage`.
+        """
+        del tools  # accepted for parity with react(); not executed when streaming
+        return await self._stream_single(
+            prompt,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            max_cost=max_cost,
+            trace=trace,
+        )
+
+    async def _stream_single(
+        self,
+        prompt: str,
+        *,
+        temperature: float,
+        max_tokens: int,
+        max_cost: TokenUsage | None,
+        trace: TraceCallback | None,
+    ) -> StreamingPatternResult:
+        """Stream one budget-checked generation, folding cost into Kit usage."""
+        provider = self.provider
+        if not isinstance(provider, StreamingProvider):
+            msg = (
+                f"streaming requires a StreamingProvider; "
+                f"{type(provider).__name__} does not implement stream()."
+            )
+            raise TypeError(msg)
+        local = CostTracker()
+        result = await checked_stream(
+            provider,
+            [user_message(prompt)],
+            local,
+            max_cost,
+            None,
+            trace,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        inner = result.text_stream
+        metadata = result.metadata
+
+        async def _folded() -> AsyncIterator[str]:
+            try:
+                async for token in inner:
+                    yield token
+            finally:
+                self._record(local.to_usage())
+
+        return StreamingPatternResult(
+            text_stream=_folded(),
+            metadata=metadata,
+            _usage_source=local.to_usage,
+        )
 
     async def __aenter__(self) -> Kit:
         return self

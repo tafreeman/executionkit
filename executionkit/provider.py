@@ -21,7 +21,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Literal, NoReturn, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+    from collections.abc import AsyncIterator, Mapping, Sequence
     from types import TracebackType
 
 # Re-export the error hierarchy from errors.py using the `Name as Name` idiom
@@ -62,6 +62,13 @@ except ImportError:
 # ---------------------------------------------------------------------------
 
 MAX_PROVIDER_REPORTED_TOKENS = 1_000_000_000
+
+# HTTP status at or above which a response is treated as an error.
+HTTP_ERROR_THRESHOLD = 400
+
+# SSE framing tokens for OpenAI-compatible streaming responses.
+_SSE_DATA_PREFIX = "data:"
+_SSE_DONE_SENTINEL = "[DONE]"
 
 
 def _usage_int(value: Any, field_name: str) -> int:
@@ -171,6 +178,30 @@ class ToolCallingProvider(LLMProvider, Protocol):
     """
 
     supports_tools: Literal[True]
+
+
+@runtime_checkable
+class StreamingProvider(LLMProvider, Protocol):
+    """Extension of ``LLMProvider`` for providers that can stream completions.
+
+    A streaming provider yields incremental text deltas via :meth:`stream`
+    instead of returning a single :class:`LLMResponse`.  ``stream`` is a normal
+    (non-``async``) method that *returns* an async iterator — call it without
+    ``await`` and consume the result with ``async for``.  Satisfied
+    structurally (PEP 544); the built-in :class:`Provider` and the test
+    :class:`~executionkit._mock.MockProvider` both implement it.
+    """
+
+    def stream(
+        self,
+        messages: Sequence[dict[str, Any]],
+        *,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        tools: Sequence[dict[str, Any]] | None = None,
+        usage_sink: list[LLMResponse] | None = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[str]: ...
 
 
 def _provider_supports_tools(provider: object) -> bool:
@@ -319,15 +350,21 @@ class Provider:
 
     async def _post(self, endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
         """Route to the appropriate HTTP backend."""
+        url, body, headers = self._prepare_request(endpoint, payload)
+        if self._use_httpx:
+            return await self._post_httpx(url, body, headers)
+        return await self._post_urllib(url, body, headers)
+
+    def _prepare_request(
+        self, endpoint: str, payload: dict[str, Any]
+    ) -> tuple[str, bytes, dict[str, str]]:
+        """Build the ``(url, body, headers)`` triple for an API request."""
         url = f"{self.base_url.rstrip('/')}/{endpoint.lstrip('/')}"
         body = json.dumps(payload).encode()
         headers: dict[str, str] = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
-
-        if self._use_httpx:
-            return await self._post_httpx(url, body, headers)
-        return await self._post_urllib(url, body, headers)
+        return url, body, headers
 
     async def _post_httpx(
         self,
@@ -415,6 +452,165 @@ class Provider:
                 ) from exc
 
         return await asyncio.to_thread(_sync)
+
+    def stream(
+        self,
+        messages: Sequence[dict[str, Any]],
+        *,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        tools: Sequence[dict[str, Any]] | None = None,
+        usage_sink: list[LLMResponse] | None = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[str]:
+        """Stream a completion as live text deltas over OpenAI-compatible SSE.
+
+        Sends ``stream: true`` plus ``stream_options.include_usage`` so the
+        server emits a final usage frame.  Yields ``choices[0].delta.content``
+        strings as they arrive.  When *usage_sink* is supplied, the final
+        :class:`LLMResponse` (carrying token usage) is appended to it once the
+        stream drains, so budget-aware callers can record cost afterwards.
+
+        This is a regular method that *returns* an async iterator — call it
+        without ``await`` and consume it with ``async for``.
+        """
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "messages": list(messages),
+            "temperature": (
+                temperature if temperature is not None else self.default_temperature
+            ),
+            "max_tokens": (
+                max_tokens if max_tokens is not None else self.default_max_tokens
+            ),
+            "stream": True,
+            "stream_options": {"include_usage": True},
+        }
+        if tools:
+            payload["tools"] = list(tools)
+        payload.update(kwargs)
+        return self._stream(payload, usage_sink)
+
+    async def _stream(
+        self,
+        payload: dict[str, Any],
+        usage_sink: list[LLMResponse] | None,
+    ) -> AsyncIterator[str]:
+        """Drive the SSE transport, parse frames, and yield content deltas."""
+        url, body, headers = self._prepare_request("chat/completions", payload)
+        raw_lines = (
+            self._stream_httpx(url, body, headers)
+            if self._use_httpx
+            else self._stream_urllib(url, body, headers)
+        )
+        parts: list[str] = []
+        final: LLMResponse | None = None
+        with llm_span(self.model) as span:
+            async for line in raw_lines:
+                chunk = _parse_sse_line(line)
+                if chunk is None:
+                    continue
+                delta = _extract_stream_delta(chunk)
+                if delta is not None:
+                    parts.append(delta)
+                    yield delta
+                usage_response = _response_from_usage_chunk(chunk, "".join(parts))
+                if usage_response is not None:
+                    final = usage_response
+            if final is None:
+                final = LLMResponse(content="".join(parts))
+            if usage_sink is not None:
+                usage_sink.append(final)
+            record_llm_span_attributes(
+                span, self.model, final.input_tokens, final.output_tokens
+            )
+
+    async def _stream_httpx(  # pragma: no cover - needs a live SSE server
+        self,
+        url: str,
+        body: bytes,
+        headers: dict[str, str],
+    ) -> AsyncIterator[str]:
+        """Yield raw SSE lines via ``httpx.AsyncClient.stream``."""
+        assert _httpx is not None  # noqa: S101
+        try:
+            async with self._client.stream(
+                "POST", url, content=body, headers=headers
+            ) as resp:
+                if resp.status_code >= HTTP_ERROR_THRESHOLD:
+                    await resp.aread()
+                    _raise_httpx_stream_error(resp)
+                async for line in resp.aiter_lines():
+                    yield line
+        except _httpx.TransportError as exc:
+            raise ProviderError(
+                f"Transport failure: {_redact_sensitive(str(exc))}"
+            ) from exc
+
+    async def _stream_urllib(
+        self,
+        url: str,
+        body: bytes,
+        headers: dict[str, str],
+    ) -> AsyncIterator[str]:
+        """Yield raw SSE lines via stdlib ``urllib`` on a worker thread.
+
+        urllib is synchronous, so a producer thread reads the response line by
+        line and hands each line to the event loop through an
+        :class:`asyncio.Queue` (scheduled with ``call_soon_threadsafe``).  The
+        async generator awaits the queue, yielding lines as they arrive without
+        blocking the loop.  ``Authorization`` is added as an *unredirected*
+        header so the bearer credential is never resent across a redirect.
+        """
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue[str | BaseException | None] = asyncio.Queue()
+        request_timeout = self.timeout
+
+        def _put(item: str | BaseException | None) -> None:
+            loop.call_soon_threadsafe(queue.put_nowait, item)
+
+        def _producer() -> None:
+            try:
+                req = urllib.request.Request(url, data=body)  # noqa: S310
+                for name, value in headers.items():
+                    if name.lower() == "authorization":
+                        req.add_unredirected_header(name, value)
+                    else:
+                        req.add_header(name, value)
+                try:
+                    with urllib.request.urlopen(  # noqa: S310
+                        req, timeout=request_timeout
+                    ) as resp:
+                        for raw_line in resp:
+                            _put(raw_line.decode("utf-8").rstrip("\r\n"))
+                except urllib.error.HTTPError as exc:
+                    _put(_stream_http_error_urllib(exc))
+                except urllib.error.URLError as exc:
+                    _put(
+                        ProviderError(
+                            f"Transport failure: {_redact_sensitive(str(exc.reason))}"
+                        )
+                    )
+                except TimeoutError as exc:
+                    _put(
+                        ProviderError(
+                            f"Transport failure: {_redact_sensitive(str(exc))}"
+                        )
+                    )
+            finally:
+                _put(None)
+
+        producer = loop.run_in_executor(None, _producer)
+        try:
+            while True:
+                item = await queue.get()
+                if item is None:
+                    break
+                if isinstance(item, BaseException):
+                    raise item
+                yield item
+        finally:
+            await producer
 
     def _parse_response(self, data: dict[str, Any]) -> LLMResponse:
         """Extract content, tool calls, and usage from the raw API response."""
@@ -686,3 +882,107 @@ def _format_http_error(status_code: int, payload: dict[str, Any]) -> str:
             f"{_redact_sensitive(message)}"
         )
     return f"Provider request failed with HTTP {status_code}"
+
+
+# ---------------------------------------------------------------------------
+# Streaming SSE helpers
+# ---------------------------------------------------------------------------
+
+
+def _parse_sse_line(line: str) -> dict[str, Any] | None:
+    """Decode one SSE ``data:`` line into a JSON object.
+
+    Returns ``None`` for blank lines, non-``data:`` lines (e.g. ``event:`` or
+    SSE comments), and the terminal ``[DONE]`` sentinel.  Raises
+    :exc:`ProviderError` if a data payload is present but not a JSON object.
+    """
+    stripped = line.strip()
+    if not stripped or not stripped.startswith(_SSE_DATA_PREFIX):
+        return None
+    data = stripped[len(_SSE_DATA_PREFIX) :].strip()
+    if not data or data == _SSE_DONE_SENTINEL:
+        return None
+    try:
+        chunk = json.loads(data)
+    except json.JSONDecodeError as exc:
+        raise ProviderError("Provider returned a non-JSON SSE data frame") from exc
+    if not isinstance(chunk, dict):
+        raise ProviderError("Provider SSE data frame was not a JSON object")
+    return chunk
+
+
+def _extract_stream_delta(chunk: dict[str, Any]) -> str | None:
+    """Return ``choices[0].delta.content`` from an SSE chunk, or ``None``."""
+    choices = chunk.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return None
+    first = choices[0]
+    if not isinstance(first, dict):
+        return None
+    delta = first.get("delta")
+    if not isinstance(delta, dict):
+        return None
+    content = delta.get("content")
+    return content if isinstance(content, str) else None
+
+
+def _response_from_usage_chunk(
+    chunk: dict[str, Any], content: str
+) -> LLMResponse | None:
+    """Build an :class:`LLMResponse` from a chunk carrying a ``usage`` object.
+
+    OpenAI emits a terminal chunk (empty ``choices``) carrying token usage when
+    ``stream_options.include_usage`` is set.  *content* is the text accumulated
+    so far, attached to the response for convenience.
+    """
+    usage = chunk.get("usage")
+    if not isinstance(usage, dict):
+        return None
+    return LLMResponse(content=content, usage=MappingProxyType(dict(usage)), raw=chunk)
+
+
+def _stream_http_error_urllib(exc: urllib.error.HTTPError) -> LLMError:
+    """Classify a urllib streaming ``HTTPError`` and return the mapped error.
+
+    Producer threads enqueue the returned exception for the consuming
+    coroutine to raise — they cannot raise across the thread boundary directly.
+    """
+    try:
+        raw = _load_json(exc.read())
+    except ProviderError:
+        raw = {}
+    retry_after = _parse_retry_after(
+        exc.headers.get("retry-after", "1") if exc.headers else "1"
+    )
+    return _classify_http_error_return(exc.code, raw, retry_after, cause=exc)
+
+
+def _classify_http_error_return(
+    status: int,
+    raw: dict[str, Any],
+    retry_after: float,
+    *,
+    cause: BaseException,
+) -> LLMError:
+    """Like :func:`_classify_http_error` but returns the error instead of raising."""
+    try:
+        _classify_http_error(status, raw, retry_after, cause=cause)
+    except LLMError as classified:
+        return classified
+    raise AssertionError("unreachable")  # pragma: no cover
+
+
+def _raise_httpx_stream_error(resp: Any) -> NoReturn:  # pragma: no cover
+    """Classify and raise the error for a failed httpx streaming response."""
+    assert _httpx is not None  # noqa: S101
+    try:
+        raw = resp.json()
+        if not isinstance(raw, dict):
+            raw = {}
+    except (ValueError, UnicodeDecodeError):
+        raw = {}
+    retry_after = _parse_retry_after(resp.headers.get("retry-after", "1"))
+    cause = _httpx.HTTPStatusError(
+        "streaming request failed", request=resp.request, response=resp
+    )
+    _classify_http_error(resp.status_code, raw, retry_after, cause=cause)

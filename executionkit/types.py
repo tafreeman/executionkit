@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING, Any, Generic, TypeAlias, TypeVar
 from executionkit._constants import DEFAULT_TOOL_TIMEOUT_SECONDS
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
     from executionkit.provider import LLMProvider
 
 T = TypeVar("T")
@@ -40,6 +42,20 @@ class TokenUsage:
             llm_calls=self.llm_calls + other.llm_calls,
         )
 
+    def __sub__(self, other: TokenUsage) -> TokenUsage:
+        """Return the field-wise difference ``self - other``.
+
+        Useful for computing the delta between two :class:`CostTracker`
+        snapshots (e.g. per-step cost attribution).  No clamping is applied,
+        so callers that subtract a later snapshot from an earlier one can
+        observe negative fields.
+        """
+        return TokenUsage(
+            input_tokens=self.input_tokens - other.input_tokens,
+            output_tokens=self.output_tokens - other.output_tokens,
+            llm_calls=self.llm_calls - other.llm_calls,
+        )
+
 
 # ---------------------------------------------------------------------------
 # PatternResult
@@ -63,6 +79,47 @@ class PatternResult(Generic[T]):
 
     def __str__(self) -> str:
         return str(self.value)
+
+
+# ---------------------------------------------------------------------------
+# StreamingPatternResult
+# ---------------------------------------------------------------------------
+
+
+def _empty_usage() -> TokenUsage:
+    """Default usage source for a result whose stream has not been drained."""
+    return TokenUsage()
+
+
+@dataclass(frozen=True, slots=True)
+class StreamingPatternResult:
+    """Result of a streaming pattern call — text delivered as live deltas.
+
+    Unlike :class:`PatternResult`, the output arrives incrementally through
+    :attr:`text_stream`, an async iterator of text chunks. Token usage is only
+    known once the provider emits its final usage frame, so :attr:`cost` is
+    **not** meaningful until ``text_stream`` has been fully consumed; reading it
+    earlier returns whatever has been recorded so far (typically zero).
+
+    The object itself is immutable — :attr:`cost` is a live view over the
+    originating cost tracker rather than a stored snapshot, which is how a
+    frozen result can surface usage that is populated only after the stream
+    drains.
+    """
+
+    text_stream: AsyncIterator[str]
+    metadata: MappingProxyType[str, Any] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
+    # Callable indirection (rather than a stored TokenUsage) lets a frozen
+    # result reflect usage recorded *after* construction, once the stream is
+    # drained. Defaults to an empty snapshot for directly-constructed results.
+    _usage_source: Callable[[], TokenUsage] = _empty_usage
+
+    @property
+    def cost(self) -> TokenUsage:
+        """Token usage recorded so far — accurate once the stream is drained."""
+        return self._usage_source()
 
 
 # ---------------------------------------------------------------------------
@@ -146,3 +203,22 @@ class TerminationReason(StrEnum):
 
 Evaluator: TypeAlias = Callable[[str, "LLMProvider"], Awaitable[float]]
 """Async callable that scores a response string on [0.0, 1.0]."""
+
+
+# ---------------------------------------------------------------------------
+# CheckpointCallback
+# ---------------------------------------------------------------------------
+
+CheckpointCallback: TypeAlias = Callable[
+    [int, dict[str, Any]],
+    Awaitable[None] | None,
+]
+"""Callback invoked at loop checkpoints with ``(index, state)``.
+
+``index`` is the 0-based iteration/round number and ``state`` is a
+JSON-serializable snapshot of loop progress.  The callback may be either
+synchronous (returning ``None``) or asynchronous (returning an awaitable);
+pattern loops await the result when one is returned.  Exceptions raised by
+the callback are logged and swallowed so a failing checkpoint never aborts
+the loop.
+"""

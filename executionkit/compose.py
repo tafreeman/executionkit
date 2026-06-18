@@ -117,6 +117,11 @@ async def pipe(
         The :class:`~executionkit.types.PatternResult` from the final step,
         with its ``cost`` replaced by the cumulative cost across all steps.
         If *steps* is empty the prompt is returned as-is with zero cost.
+
+        The result ``metadata`` gains ``step_costs``: a ``tuple`` of per-step
+        :class:`~executionkit.types.TokenUsage` deltas in execution order. On the
+        error path the same ``step_costs`` (including the failing step's partial
+        spend) is attached to the re-raised exception's ``metadata``.
     """
     if not steps:
         return PatternResult(value=prompt)
@@ -125,6 +130,7 @@ async def pipe(
     current_prompt: str = prompt
     last_result: PatternResult[Any] | None = None
     step_metadata: list[dict[str, Any]] = []
+    step_costs: list[TokenUsage] = []
 
     for step in steps:
         step_kwargs = dict(shared_kwargs)
@@ -137,13 +143,17 @@ async def pipe(
                 provider, current_prompt, **filtered_kwargs
             )
         except ExecutionKitError as exc:
-            # Do NOT mutate the caught exception (immutability): raise a shallow
-            # copy carrying the accumulated cost, preserving the original cause
-            # chain and traceback.
+            # Record the failing step's partial spend, then raise a shallow copy
+            # carrying the accumulated cost.  The original exception is NOT
+            # mutated (immutability): a fresh metadata dict is assigned, and the
+            # cause chain and traceback are preserved.
+            step_costs.append(exc.cost)
             new_exc = copy.copy(exc)
             new_exc.cost = total_cost + exc.cost
+            new_exc.metadata = {**exc.metadata, "step_costs": tuple(step_costs)}
             raise new_exc.with_traceback(exc.__traceback__) from exc.__cause__
 
+        step_costs.append(result.cost)
         total_cost = total_cost + result.cost
         current_prompt = str(result.value)
         step_metadata.append(dict(result.metadata))
@@ -153,6 +163,7 @@ async def pipe(
     final_metadata: dict[str, Any] = dict(last_result.metadata)
     final_metadata["step_count"] = len(steps)
     final_metadata["step_metadata"] = step_metadata
+    final_metadata["step_costs"] = tuple(step_costs)
     return PatternResult(
         value=last_result.value,
         score=last_result.score,
