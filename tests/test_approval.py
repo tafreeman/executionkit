@@ -11,6 +11,7 @@ Coverage:
 from __future__ import annotations
 
 import asyncio
+import warnings
 
 import pytest
 
@@ -187,3 +188,48 @@ async def test_timeout_with_sync_callback_that_resolves_quickly() -> None:
     decision = await gate.request(_REQUEST)
 
     assert decision.approved is True
+
+
+# ---------------------------------------------------------------------------
+# Construction-time warning for on_timeout="approve" (fail-open guard)
+# ---------------------------------------------------------------------------
+
+
+def test_approve_on_timeout_emits_user_warning() -> None:
+    """Constructing ApprovalGate with on_timeout='approve' must emit a UserWarning."""
+    with pytest.warns(UserWarning, match="fail-open"):
+        ApprovalGate(_pending_callback, timeout_seconds=0.05, on_timeout="approve")
+
+
+def test_approve_on_timeout_warning_mentions_approve() -> None:
+    """The warning text must reference 'approve' so callers know what triggered it."""
+    with pytest.warns(UserWarning, match="approve"):
+        ApprovalGate(_pending_callback, timeout_seconds=0.05, on_timeout="approve")
+
+
+def test_approve_on_timeout_warning_mentions_privilege() -> None:
+    """The warning text must mention the security/privilege risk."""
+    with pytest.warns(UserWarning, match="privilege"):
+        ApprovalGate(_pending_callback, timeout_seconds=0.05, on_timeout="approve")
+
+
+def test_no_warning_for_default_on_timeout() -> None:
+    """Default construction (on_timeout='raise') must NOT emit any UserWarning."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        # Should not raise; if a UserWarning were emitted it would become an error.
+        ApprovalGate(_pending_callback, timeout_seconds=0.05)
+
+
+def test_no_warning_for_raise_on_timeout() -> None:
+    """Explicit on_timeout='raise' must NOT emit any UserWarning."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        ApprovalGate(_pending_callback, timeout_seconds=0.05, on_timeout="raise")
+
+
+def test_no_warning_for_deny_on_timeout() -> None:
+    """on_timeout='deny' must NOT emit any UserWarning."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        ApprovalGate(_pending_callback, timeout_seconds=0.05, on_timeout="deny")

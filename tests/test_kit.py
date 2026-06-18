@@ -379,3 +379,65 @@ async def test_kit_pipe_smoke_no_steps() -> None:
 
     assert result.value == "hello world"
     assert kit.usage == TokenUsage()
+
+
+# ---------------------------------------------------------------------------
+# map_reduce delegation
+# ---------------------------------------------------------------------------
+
+
+async def test_kit_map_reduce_delegates_to_map_reduce_fn(
+    provider: MockProvider,
+) -> None:
+    expected = _make_result("combined", input_tokens=30, output_tokens=15, llm_calls=3)
+    with patch(
+        "executionkit.kit.map_reduce", new=AsyncMock(return_value=expected)
+    ) as mock_fn:
+        kit = Kit(provider)
+        result = await kit.map_reduce(
+            ["a", "b"],
+            map_prompt_template="Summarize: {item}",
+            reduce_prompt_template="Combine: {mapped_outputs}",
+        )
+
+    mock_fn.assert_called_once_with(
+        provider,
+        ["a", "b"],
+        map_prompt_template="Summarize: {item}",
+        reduce_prompt_template="Combine: {mapped_outputs}",
+    )
+    assert result is expected
+
+
+async def test_kit_map_reduce_accumulates_cost(provider: MockProvider) -> None:
+    expected = _make_result(input_tokens=30, output_tokens=15, llm_calls=3)
+    with patch("executionkit.kit.map_reduce", new=AsyncMock(return_value=expected)):
+        kit = Kit(provider)
+        await kit.map_reduce(
+            ["x"],
+            map_prompt_template="Summarize: {item}",
+            reduce_prompt_template="Combine: {mapped_outputs}",
+        )
+
+    assert kit.usage.input_tokens == 30
+    assert kit.usage.output_tokens == 15
+    assert kit.usage.llm_calls == 3
+
+
+async def test_kit_map_reduce_smoke_with_mock_provider() -> None:
+    """End-to-end: Kit.map_reduce calls through with MockProvider and cost
+    is reflected in kit.usage."""
+    # 2 map responses + 1 reduce response
+    p = MockProvider(responses=["summary_x", "summary_y", "final_answer"])
+    kit = Kit(p)
+    result = await kit.map_reduce(
+        ["x", "y"],
+        map_prompt_template="Summarize this: {item}",
+        reduce_prompt_template="Combine these summaries: {mapped_outputs}",
+    )
+
+    assert result.value == "final_answer"
+    assert result.metadata["map_count"] == 2
+    assert result.metadata["total_calls"] == 3
+    # Cost attribution: kit.usage must reflect the 3 LLM calls made.
+    assert kit.usage.llm_calls == 3

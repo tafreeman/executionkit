@@ -9,6 +9,7 @@ from itertools import chain
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
+from executionkit._constants import DEFAULT_MAX_TOKENS
 from executionkit.approval import ApprovalGate, ApprovalRequest
 from executionkit.cost import CostTracker
 from executionkit.engine.retry import RetryConfig  # noqa: TC001
@@ -23,6 +24,14 @@ from executionkit.types import PatternResult, TerminationReason, TokenUsage, Too
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
+
+# ---------------------------------------------------------------------------
+# Module-level defaults — named constants; no magic numbers.
+# ---------------------------------------------------------------------------
+
+_DEFAULT_MAX_ROUNDS: int = 8
+_DEFAULT_MAX_OBSERVATION_CHARS: int = 12_000
+_DEFAULT_TEMPERATURE: float = 0.3
 
 _JSON_SCHEMA_TYPE_MAP: dict[str, type | tuple[type, ...]] = {
     "string": str,
@@ -224,7 +233,7 @@ def _build_assistant_message(response: Any) -> dict[str, Any]:
                 "type": "function",
                 "function": {
                     "name": tc.name,
-                    "arguments": json.dumps(tc.arguments),
+                    "arguments": json.dumps(dict(tc.arguments)),
                 },
             }
             for tc in response.tool_calls
@@ -242,6 +251,7 @@ async def _execute_tool_calls_round(
     *,
     trace: TraceCallback | None = None,
     approval_gate: ApprovalGate | None = None,
+    redact_trace_args: bool = True,
 ) -> None:
     """Execute one round's tool calls concurrently, appending observations.
 
@@ -257,14 +267,31 @@ async def _execute_tool_calls_round(
     *trace* is supplied, ``tool_call_start``/``tool_call_end`` events are emitted
     around each call. Both run inside the concurrent fan-out, so trace events may
     interleave across calls; metadata is still applied in request order below.
+
+    When *redact_trace_args* is ``True`` (the default), argument *values* are
+    omitted from ``tool_call_start`` trace events; only the argument *keys* are
+    included.  Set to ``False`` to include raw argument values (useful in
+    controlled test environments, but risks leaking PII or secrets into traces).
     """
 
     async def _run_one(tc: Any) -> tuple[Any, str]:
+        # Build the trace payload for tool_call_start.
+        # When redaction is enabled (the safe default), emit only argument keys
+        # so traces remain useful for debugging without leaking argument values
+        # (which may contain PII, credentials, or other sensitive data).
+        if redact_trace_args:
+            trace_args: dict[str, Any] = dict.fromkeys(tc.arguments, "[redacted]")
+        else:
+            trace_args = dict(tc.arguments)
         await emit_trace(
             trace,
             TraceEvent.create(
                 "tool_call_start",
-                {"tool_name": tc.name, "tool_call_id": tc.id},
+                {
+                    "tool_name": tc.name,
+                    "tool_call_id": tc.id,
+                    "arguments": trace_args,
+                },
             ),
         )
         decision = (
@@ -324,16 +351,17 @@ async def react_loop(
     prompt: str,
     tools: Sequence[Tool],
     *,
-    max_rounds: int = 8,
-    max_observation_chars: int = 12000,
+    max_rounds: int = _DEFAULT_MAX_ROUNDS,
+    max_observation_chars: int = _DEFAULT_MAX_OBSERVATION_CHARS,
     tool_timeout: float | None = None,
-    temperature: float = 0.3,
-    max_tokens: int = 4096,
+    temperature: float = _DEFAULT_TEMPERATURE,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
     max_cost: TokenUsage | None = None,
     retry: RetryConfig | None = None,
     max_history_messages: int | None = None,
     trace: TraceCallback | None = None,
     approval_gate: ApprovalGate | None = None,
+    redact_trace_args: bool = True,
     **_: Any,
 ) -> PatternResult[str]:
     """Execute a think-act-observe tool-calling loop.
@@ -361,6 +389,12 @@ async def react_loop(
             message (the original prompt). ``None`` disables trimming.
         trace: Optional structured trace callback.
         approval_gate: Optional gate checked before each tool execution.
+        redact_trace_args: When ``True`` (the default), argument *values* are
+            replaced with ``"[redacted]"`` in ``tool_call_start`` trace events.
+            Only argument *keys* are emitted, keeping traces useful for
+            debugging without risking PII or credential leakage.  Set to
+            ``False`` to include raw argument values (e.g. in controlled test
+            environments).
 
     Returns:
         A :class:`PatternResult` whose ``value`` is the final LLM
@@ -447,6 +481,7 @@ async def react_loop(
             messages,
             trace=trace,
             approval_gate=approval_gate,
+            redact_trace_args=redact_trace_args,
         )
 
     metadata["termination_reason"] = TerminationReason.MAX_ITERATIONS
@@ -498,7 +533,9 @@ async def _execute_tool_call(
     except TimeoutError:
         return f"Tool execution timed out after {timeout}s"
     except Exception as exc:
+        # exc_info=False: tracebacks can carry tool arguments, URLs, or
+        # credentials; the exception type in the message is sufficient signal.
         logging.getLogger(__name__).debug(
-            "Tool '%s' raised %s", tc_name, type(exc).__name__, exc_info=True
+            "Tool '%s' raised %s", tc_name, type(exc).__name__, exc_info=False
         )
         return f"Tool '{tc_name}' failed: {type(exc).__name__}"

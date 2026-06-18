@@ -333,3 +333,189 @@ async def test_checkpoint_fn_receives_immutable_outputs() -> None:
 
     for cp in checkpoints:
         assert isinstance(cp.outputs, MappingProxyType)
+
+
+# ---------------------------------------------------------------------------
+# Finding #2 — async checkpoint_fn is actually awaited
+# ---------------------------------------------------------------------------
+
+
+async def test_async_checkpoint_fn_is_awaited() -> None:
+    """An async checkpoint_fn must be awaited, not silently dropped."""
+    recorded: list[int] = []
+
+    async def async_checkpoint(cp: WorkflowCheckpoint) -> None:
+        recorded.append(cp.step_index)
+
+    workflow = Workflow(_make_steps(3))
+    await workflow.run(checkpoint_fn=async_checkpoint)
+
+    # Three sequential steps → three checkpoints, each with the correct index
+    assert recorded == [1, 2, 3]
+
+
+async def test_async_checkpoint_fn_receives_correct_outputs() -> None:
+    """Async checkpoint_fn must receive the accumulated outputs at each batch."""
+    snapshots: list[dict[str, Any]] = []
+
+    async def async_checkpoint(cp: WorkflowCheckpoint) -> None:
+        snapshots.append(dict(cp.outputs))
+
+    workflow = Workflow(_make_steps(2))
+    await workflow.run(checkpoint_fn=async_checkpoint)
+
+    assert "step_1" in snapshots[0]
+    assert "step_1" in snapshots[1]
+    assert "step_2" in snapshots[1]
+
+
+# ---------------------------------------------------------------------------
+# Finding #3 — from_dict raises clear ValueError for missing/malformed keys
+# ---------------------------------------------------------------------------
+
+
+def test_from_dict_raises_for_missing_cost() -> None:
+    """from_dict must raise ValueError (not KeyError) when 'cost' is absent."""
+    data = {
+        "step_index": 1,
+        "outputs": {"step_1": "result_1"},
+        # 'cost' deliberately omitted
+    }
+    try:
+        WorkflowCheckpoint.from_dict(data)
+    except ValueError as exc:
+        assert "cost" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError was not raised")
+
+
+def test_from_dict_raises_for_missing_input_tokens() -> None:
+    """from_dict must raise ValueError when 'input_tokens' is absent from cost."""
+    data = {
+        "step_index": 1,
+        "outputs": {"step_1": "result_1"},
+        "cost": {"output_tokens": 5, "llm_calls": 1},  # 'input_tokens' missing
+    }
+    try:
+        WorkflowCheckpoint.from_dict(data)
+    except ValueError as exc:
+        assert "input_tokens" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError was not raised")
+
+
+def test_from_dict_raises_for_missing_step_index() -> None:
+    """from_dict must raise ValueError when 'step_index' is absent."""
+    data = {
+        "outputs": {"step_1": "result_1"},
+        "cost": {"input_tokens": 1, "output_tokens": 5, "llm_calls": 1},
+        # 'step_index' deliberately omitted
+    }
+    try:
+        WorkflowCheckpoint.from_dict(data)
+    except ValueError as exc:
+        assert "step_index" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError was not raised")
+
+
+def test_from_dict_raises_for_missing_outputs() -> None:
+    """from_dict must raise ValueError when 'outputs' is absent."""
+    data = {
+        "step_index": 1,
+        "cost": {"input_tokens": 1, "output_tokens": 5, "llm_calls": 1},
+        # 'outputs' deliberately omitted
+    }
+    try:
+        WorkflowCheckpoint.from_dict(data)
+    except ValueError as exc:
+        assert "outputs" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError was not raised")
+
+
+def test_from_dict_does_not_raise_keyerror_for_bad_input() -> None:
+    """Corrupt checkpoint dicts must never surface a bare KeyError."""
+    bad_inputs = [
+        {},
+        {"step_index": 1},
+        {"step_index": 1, "outputs": {}, "cost": {}},
+    ]
+    for bad in bad_inputs:
+        try:
+            WorkflowCheckpoint.from_dict(bad)
+        except ValueError:
+            pass  # expected
+        except KeyError as exc:  # pragma: no cover
+            raise AssertionError(
+                f"Bare KeyError raised instead of ValueError: {exc}"
+            ) from exc
+
+
+# ---------------------------------------------------------------------------
+# Finding #1 — gather_strict: parallel steps produce correct ordered outputs
+# ---------------------------------------------------------------------------
+
+
+async def test_parallel_steps_correct_outputs_after_gather_strict() -> None:
+    """Parallel-ready steps (same dependency tier) must all produce correct
+    results after the asyncio.gather → gather_strict swap."""
+    execution_order: list[str] = []
+
+    async def make_parallel_step(name: str) -> Any:
+        async def _run(ctx: dict[str, Any]) -> str:
+            execution_order.append(name)
+            return f"output_{name}"
+
+        return _run
+
+    step_root_fn = await make_parallel_step("root")
+    step_a_fn = await make_parallel_step("a")
+    step_b_fn = await make_parallel_step("b")
+    step_c_fn = await make_parallel_step("c")
+
+    # 'a', 'b', and 'c' all depend on 'root' and are thus ready in one batch.
+    workflow = Workflow(
+        [
+            Step("root", step_root_fn),
+            Step("a", step_a_fn, depends_on=("root",)),
+            Step("b", step_b_fn, depends_on=("root",)),
+            Step("c", step_c_fn, depends_on=("root",)),
+        ]
+    )
+
+    result = await workflow.run()
+
+    assert result.outputs["root"] == "output_root"
+    assert result.outputs["a"] == "output_a"
+    assert result.outputs["b"] == "output_b"
+    assert result.outputs["c"] == "output_c"
+    # All four steps must have actually run
+    assert set(execution_order) == {"root", "a", "b", "c"}
+
+
+async def test_parallel_steps_ordering_matches_step_definition() -> None:
+    """Results must map back to each step by name regardless of completion
+    order (ordering guarantee from gather_strict's index-based assignment)."""
+    import asyncio as _asyncio
+
+    async def slow_step(ctx: dict[str, Any]) -> str:
+        await _asyncio.sleep(0)  # yield to allow interleaving
+        return "slow"
+
+    async def fast_step(ctx: dict[str, Any]) -> str:
+        return "fast"
+
+    # Both 'slow' and 'fast' depend only on 'root' → run in same parallel batch.
+    workflow = Workflow(
+        [
+            Step("root", lambda ctx: "root"),
+            Step("slow", slow_step, depends_on=("root",)),
+            Step("fast", fast_step, depends_on=("root",)),
+        ]
+    )
+
+    result = await workflow.run()
+
+    assert result.outputs["slow"] == "slow"
+    assert result.outputs["fast"] == "fast"

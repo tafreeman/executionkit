@@ -1449,3 +1449,185 @@ class TestParseRetryAfter:
         """``"-inf"`` is non-finite and falls back to the default delay."""
         result = self._call("-inf")
         assert result == 1.0
+
+
+# ---------------------------------------------------------------------------
+# SEC-01: ToolCall.arguments is immutable (MappingProxyType)
+# ---------------------------------------------------------------------------
+
+
+class TestToolCallImmutability:
+    """ToolCall.arguments must be wrapped in MappingProxyType to prevent mutation."""
+
+    def test_arguments_is_mapping_proxy(self) -> None:
+        """Plain dict passed to ToolCall is wrapped in MappingProxyType."""
+        from types import MappingProxyType
+
+        tc = ToolCall(id="t1", name="fn", arguments={"x": 1})
+        assert isinstance(tc.arguments, MappingProxyType)
+
+    def test_arguments_mutation_raises_type_error(self) -> None:
+        """Attempting to set a key on ToolCall.arguments must raise TypeError."""
+        tc = ToolCall(id="t1", name="fn", arguments={"x": 1})
+        with pytest.raises(TypeError):
+            tc.arguments["x"] = 99  # type: ignore[index]
+
+    def test_arguments_deletion_raises_type_error(self) -> None:
+        """Attempting to delete a key on ToolCall.arguments must raise TypeError."""
+        tc = ToolCall(id="t1", name="fn", arguments={"x": 1})
+        with pytest.raises(TypeError):
+            del tc.arguments["x"]  # type: ignore[attr-defined]
+
+    def test_arguments_content_is_preserved(self) -> None:
+        """Wrapping must not alter the contents of the arguments dict."""
+        tc = ToolCall(id="t1", name="fn", arguments={"a": 1, "b": "hello"})
+        assert tc.arguments["a"] == 1
+        assert tc.arguments["b"] == "hello"
+
+    def test_arguments_spread_still_works(self) -> None:
+        """``**tc.arguments`` unpacking must work for downstream tool dispatch."""
+
+        def _tool(a: int, b: str) -> str:
+            return f"{a}-{b}"
+
+        tc = ToolCall(id="t1", name="fn", arguments={"a": 42, "b": "world"})
+        result = _tool(**tc.arguments)
+        assert result == "42-world"
+
+    def test_already_proxy_is_not_double_wrapped(self) -> None:
+        """Passing a MappingProxyType directly must not re-wrap it."""
+        from types import MappingProxyType
+
+        proxy = MappingProxyType({"k": "v"})
+        tc = ToolCall(id="t1", name="fn", arguments=proxy)
+        assert tc.arguments is proxy
+
+
+# ---------------------------------------------------------------------------
+# SEC-02: SSRF scheme validation — Provider rejects non-http(s) base_url
+# ---------------------------------------------------------------------------
+
+
+class TestProviderSchemeValidation:
+    """Provider.__post_init__ must reject URL schemes other than http and https."""
+
+    @pytest.mark.parametrize(
+        "bad_url",
+        [
+            "file:///etc/passwd",
+            "ftp://attacker.internal/llm",
+            "gopher://evil.internal:70/",
+            "data:text/plain,hello",
+            "javascript:alert(1)",
+            "dict://localhost:2628/",
+        ],
+    )
+    def test_non_http_scheme_raises_value_error(self, bad_url: str) -> None:
+        """Non-http(s) URL scheme must raise ValueError at construction time."""
+        with pytest.raises(ValueError, match="scheme must be 'http' or 'https'"):
+            Provider(base_url=bad_url, model="m")
+
+    def test_http_localhost_is_accepted(self) -> None:
+        """http://localhost is a valid base_url (local LLM servers like Ollama)."""
+        p = Provider(base_url="http://localhost:11434/v1", model="llama3.2")
+        assert p.base_url == "http://localhost:11434/v1"
+
+    def test_http_127_is_accepted(self) -> None:
+        """http://127.0.0.1 must not be blocked."""
+        p = Provider(base_url="http://127.0.0.1:8080/v1", model="m")
+        assert p.base_url == "http://127.0.0.1:8080/v1"
+
+    def test_https_remote_is_accepted(self) -> None:
+        """https:// remote endpoints must be accepted."""
+        p = Provider(base_url="https://api.example.com/v1", model="gpt-4o")
+        assert p.base_url == "https://api.example.com/v1"
+
+    def test_http_private_range_is_accepted(self) -> None:
+        """Private-range IPs are legitimate LLM server addresses and must pass."""
+        p = Provider(base_url="http://192.168.1.100:11434/v1", model="llama3.2")
+        assert p.base_url == "http://192.168.1.100:11434/v1"
+
+    def test_error_message_includes_offending_scheme(self) -> None:
+        """ValueError message must name the offending scheme for debuggability."""
+        with pytest.raises(ValueError, match="file://"):
+            Provider(base_url="file:///etc/passwd", model="m")
+
+
+# ---------------------------------------------------------------------------
+# SEC-03: _redact_sensitive broadened coverage
+# ---------------------------------------------------------------------------
+
+
+class TestRedactSensitiveBroadened:
+    """_redact_sensitive must catch additional key-name and boundary variants."""
+
+    def _redact(self, text: str) -> str:
+        from executionkit.provider import _redact_sensitive
+
+        return _redact_sensitive(text)
+
+    # --- case-insensitive key-name variants ---
+
+    def test_api_key_equals_lowercase(self) -> None:
+        result = self._redact("api_key=sk-supersecretvalue")
+        assert "sk-supersecretvalue" not in result
+        assert "[REDACTED]" in result
+
+    def test_api_key_equals_uppercase(self) -> None:
+        result = self._redact("API_KEY=sk-supersecretvalue")
+        assert "sk-supersecretvalue" not in result
+        assert "[REDACTED]" in result
+
+    def test_apikey_no_underscore(self) -> None:
+        result = self._redact("apikey=supersecretvalue1234")
+        assert "supersecretvalue1234" not in result
+        assert "[REDACTED]" in result
+
+    def test_password_equals(self) -> None:
+        result = self._redact("password=hunter2hunter")
+        assert "hunter2hunter" not in result
+        assert "[REDACTED]" in result
+
+    def test_password_equals_uppercase(self) -> None:
+        result = self._redact("PASSWORD=hunter2hunter")
+        assert "hunter2hunter" not in result
+        assert "[REDACTED]" in result
+
+    def test_access_key_equals(self) -> None:
+        result = self._redact("access_key=AKIAIOSFODNN7EXAMPLE")
+        assert "AKIAIOSFODNN7EXAMPLE" not in result
+        assert "[REDACTED]" in result
+
+    # --- URL query-string boundary forms ---
+
+    def test_query_string_api_key(self) -> None:
+        """?api_key=VALUE in a URL must be redacted."""
+        result = self._redact("https://api.example.com/v1?api_key=supersecretval")
+        assert "supersecretval" not in result
+        assert "[REDACTED]" in result
+
+    def test_query_string_ampersand_api_key(self) -> None:
+        """&api_key=VALUE (subsequent query param) must be redacted."""
+        result = self._redact(
+            "https://api.example.com/v1?foo=bar&api_key=supersecretval"
+        )
+        assert "supersecretval" not in result
+        assert "[REDACTED]" in result
+
+    def test_query_string_password(self) -> None:
+        result = self._redact("https://host/?password=mypassword12")
+        assert "mypassword12" not in result
+        assert "[REDACTED]" in result
+
+    # --- safe words must NOT be over-redacted ---
+
+    def test_ordinary_word_not_redacted(self) -> None:
+        """Common words that happen to contain 'key' must not be redacted."""
+        result = self._redact("The monkey ate the turkey.")
+        assert result == "The monkey ate the turkey."
+
+    def test_short_value_not_redacted(self) -> None:
+        """Values shorter than 4 chars after '=' must not match (too short)."""
+        result = self._redact("key=abc")
+        # 'abc' is 3 chars — below threshold
+        assert "[REDACTED]" not in result

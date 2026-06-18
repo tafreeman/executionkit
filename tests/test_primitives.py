@@ -317,3 +317,74 @@ async def test_approval_gate_allows_react_tool_execution() -> None:
     await react_loop(provider, "find", [tool], approval_gate=gate)
 
     assert executed == ["public"]
+
+
+# ---------------------------------------------------------------------------
+# Plan-focused tests
+# ---------------------------------------------------------------------------
+
+
+def test_plan_raises_on_duplicate_step_names() -> None:
+    from executionkit.planning import Plan, PlanStep
+
+    with pytest.raises(ValueError, match="unique"):
+        Plan(
+            [
+                PlanStep("draft", "create draft", lambda context: "draft"),
+                PlanStep("draft", "duplicate name", lambda context: "oops"),
+            ]
+        )
+
+
+async def test_plan_approval_gate_denies_step() -> None:
+    from executionkit.approval import ApprovalDeniedError, ApprovalGate
+    from executionkit.planning import Plan, PlanStep
+
+    executed: list[str] = []
+
+    async def side_effect(context: dict[str, Any]) -> str:
+        executed.append("ran")
+        return "ran"
+
+    plan = Plan([PlanStep("step_a", "do something", side_effect)])
+
+    with pytest.raises(ApprovalDeniedError, match="needs review"):
+        await plan.execute(approval_gate=ApprovalGate.deny_all("needs review"))
+
+    assert executed == []
+
+
+async def test_plan_approval_gate_allows_step() -> None:
+    from executionkit.approval import ApprovalGate
+    from executionkit.planning import Plan, PlanStep
+
+    executed: list[str] = []
+
+    async def side_effect(context: dict[str, Any]) -> str:
+        executed.append("ran")
+        return "ran"
+
+    plan = Plan([PlanStep("step_a", "do something", side_effect)])
+
+    result = await plan.execute(approval_gate=ApprovalGate.allow_all())
+
+    assert executed == ["ran"]
+    assert result.outputs["step_a"] == "ran"
+
+
+async def test_plan_unwraps_pattern_result_and_accumulates_cost() -> None:
+    from executionkit.planning import Plan, PlanStep
+
+    usage = TokenUsage(llm_calls=3, input_tokens=10, output_tokens=5)
+
+    def returning_pattern_result(context: dict[str, Any]) -> PatternResult[str]:
+        return PatternResult("unwrapped-value", cost=usage)
+
+    plan = Plan([PlanStep("llm_step", "call the model", returning_pattern_result)])
+
+    result = await plan.execute()
+
+    assert result.outputs["llm_step"] == "unwrapped-value"
+    assert result.cost.llm_calls == 3
+    assert result.cost.input_tokens == 10
+    assert result.cost.output_tokens == 5

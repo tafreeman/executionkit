@@ -7,6 +7,7 @@ import warnings
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
+from executionkit._constants import DEFAULT_MAX_TOKENS
 from executionkit.cost import CostTracker
 from executionkit.engine.convergence import ConvergenceDetector
 from executionkit.engine.retry import RetryConfig  # noqa: TC001
@@ -16,6 +17,15 @@ from executionkit.types import Evaluator, PatternResult, TokenUsage
 
 if TYPE_CHECKING:
     from executionkit.observability import TraceCallback
+
+_DEFAULT_EVALUATOR_TEMPERATURE: float = 0.1
+"""Sampling temperature used by the built-in LLM evaluator closure."""
+
+_DEFAULT_TEMPERATURE: float = 0.7
+"""Default sampling temperature for refine_loop generation calls."""
+
+_DEFAULT_MAX_EVAL_CHARS: int = 32_768
+"""Default character cap on text forwarded to the evaluator."""
 
 # Matches an opening or closing <response_to_rate> envelope tag (any case,
 # optional inner whitespace) so it can be stripped from untrusted candidate text.
@@ -127,7 +137,7 @@ def _make_default_evaluator(
             max_cost,
             retry,
             trace,
-            temperature=0.1,
+            temperature=_DEFAULT_EVALUATOR_TEMPERATURE,
             max_tokens=16,
         )
         raw_score = _parse_score(response.content)
@@ -190,13 +200,13 @@ async def refine_loop(
     prompt: str,
     *,
     evaluator: Evaluator | None = None,
-    max_eval_chars: int = 32_768,
+    max_eval_chars: int = _DEFAULT_MAX_EVAL_CHARS,
     target_score: float = 0.9,
     max_iterations: int = 5,
     patience: int = 3,
     delta_threshold: float = 0.01,
-    temperature: float = 0.7,
-    max_tokens: int = 4096,
+    temperature: float = _DEFAULT_TEMPERATURE,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
     max_cost: TokenUsage | None = None,
     retry: RetryConfig | None = None,
     trace: TraceCallback | None = None,
