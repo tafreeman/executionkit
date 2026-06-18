@@ -2,18 +2,28 @@
 
 from __future__ import annotations
 
+import inspect
+import logging
 import math
 import warnings
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import AsyncIterator, Sequence
+
+    from executionkit.types import CheckpointCallback
 
 from executionkit.cost import CostTracker  # noqa: TC001
 from executionkit.engine.retry import DEFAULT_RETRY, RetryConfig, with_retry
 from executionkit.observability import TraceCallback, TraceEvent, emit_trace
-from executionkit.provider import BudgetExhaustedError, LLMProvider, LLMResponse
-from executionkit.types import TokenUsage  # noqa: TC001
+from executionkit.provider import (
+    BudgetExhaustedError,
+    LLMProvider,
+    LLMResponse,
+    StreamingProvider,
+)
+from executionkit.types import StreamingPatternResult, TokenUsage
 
 BUDGET_EXHAUSTED_SENTINEL = -1
 
@@ -85,6 +95,39 @@ def validate_score(score: float) -> float:
     if math.isnan(score) or not (0.0 <= score <= 1.0):
         raise ValueError(f"Invalid evaluator score: {score}")
     return score
+
+
+async def run_checkpoint(
+    callback: CheckpointCallback | None,
+    index: int,
+    state: dict[str, Any],
+    *,
+    context: str,
+) -> None:
+    """Invoke a checkpoint callback, awaiting async results and isolating failures.
+
+    Supports both synchronous (``-> None``) and asynchronous
+    (``-> Awaitable[None]``) callbacks.  Any exception raised by the callback is
+    logged and swallowed so a failing checkpoint never aborts the loop;
+    ``asyncio.CancelledError`` (a ``BaseException``, not an ``Exception``) still
+    propagates normally.
+
+    Args:
+        callback: The user checkpoint callback, or ``None`` (no-op).
+        index: 0-based iteration/round index passed to the callback.
+        state: JSON-serializable progress snapshot passed to the callback.
+        context: Pattern name used in the warning log message.
+    """
+    if callback is None:
+        return
+    try:
+        result = callback(index, state)
+        if inspect.isawaitable(result):
+            await result
+    except Exception:
+        logging.getLogger(__name__).warning(
+            "%s checkpoint callback raised; continuing", context, exc_info=True
+        )
 
 
 async def checked_complete(
@@ -207,6 +250,112 @@ async def checked_complete(
         ),
     )
     return response
+
+
+async def checked_stream(
+    provider: StreamingProvider,
+    messages: Sequence[dict[str, Any]],
+    tracker: CostTracker,
+    budget: TokenUsage | None,
+    retry: RetryConfig | None,
+    trace: TraceCallback | None = None,
+    **kwargs: Any,
+) -> StreamingPatternResult:
+    """Budget-checked, trace-instrumented streaming completion.
+
+    Parallel to :func:`checked_complete`, but yields live text deltas instead
+    of returning a single response.  Before any token is produced it eagerly:
+
+    1. Checks the budget — raises :exc:`BudgetExhaustedError` if exhausted.
+    2. Calls ``tracker.reserve_call()`` in the same no-await segment as the
+       budget check (same concurrency contract as :func:`checked_complete`).
+    3. Emits the ``llm_call_start`` trace event.
+
+    The returned :class:`StreamingPatternResult` wraps the provider stream so
+    that, once the caller drains it, token usage is recorded
+    (``record_without_call``) and ``llm_call_end`` is emitted.  If the stream
+    raises mid-flight, ``llm_call_error`` is emitted and the exception
+    propagates to the consumer.
+
+    Retry is **not** supported for streaming — a partial stream cannot be
+    replayed — so a non-``None`` *retry* is logged and ignored.
+
+    Args:
+        provider: Streaming-capable LLM provider.
+        messages: Chat messages to send.
+        tracker: Cost tracker to record usage on.
+        budget: Optional token/call budget. ``None`` means unlimited.
+        retry: Ignored (logged) — streaming cannot be retried.
+        trace: Optional structured trace callback.
+        **kwargs: Forwarded to ``provider.stream()`` (e.g. ``temperature``).
+
+    Returns:
+        A :class:`StreamingPatternResult` whose ``text_stream`` yields deltas
+        and whose ``cost`` becomes accurate once the stream is drained.
+
+    Raises:
+        BudgetExhaustedError: If the budget is exhausted before dispatch.
+    """
+    if retry is not None:
+        logging.getLogger(__name__).warning(
+            "retry is not supported for streaming and will be ignored "
+            "(a partial stream cannot be replayed)."
+        )
+
+    # ---- no-await critical section: check then reserve ----
+    # No ``await`` must be inserted between _check_budget and reserve_call();
+    # see checked_complete() and executionkit/cost.py for the concurrency
+    # contract this upholds.
+    if budget is not None:
+        _check_budget(
+            budget,
+            tracker.to_usage(),
+            tuple(_BUDGET_FIELD_LABELS),
+            sentinel_suffix="(forwarded from pipe)",
+            exceeded_suffix="before dispatch",
+        )
+    tracker.reserve_call()
+    # ---- end critical section ----
+    await emit_trace(
+        trace,
+        TraceEvent.create("llm_call_start", {"cost": tracker.to_usage()}),
+    )
+
+    usage_sink: list[LLMResponse] = []
+    raw_stream = provider.stream(messages, usage_sink=usage_sink, **kwargs)
+
+    async def _tracked_stream() -> AsyncIterator[str]:
+        try:
+            async for delta in raw_stream:
+                yield delta
+        except Exception as exc:
+            await emit_trace(
+                trace,
+                TraceEvent.create(
+                    "llm_call_error",
+                    {"error_type": type(exc).__name__, "cost": tracker.to_usage()},
+                ),
+            )
+            raise
+        response = usage_sink[-1] if usage_sink else LLMResponse(content="")
+        tracker.record_without_call(response)
+        await emit_trace(
+            trace,
+            TraceEvent.create(
+                "llm_call_end",
+                {
+                    "cost": tracker.to_usage(),
+                    "input_tokens": response.input_tokens,
+                    "output_tokens": response.output_tokens,
+                },
+            ),
+        )
+
+    return StreamingPatternResult(
+        text_stream=_tracked_stream(),
+        metadata=MappingProxyType({"streaming": True}),
+        _usage_source=tracker.to_usage,
+    )
 
 
 def _note_truncation(

@@ -133,3 +133,14 @@ class CostTracker:
             output_tokens=self._output,
             llm_calls=self._calls,
         )
+
+    def snapshot(self) -> TokenUsage:
+        """Return current totals as an immutable snapshot without mutating state.
+
+        Equivalent to :meth:`to_usage`; provided as the public, intention-revealing
+        name for callers that capture point-in-time deltas (e.g. per-step cost
+        attribution or loop checkpoint state).  Calling it never advances any
+        counter, so two consecutive snapshots with no intervening ``record`` are
+        equal.
+        """
+        return self.to_usage()

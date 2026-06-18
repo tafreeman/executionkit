@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
+import importlib.util
 import json
 import logging
 from itertools import chain
@@ -14,7 +16,11 @@ from executionkit.approval import ApprovalGate, ApprovalRequest
 from executionkit.cost import CostTracker
 from executionkit.engine.retry import RetryConfig  # noqa: TC001
 from executionkit.observability import TraceCallback, TraceEvent, emit_trace
-from executionkit.patterns.base import _note_truncation, checked_complete
+from executionkit.patterns.base import (
+    _note_truncation,
+    checked_complete,
+    run_checkpoint,
+)
 from executionkit.provider import (
     MaxIterationsError,
     ToolCallingProvider,
@@ -24,6 +30,8 @@ from executionkit.types import PatternResult, TerminationReason, TokenUsage, Too
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
+
+    from executionkit.types import CheckpointCallback
 
 # ---------------------------------------------------------------------------
 # Module-level defaults — named constants; no magic numbers.
@@ -84,10 +92,41 @@ def _check_arg_type(key: str, value: Any, prop_schema: dict[str, Any]) -> str | 
     return None
 
 
-def _validate_tool_args(
+# Logged at most once per process when Tier B (jsonschema) is unavailable.
+_subset_validator_warned: bool = False
+
+_JSONSCHEMA_MODULE: str = "jsonschema"
+
+
+def _jsonschema_available() -> bool:
+    """Return True if the optional ``jsonschema`` package can be imported.
+
+    Detected via :func:`importlib.util.find_spec` at call time (deliberately not
+    cached) so the result tracks the current environment and stays patchable in
+    tests.  The lookup cost is negligible next to the LLM round-trip preceding
+    each tool call.
+    """
+    return importlib.util.find_spec(_JSONSCHEMA_MODULE) is not None
+
+
+def _warn_subset_validator_once() -> None:
+    """Emit a one-time debug notice that only the Tier-A subset validator is active."""
+    global _subset_validator_warned
+    if not _subset_validator_warned:
+        logging.getLogger(__name__).debug(
+            "jsonschema not installed; using subset validator"
+        )
+        _subset_validator_warned = True
+
+
+def _subset_validate_tool_args(
     parameters_schema: Mapping[str, Any], arguments: dict[str, Any]
 ) -> str | None:
-    """Return None if valid, or an error string describing the problem."""
+    """Tier A: dependency-free subset validator.
+
+    Checks required fields, ``additionalProperties: false``, and top-level
+    property types.  Returns None if valid, or an error string otherwise.
+    """
     props: dict[str, Any] = parameters_schema.get("properties", {})
     required: list[str] = parameters_schema.get("required", [])
     additional: bool | dict[str, Any] = parameters_schema.get(
@@ -109,6 +148,58 @@ def _validate_tool_args(
         if error is not None:
             return error
 
+    return None
+
+
+def _jsonschema_validate_tool_args(
+    parameters_schema: Mapping[str, Any], arguments: dict[str, Any]
+) -> str | None:
+    """Tier B: full JSON Schema validation via the optional ``jsonschema`` package.
+
+    Covers what Tier A cannot express: nested objects, ``enum``,
+    ``minimum``/``maximum``, ``minLength``/``maxLength``, ``pattern``, and
+    ``anyOf``/``oneOf``.  A ``ValidationError`` (bad *arguments*) becomes an error
+    string; a ``SchemaError`` (a malformed *tool schema*) is logged and treated as
+    "no additional error" so a buggy schema cannot crash the loop.
+    """
+    import jsonschema  # local import: only reached when the extra is installed
+
+    # ToolCall wraps its arguments in a MappingProxyType, which jsonschema does
+    # not recognise as a JSON "object" (it type-checks against ``dict``).  Pass a
+    # plain dict so a real tool call is not spuriously rejected; nested values are
+    # already plain dicts (JSON-parsed), so a shallow copy is sufficient.
+    try:
+        jsonschema.validate(instance=dict(arguments), schema=dict(parameters_schema))
+    except jsonschema.ValidationError as exc:
+        return str(exc.message)
+    except jsonschema.SchemaError as exc:
+        logging.getLogger(__name__).warning(
+            "Invalid tool parameter schema; skipping jsonschema validation: %s",
+            exc.message,
+        )
+    return None
+
+
+def _validate_tool_args(
+    parameters_schema: Mapping[str, Any], arguments: dict[str, Any]
+) -> str | None:
+    """Validate tool-call *arguments* against the tool's JSON Schema.
+
+    Two tiers run in order:
+
+    * **Tier A** (always available): the dependency-free subset validator.
+    * **Tier B** (when ``jsonschema`` is installed): full JSON Schema validation
+      for the constraints Tier A cannot express.
+
+    Returns None if the arguments are valid, otherwise an error string suitable
+    for surfacing to the model as a tool observation.
+    """
+    error = _subset_validate_tool_args(parameters_schema, arguments)
+    if error is not None:
+        return error
+    if _jsonschema_available():
+        return _jsonschema_validate_tool_args(parameters_schema, arguments)
+    _warn_subset_validator_once()
     return None
 
 
@@ -362,6 +453,7 @@ async def react_loop(
     trace: TraceCallback | None = None,
     approval_gate: ApprovalGate | None = None,
     redact_trace_args: bool = True,
+    on_checkpoint: CheckpointCallback | None = None,
     **_: Any,
 ) -> PatternResult[str]:
     """Execute a think-act-observe tool-calling loop.
@@ -395,6 +487,12 @@ async def react_loop(
             debugging without risking PII or credential leakage.  Set to
             ``False`` to include raw argument values (e.g. in controlled test
             environments).
+        on_checkpoint: Optional callback invoked after each round that dispatched
+            tool calls, receiving ``(round, state)`` where ``round`` is 0-based
+            and ``state`` is a JSON-serializable dict with keys ``round``,
+            ``last_response``, ``tool_calls_made`` (list of tool names), and
+            ``cost``. May be sync or async; exceptions are logged and swallowed
+            so a failing checkpoint never aborts the loop.
 
     Returns:
         A :class:`PatternResult` whose ``value`` is the final LLM
@@ -483,6 +581,17 @@ async def react_loop(
             approval_gate=approval_gate,
             redact_trace_args=redact_trace_args,
         )
+
+        if on_checkpoint is not None:
+            checkpoint_state: dict[str, Any] = {
+                "round": round_num - 1,
+                "last_response": response.content,
+                "tool_calls_made": [tc.name for tc in response.tool_calls],
+                "cost": dataclasses.asdict(tracker.snapshot()),
+            }
+            await run_checkpoint(
+                on_checkpoint, round_num - 1, checkpoint_state, context="react_loop"
+            )
 
     metadata["termination_reason"] = TerminationReason.MAX_ITERATIONS
     raise MaxIterationsError(

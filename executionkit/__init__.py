@@ -17,6 +17,7 @@ from executionkit.compose import PatternStep, pipe
 from executionkit.cost import CostTracker, estimate_cost
 from executionkit.engine.convergence import ConvergenceDetector
 from executionkit.engine.json_extraction import extract_json
+from executionkit.engine.rate_bucket import TokenBucket
 from executionkit.engine.retry import DEFAULT_RETRY, RetryConfig
 from executionkit.evals import (
     EvalCase,
@@ -27,7 +28,11 @@ from executionkit.evals import (
 )
 from executionkit.kit import Kit
 from executionkit.observability import TraceCallback, TraceEvent, emit_trace
-from executionkit.patterns.base import checked_complete, validate_score
+from executionkit.patterns.base import (
+    checked_complete,
+    checked_stream,
+    validate_score,
+)
 from executionkit.patterns.consensus import consensus
 from executionkit.patterns.map_reduce import map_reduce
 from executionkit.patterns.react_loop import react_loop
@@ -47,13 +52,16 @@ from executionkit.provider import (
     Provider,
     ProviderError,
     RateLimitError,
+    StreamingProvider,
     ToolCall,
     ToolCallingProvider,
 )
 from executionkit.routing import Router, RouteRule
 from executionkit.types import (
+    CheckpointCallback,
     Evaluator,
     PatternResult,
+    StreamingPatternResult,
     TerminationReason,
     TokenUsage,
     Tool,
@@ -74,6 +82,7 @@ __all__ = [
     "ApprovalRequest",
     "ApprovalTimeoutError",
     "BudgetExhaustedError",
+    "CheckpointCallback",
     "ConsensusFailedError",
     "ConvergenceDetector",
     "CostTracker",
@@ -102,7 +111,10 @@ __all__ = [
     "RouteRule",
     "Router",
     "Step",
+    "StreamingPatternResult",
+    "StreamingProvider",
     "TerminationReason",
+    "TokenBucket",
     "TokenUsage",
     "Tool",
     "ToolCall",
@@ -115,6 +127,7 @@ __all__ = [
     "WorkflowResult",
     "__version__",
     "checked_complete",
+    "checked_stream",
     "consensus",
     "consensus_sync",
     "emit_trace",

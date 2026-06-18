@@ -90,6 +90,7 @@ async def map_reduce(
     max_cost: TokenUsage | None = None,
     retry: RetryConfig | None = None,
     trace: TraceCallback | None = None,
+    stream: bool = False,
 ) -> PatternResult[str]:
     """Fan-out completions over *inputs* concurrently, then reduce.
 
@@ -136,6 +137,11 @@ async def map_reduce(
             to combine (still runs one reduce call — ``reduce_calls=1``).
         total_calls (int): Total LLM calls made (``map_count + 1``).
     """
+    if stream:
+        raise ValueError(
+            "stream=True is not supported for map_reduce: this pattern "
+            "aggregates intermediate results before returning."
+        )
     if max_concurrency < 1:
         raise ValueError(f"max_concurrency must be >= 1, got {max_concurrency}")
     if max_tokens < 1:
