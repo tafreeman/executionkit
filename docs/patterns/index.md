@@ -1,6 +1,6 @@
 # Patterns Overview
 
-ExecutionKit ships **five composable pattern utilities**. Each is a single async function that takes a provider and a prompt and returns a `PatternResult` carrying the answer, a score, accumulated cost, and per-pattern metadata. Lightweight orchestration helpers such as `Router`, `Workflow`, `Plan`, `ApprovalGate`, and evals live alongside these patterns in the public API.
+ExecutionKit ships **six composable pattern utilities**. Each is a single async function that takes a provider and a prompt and returns a `PatternResult` carrying the answer, a score, accumulated cost, and per-pattern metadata. Lightweight orchestration helpers such as `Router`, `Workflow`, `Plan`, `ApprovalGate`, and evals live alongside these patterns in the public API.
 
 | Pattern | Use when… | Cost shape |
 |---------|-----------|------------|
@@ -9,6 +9,7 @@ ExecutionKit ships **five composable pattern utilities**. Each is a single async
 | [ReAct Tool Loop](react-loop.md) | The model needs to call tools to gather information before answering. | `O(rounds)` sequential calls; bounded by `max_rounds`. |
 | [Structured Output](structured.md) | You need a JSON object or array with optional validation and repair. | `1 + max_retries` sequential calls in the worst case. |
 | [Pipe](pipe.md) | You want to chain patterns end-to-end with a shared budget. | Sum of the individual pattern costs. |
+| [Map-Reduce](map-reduce.md) | You need to fan out over a collection of inputs, process each independently, then reduce to a single answer. | `O(len(inputs))` parallel calls for map; one call for reduce. |
 
 ## Choosing a pattern
 
@@ -22,11 +23,14 @@ flowchart TD
     F -- yes --> G[Consensus]
     F -- no --> K{Need JSON<br/>with validation?}
     K -- yes --> L[Structured Output]
-    K -- no --> H[Single completion<br/>via Provider directly]
+    K -- no --> M{Have a collection<br/>of inputs to process?}
+    M -- yes --> N[Map-Reduce]
+    M -- no --> H[Single completion<br/>via Provider directly]
     C --> I{Need multi-step?}
     E --> I
     G --> I
     L --> I
+    N --> I
     I -- yes --> J[Pipe to chain them]
 ```
 
