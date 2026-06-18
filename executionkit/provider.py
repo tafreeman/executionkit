@@ -21,7 +21,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Literal, NoReturn, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
     from types import TracebackType
 
 # Re-export the error hierarchy from errors.py using the `Name as Name` idiom
@@ -81,7 +81,17 @@ class ToolCall:
 
     id: str
     name: str
-    arguments: dict[str, Any]
+    # Declared as Mapping so callers receive a read-only view; __post_init__
+    # wraps any plain dict in MappingProxyType.  ``**tc.arguments`` unpacking
+    # still works because MappingProxyType supports the mapping protocol.
+    arguments: Mapping[str, Any]
+
+    def __post_init__(self) -> None:
+        """Wrap ``arguments`` in a read-only proxy to enforce immutability."""
+        if not isinstance(self.arguments, MappingProxyType):
+            object.__setattr__(
+                self, "arguments", MappingProxyType(dict(self.arguments))
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -217,11 +227,28 @@ class Provider:
     )
 
     def __post_init__(self) -> None:
+        # --- SSRF scheme guard (trust boundary) ----------------------------
+        # base_url is a trust boundary: callers control this value, so we
+        # validate the URL scheme before any network activity to prevent
+        # file://, ftp://, gopher://, data://, etc. attacks.
+        # Localhost and private-range IPs are intentionally NOT blocked —
+        # local LLM servers (Ollama, LM Studio, vLLM) are a primary use case.
+        scheme = self.base_url.split("://", maxsplit=1)[0].lower()
+        if scheme not in {"http", "https"}:
+            raise ValueError(
+                f"base_url scheme must be 'http' or 'https', got '{scheme}://'. "
+                "Use an http:// or https:// URL (e.g. http://localhost:11434/v1)."
+            )
+        # --- HTTP client setup -------------------------------------------
         # object.__setattr__ is the standard pattern for derived state on frozen
-        # dataclasses
+        # dataclasses.
+        # follow_redirects=False prevents auth-header leakage: a 302 to an
+        # internal host would otherwise resend the Authorization header.
         if _HTTPX_AVAILABLE and _httpx is not None:
             object.__setattr__(
-                self, "_client", _httpx.AsyncClient(timeout=self.timeout)
+                self,
+                "_client",
+                _httpx.AsyncClient(timeout=self.timeout, follow_redirects=False),
             )
             object.__setattr__(self, "_use_httpx", True)
         else:
@@ -346,15 +373,26 @@ class Provider:
         - {400, 401, 403, 404, 405, 413, 422} -> PermanentError
           (non-retryable client errors whose outcome cannot change on retry)
         - everything else >=400 -> ProviderError (retryable by default)
+
+        The ``Authorization`` header is added as an *unredirected* header so
+        urllib will NOT resend the bearer credential if the endpoint issues a
+        cross-host redirect (prevents auth-header leakage on redirect).
         """
         request_timeout = self.timeout
 
         def _sync() -> dict[str, Any]:
-            req = urllib.request.Request(  # noqa: S310
-                url, data=body, headers=headers
-            )
+            req = urllib.request.Request(url, data=body)  # noqa: S310
+            for name, value in headers.items():
+                # Authorization is added unredirected so it is not leaked to a
+                # redirected host; other headers may safely follow redirects.
+                if name.lower() == "authorization":
+                    req.add_unredirected_header(name, value)
+                else:
+                    req.add_header(name, value)
             try:
-                with urllib.request.urlopen(req, timeout=request_timeout) as resp:  # noqa: S310
+                with urllib.request.urlopen(  # noqa: S310
+                    req, timeout=request_timeout
+                ) as resp:
                     raw: dict[str, Any] = json.loads(resp.read())
                     return raw
             except urllib.error.HTTPError as exc:
@@ -505,18 +543,34 @@ def _redact_sensitive(text: str) -> str:
     """Replace credential-like substrings with ``[REDACTED]``.
 
     Matches common API key/token shapes and authorization phrases.
+    Case-insensitive so ``API_KEY=``, ``api_key=``, ``Password=`` etc. are
+    all caught.  Also handles URL query-string boundaries (``?`` / ``&``)
+    where a word boundary ``\\b`` anchor does not fire.
     """
     return re.sub(
         r"""(?ix)
+        # Named-service token patterns (prefix-anchored, no false positives)
         \b(?:
             gh[pousr]_[A-Za-z0-9_]{4,}
             | AIza[A-Za-z0-9_-]{8,}
             | xox[bpoa]-[A-Za-z0-9-]{8,}
             | gsk_[A-Za-z0-9_]{4,}
             | sk[-_][^\s'"<>]{4,}
-            | (?:key|token|secret|auth)[=:][^\s'"<>]{4,}
-            | (?:bearer|token|secret)\s+[A-Za-z0-9._~+/\-=]{4,}
-        )""",
+        )
+        |
+        # Key-name=value pairs — word-boundary OR query-string boundary (?/&).
+        # The alternation handles both:
+        #   word-boundary form:   key=VALUE
+        #   URL query-string:     ?api_key=VALUE  or  &api_key=VALUE
+        # Covers: api_key, apikey, access_key, password, passwd, key, token,
+        #         secret, auth, and their uppercase / underscore variants.
+        (?:\b|(?<=[?&]))
+        (?:api_?key|access_?key|password|passwd|key|token|secret|auth)
+        [=:][^\s'"<>&]{4,}
+        |
+        # "Bearer <value>", "token <value>", "secret <value>" (case-insensitive)
+        \b(?:bearer|token|secret)\s+[A-Za-z0-9._~+/\-=]{4,}
+        """,
         "[REDACTED]",
         text,
     )

@@ -5,13 +5,15 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING, Any
 
+from executionkit._constants import DEFAULT_MAX_CONCURRENCY
+
 if TYPE_CHECKING:
     from collections.abc import Coroutine
 
 
 async def gather_resilient(
     coros: list[Coroutine[Any, Any, Any]],
-    max_concurrency: int = 10,
+    max_concurrency: int = DEFAULT_MAX_CONCURRENCY,
 ) -> list[Any | BaseException]:
     """Run coroutines concurrently, returning exceptions as values.
 
@@ -38,7 +40,7 @@ async def gather_resilient(
 
 async def gather_strict(
     coros: list[Coroutine[Any, Any, Any]],
-    max_concurrency: int = 10,
+    max_concurrency: int = DEFAULT_MAX_CONCURRENCY,
 ) -> list[Any]:
     """Run coroutines concurrently with all-or-nothing semantics.
 

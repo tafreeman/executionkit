@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import inspect
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -10,12 +9,13 @@ from types import MappingProxyType
 from typing import Any, TypeAlias
 
 from executionkit.approval import ApprovalGate, ApprovalRequest
+from executionkit.engine.parallel import gather_strict
 from executionkit.errors import ExecutionKitError
 from executionkit.observability import TraceCallback, TraceEvent, emit_trace
 from executionkit.types import PatternResult, TokenUsage
 
 WorkflowRun: TypeAlias = Callable[[dict[str, Any]], Awaitable[Any] | Any]
-CheckpointFn: TypeAlias = Callable[["WorkflowCheckpoint"], None]
+CheckpointFn: TypeAlias = Callable[["WorkflowCheckpoint"], Awaitable[None] | None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,7 +49,13 @@ class WorkflowCheckpoint:
     """Aggregate token usage consumed up to this checkpoint."""
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialise to a plain-Python dict suitable for JSON encoding."""
+        """Serialise to a plain-Python dict.
+
+        JSON-serializability depends on the caller ensuring that all step
+        outputs stored in this checkpoint are themselves JSON-safe primitives.
+        Non-primitive output values (e.g. custom objects, bytes) will cause
+        ``json.dumps`` to raise when applied to the returned dict.
+        """
         return {
             "step_index": self.step_index,
             "outputs": dict(self.outputs),
@@ -62,8 +68,43 @@ class WorkflowCheckpoint:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> WorkflowCheckpoint:
-        """Restore a :class:`WorkflowCheckpoint` from a plain-Python dict."""
-        cost_data: dict[str, int] = data["cost"]
+        """Restore a :class:`WorkflowCheckpoint` from a plain-Python dict.
+
+        Raises
+        ------
+        ValueError
+            If the dict is missing a required key or contains a value of the
+            wrong type.  The message names the exact missing or malformed field
+            so that callers can produce actionable diagnostics.
+        """
+        required_top: tuple[str, ...] = ("step_index", "outputs", "cost")
+        required_cost: tuple[str, ...] = ("input_tokens", "output_tokens", "llm_calls")
+
+        for key in required_top:
+            if key not in data:
+                raise ValueError(
+                    f"WorkflowCheckpoint.from_dict: missing required key {key!r}"
+                )
+
+        if not isinstance(data["cost"], dict):
+            raise ValueError(
+                "WorkflowCheckpoint.from_dict: 'cost' must be a dict, "
+                f"got {type(data['cost']).__name__!r}"
+            )
+        cost_data: dict[str, Any] = data["cost"]
+
+        for key in required_cost:
+            if key not in cost_data:
+                raise ValueError(
+                    f"WorkflowCheckpoint.from_dict: missing required key 'cost.{key}'"
+                )
+
+        if not isinstance(data["outputs"], dict):
+            raise ValueError(
+                "WorkflowCheckpoint.from_dict: 'outputs' must be a dict, "
+                f"got {type(data['outputs']).__name__!r}"
+            )
+
         return cls(
             step_index=int(data["step_index"]),
             outputs=MappingProxyType(dict(data["outputs"])),
@@ -186,8 +227,8 @@ class Workflow:
             if not ready:
                 raise ExecutionKitError("Workflow dependencies could not be resolved")
 
-            results = await asyncio.gather(
-                *[
+            results = await gather_strict(
+                [
                     self._run_step(
                         step,
                         outputs,
@@ -208,12 +249,14 @@ class Workflow:
             completed_count += len(ready)
 
             if checkpoint_fn is not None:
-                checkpoint_fn(
+                maybe_checkpoint = checkpoint_fn(
                     WorkflowCheckpoint(
                         step_index=completed_count,
                         outputs=MappingProxyType(dict(outputs)),
                         cost=total_cost,
                     )
                 )
+                if inspect.isawaitable(maybe_checkpoint):
+                    await maybe_checkpoint
 
         return WorkflowResult(outputs=MappingProxyType(outputs), cost=total_cost)

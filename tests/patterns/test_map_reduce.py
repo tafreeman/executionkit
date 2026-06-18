@@ -7,12 +7,19 @@ template validation, concurrency bounding, and cost accumulation.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pytest
 
 from executionkit._mock import MockProvider
+from executionkit.engine.retry import RetryConfig
 from executionkit.patterns.map_reduce import map_reduce
-from executionkit.provider import BudgetExhaustedError
+from executionkit.provider import BudgetExhaustedError, LLMResponse, ProviderError
 from executionkit.types import TokenUsage
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+    from typing import Any
 
 # Reusable prompt templates for most tests.
 _MAP_TEMPLATE = "Summarize this: {item}"
@@ -230,3 +237,65 @@ class TestMapReduceConcurrency:
         )
         assert provider.call_count == n_inputs + 1
         assert result.metadata["total_calls"] == n_inputs + 1
+
+
+class TestMapReducePartialFailure:
+    async def test_single_map_failure_propagates(self) -> None:
+        """When one MAP call fails, the exception propagates out of map_reduce.
+
+        gather_strict uses asyncio.TaskGroup with all-or-nothing semantics:
+        a single task failure is unwrapped from the ExceptionGroup and
+        re-raised directly.  Retries are disabled (max_retries=0) so the
+        first failure surfaces immediately rather than being retried away —
+        ProviderError is retryable under the default RetryConfig.
+        """
+
+        class _FailOnItemBProvider:
+            """Satisfies LLMProvider; fails deterministically for ``item_b``."""
+
+            supports_tools = True
+
+            async def complete(
+                self,
+                messages: Sequence[dict[str, Any]],
+                *,
+                temperature: float | None = None,
+                max_tokens: int | None = None,
+                tools: Sequence[dict[str, Any]] | None = None,
+                **kwargs: Any,
+            ) -> LLMResponse:
+                content = str(messages[0].get("content", ""))
+                if "item_b" in content:
+                    raise ProviderError("simulated provider failure")
+                return LLMResponse(content="ok")
+
+        provider = _FailOnItemBProvider()
+        with pytest.raises(ProviderError, match="simulated provider failure"):
+            await map_reduce(
+                provider,  # type: ignore[arg-type]
+                inputs=["item_a", "item_b", "item_c"],
+                map_prompt_template=_MAP_TEMPLATE,
+                reduce_prompt_template=_REDUCE_TEMPLATE,
+                retry=RetryConfig(max_retries=0),
+            )
+
+
+class TestMapReduceSync:
+    def test_map_reduce_sync_returns_same_shape_as_async(self) -> None:
+        """map_reduce_sync (called from non-async context) returns a
+        PatternResult with the same shape as the async version."""
+        from executionkit import map_reduce_sync
+
+        provider = MockProvider(responses=["sum_a", "sum_b", "combined"])
+        result = map_reduce_sync(
+            provider,
+            ["alpha", "beta"],
+            map_prompt_template=_MAP_TEMPLATE,
+            reduce_prompt_template=_REDUCE_TEMPLATE,
+        )
+        assert result.value == "combined"
+        assert result.score is None
+        assert result.metadata["map_count"] == 2
+        assert result.metadata["reduce_calls"] == 1
+        assert result.metadata["total_calls"] == 3
+        assert result.cost.llm_calls == 3

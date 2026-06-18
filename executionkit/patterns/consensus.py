@@ -7,6 +7,7 @@ import re
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
+from executionkit._constants import DEFAULT_MAX_TOKENS
 from executionkit.cost import CostTracker
 from executionkit.engine.messages import user_message
 from executionkit.engine.parallel import gather_strict
@@ -17,6 +18,13 @@ from executionkit.types import PatternResult, TokenUsage, VotingStrategy
 
 if TYPE_CHECKING:
     from executionkit.observability import TraceCallback
+
+
+_DEFAULT_TEMPERATURE: float = 0.9
+"""Default sampling temperature for consensus (high diversity by design)."""
+
+_DEFAULT_CONSENSUS_CONCURRENCY: int = 5
+"""Default concurrency cap for consensus fan-out (smaller than engine default)."""
 
 
 def _normalize(text: str) -> str:
@@ -30,9 +38,9 @@ async def consensus(
     *,
     num_samples: int = 5,
     strategy: VotingStrategy | str = "majority",
-    temperature: float = 0.9,
-    max_tokens: int = 4096,
-    max_concurrency: int = 5,
+    temperature: float = _DEFAULT_TEMPERATURE,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
+    max_concurrency: int = _DEFAULT_CONSENSUS_CONCURRENCY,
     retry: RetryConfig | None = None,
     # NOTE (F-03 verified): max_cost is implemented and forwarded to every
     # checked_complete() call below, enabling budget-aware pipe() chains.

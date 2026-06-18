@@ -6,6 +6,7 @@ accumulating costs and optionally sharing a token budget across all steps.
 
 from __future__ import annotations
 
+import copy
 import inspect
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Protocol
@@ -136,8 +137,12 @@ async def pipe(
                 provider, current_prompt, **filtered_kwargs
             )
         except ExecutionKitError as exc:
-            exc.cost = total_cost + exc.cost
-            raise
+            # Do NOT mutate the caught exception (immutability): raise a shallow
+            # copy carrying the accumulated cost, preserving the original cause
+            # chain and traceback.
+            new_exc = copy.copy(exc)
+            new_exc.cost = total_cost + exc.cost
+            raise new_exc.with_traceback(exc.__traceback__) from exc.__cause__
 
         total_cost = total_cost + result.cost
         current_prompt = str(result.value)

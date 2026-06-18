@@ -122,6 +122,7 @@ __all__ = [
     "extract_json",
     "live_provider_from_env",
     "map_reduce",
+    "map_reduce_sync",
     "pipe",
     "pipe_sync",
     "react_loop",
@@ -203,3 +204,12 @@ def structured_sync(
 ) -> PatternResult[Any]:
     """Synchronous wrapper for :func:`structured`."""
     return _run_sync(structured(provider, prompt, **kwargs))
+
+
+def map_reduce_sync(
+    provider: LLMProvider,
+    inputs: Sequence[str],
+    **kwargs: Any,
+) -> PatternResult[str]:
+    """Synchronous wrapper for :func:`map_reduce`."""
+    return _run_sync(map_reduce(provider, inputs, **kwargs))

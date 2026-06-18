@@ -37,6 +37,8 @@ def test_public_api_surface() -> None:
         "consensus",
         "consensus_sync",
         "extract_json",
+        "map_reduce",
+        "map_reduce_sync",
         "pipe",
         "pipe_sync",
         "react_loop",

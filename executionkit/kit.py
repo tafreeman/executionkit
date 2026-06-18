@@ -8,6 +8,7 @@ from executionkit.compose import pipe
 from executionkit.cost import CostTracker
 from executionkit.errors import ExecutionKitError
 from executionkit.patterns.consensus import consensus
+from executionkit.patterns.map_reduce import map_reduce
 from executionkit.patterns.react_loop import react_loop
 from executionkit.patterns.refine_loop import refine_loop
 from executionkit.provider import (
@@ -101,6 +102,17 @@ class Kit:
         return await self._run_tracked(
             react_loop(tool_provider, prompt, tools, **kwargs)
         )
+
+    async def map_reduce(
+        self, inputs: Sequence[str], **kwargs: Any
+    ) -> PatternResult[str]:
+        """Run the :func:`~executionkit.patterns.map_reduce.map_reduce` pattern.
+
+        All keyword arguments are forwarded unchanged to :func:`map_reduce`.
+        ``map_prompt_template`` and ``reduce_prompt_template`` are required
+        keyword arguments.
+        """
+        return await self._run_tracked(map_reduce(self.provider, inputs, **kwargs))
 
     async def pipe(
         self, prompt: str, *steps: Callable[..., Any], **kwargs: Any

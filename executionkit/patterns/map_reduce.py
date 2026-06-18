@@ -11,6 +11,7 @@ from __future__ import annotations
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
+from executionkit._constants import DEFAULT_MAX_CONCURRENCY, DEFAULT_MAX_TOKENS
 from executionkit.cost import CostTracker
 from executionkit.engine.messages import user_message
 from executionkit.engine.parallel import gather_strict
@@ -26,6 +27,9 @@ if TYPE_CHECKING:
 
 # Default separator used to join mapped outputs before the reduce prompt.
 _DEFAULT_SEPARATOR = "\n\n---\n\n"
+
+# Default sampling temperature for map and reduce calls.
+_DEFAULT_TEMPERATURE: float = 0.3
 
 
 def _build_map_prompt(template: str, item: str) -> str:
@@ -80,9 +84,9 @@ async def map_reduce(
     *,
     map_prompt_template: str,
     reduce_prompt_template: str,
-    max_concurrency: int = 10,
-    temperature: float = 0.3,
-    max_tokens: int = 4096,
+    max_concurrency: int = DEFAULT_MAX_CONCURRENCY,
+    temperature: float = _DEFAULT_TEMPERATURE,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
     max_cost: TokenUsage | None = None,
     retry: RetryConfig | None = None,
     trace: TraceCallback | None = None,

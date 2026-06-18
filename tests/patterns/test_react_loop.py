@@ -825,3 +825,132 @@ class TestTerminationReason:
 
         # StrEnum: TerminationReason.NATURAL == "natural"
         assert result.metadata["termination_reason"] == "natural"
+
+
+# ---------------------------------------------------------------------------
+# Security: PII/secret redaction in trace events (SEC-001)
+# ---------------------------------------------------------------------------
+
+
+class TestTraceArgRedaction:
+    """Verify that tool_call_start trace events respect redact_trace_args."""
+
+    def _make_search_tool(self) -> Tool:
+        async def _execute(query: str, api_key: str = "") -> str:
+            return "result"
+
+        return Tool(
+            name="search",
+            description="Search with optional api_key",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "api_key": {"type": "string"},
+                },
+                "required": ["query"],
+            },
+            execute=_execute,
+        )
+
+    async def test_redact_trace_args_true_hides_values(self) -> None:
+        """With redact_trace_args=True (default), sensitive argument values must
+        not appear in tool_call_start trace events."""
+        events: list[Any] = []
+
+        async def trace_cb(event: Any) -> None:
+            events.append(event)
+
+        tool_call = _make_tool_response(
+            "search",
+            "tc1",
+            {"query": "hello", "api_key": "SECRET-KEY-12345"},
+        )
+        final = _make_final_response("done")
+        provider = MockProvider(responses=[tool_call, final])
+        tool = self._make_search_tool()
+
+        await react_loop(
+            provider,
+            "question",
+            tools=[tool],
+            trace=trace_cb,
+            # redact_trace_args=True is the default
+        )
+
+        start_events = [e for e in events if e.kind == "tool_call_start"]
+        assert start_events, "Expected at least one tool_call_start event"
+
+        for event in start_events:
+            args_in_payload = event.payload.get("arguments", {})
+            # The sensitive value must NOT appear verbatim in the trace.
+            assert "SECRET-KEY-12345" not in args_in_payload.values(), (
+                "Sensitive argument value leaked into trace event payload"
+            )
+            # Keys should still be present so traces are debuggable.
+            assert "query" in args_in_payload, (
+                "Argument key 'query' missing from redacted trace payload"
+            )
+            assert "api_key" in args_in_payload, (
+                "Argument key 'api_key' missing from redacted trace payload"
+            )
+            # Values should be the redaction sentinel.
+            assert all(v == "[redacted]" for v in args_in_payload.values()), (
+                "Expected all argument values to be '[redacted]'"
+            )
+
+    async def test_redact_trace_args_false_exposes_values(self) -> None:
+        """With redact_trace_args=False, raw argument values appear in the trace."""
+        events: list[Any] = []
+
+        async def trace_cb(event: Any) -> None:
+            events.append(event)
+
+        tool_call = _make_tool_response(
+            "search",
+            "tc1",
+            {"query": "hello", "api_key": "SECRET-KEY-12345"},
+        )
+        final = _make_final_response("done")
+        provider = MockProvider(responses=[tool_call, final])
+        tool = self._make_search_tool()
+
+        await react_loop(
+            provider,
+            "question",
+            tools=[tool],
+            trace=trace_cb,
+            redact_trace_args=False,
+        )
+
+        start_events = [e for e in events if e.kind == "tool_call_start"]
+        assert start_events, "Expected at least one tool_call_start event"
+
+        found_sensitive = any(
+            "SECRET-KEY-12345" in str(e.payload.get("arguments", {}).values())
+            for e in start_events
+        )
+        assert found_sensitive, (
+            "With redact_trace_args=False, raw argument values should appear in trace"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Validation: max_observation_chars=0 raises ValueError (SEC-002)
+# ---------------------------------------------------------------------------
+
+
+async def test_react_loop_zero_max_observation_chars_raises() -> None:
+    """react_loop must raise ValueError when max_observation_chars < 1.
+
+    This branch in _validate_react_loop_args was previously untested.
+    """
+    provider = MockProvider(responses=[_make_final_response("ok")])
+
+    with pytest.raises(ValueError, match="max_observation_chars must be >= 1"):
+        await react_loop(
+            provider,
+            "question",
+            tools=[],
+            max_observation_chars=0,
+        )

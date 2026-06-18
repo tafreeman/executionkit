@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import warnings
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
@@ -69,7 +70,21 @@ class ApprovalGate:
         * ``"raise"`` (default) — raise :class:`ApprovalTimeoutError`.
         * ``"approve"`` — treat the timed-out request as approved.
         * ``"deny"``   — treat the timed-out request as denied.
+
+    .. warning::
+        Setting ``on_timeout="approve"`` creates a **fail-open** gate: if the
+        approval callback does not respond in time, the operation is
+        automatically permitted.  This is a potential privilege-escalation
+        vector.  Only use this option when you have deliberately decided that
+        availability is more important than security for the guarded operation.
     """
+
+    _APPROVE_ON_TIMEOUT_WARNING: str = (
+        "ApprovalGate constructed with on_timeout='approve': timeouts will "
+        "automatically APPROVE the request (fail-open). This is a potential "
+        "privilege-escalation risk. Only use this intentionally when "
+        "availability must take priority over security."
+    )
 
     def __init__(
         self,
@@ -78,6 +93,12 @@ class ApprovalGate:
         timeout_seconds: float | None = None,
         on_timeout: Literal["approve", "deny", "raise"] = "raise",
     ) -> None:
+        if on_timeout == "approve":
+            warnings.warn(
+                self._APPROVE_ON_TIMEOUT_WARNING,
+                UserWarning,
+                stacklevel=2,
+            )
         self._callback = callback
         self._timeout_seconds = timeout_seconds
         self._on_timeout = on_timeout

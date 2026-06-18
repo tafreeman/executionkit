@@ -12,6 +12,8 @@ from enum import StrEnum
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Generic, TypeAlias, TypeVar
 
+from executionkit._constants import DEFAULT_TOOL_TIMEOUT_SECONDS
+
 if TYPE_CHECKING:
     from executionkit.provider import LLMProvider
 
@@ -81,7 +83,7 @@ class Tool:
     description: str
     parameters: Mapping[str, Any]
     execute: Callable[..., Awaitable[str]]
-    timeout: float = 30.0
+    timeout: float = DEFAULT_TOOL_TIMEOUT_SECONDS
 
     def __post_init__(self) -> None:
         """Wrap ``parameters`` in a read-only proxy to enforce immutability."""
