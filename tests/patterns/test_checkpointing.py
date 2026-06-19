@@ -248,4 +248,5 @@ async def test_checkpoint_state_is_json_serializable() -> None:
         "last_response",
         "tool_calls_made",
         "cost",
+        "messages",
     }

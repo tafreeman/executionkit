@@ -7,9 +7,13 @@ import os
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Any, TypeAlias
+from typing import TYPE_CHECKING, Any, TypeAlias
 
 from executionkit.provider import Provider
+
+if TYPE_CHECKING:
+    from executionkit.kit import Kit
+    from executionkit.types import PatternResult
 
 # Minimum accuracy required for LIVE / non-deterministic eval suites.
 # Deterministic golden suites must still achieve 100% (report.passed).
@@ -32,6 +36,40 @@ class EvalCase:
     run: EvalRun
     check: EvalCheck
     metadata: Mapping[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class Turn:
+    """One turn of a multi-turn :class:`ConversationScript`.
+
+    Attributes:
+        user: The user text sent to :meth:`Kit.turn` for this turn.
+        check: An :data:`EvalCheck` applied to the ``PatternResult[str]`` that
+            ``kit.turn`` returns. Returning ``None``/``True``/``""`` passes the
+            turn; returning ``False`` or a non-empty string fails it (the string
+            becomes the failure reason).
+    """
+
+    user: str
+    check: EvalCheck
+
+
+@dataclass(frozen=True, slots=True)
+class ConversationScript:
+    """A named, ordered sequence of conversational turns to evaluate.
+
+    Run via :func:`run_conversation_script`, which drives each turn through a
+    single :class:`~executionkit.kit.Kit` so conversation state carries across
+    turns.
+
+    Attributes:
+        name: Identifier used to label each turn's :class:`EvalResult`
+            (``f"{name}[{i}]"`` for turn ``i``).
+        turns: The turns to run, in order.
+    """
+
+    name: str
+    turns: tuple[Turn, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,7 +144,25 @@ class EvalReport:
         return f"{self.passed_count}/{self.total} passed ({self.accuracy:.1%} accuracy)"
 
 
+def _verdict_to_result(
+    name: str,
+    verdict: bool | str | None,
+    metadata: MappingProxyType[str, Any],
+) -> EvalResult:
+    """Normalize an :data:`EvalCheck` verdict into an :class:`EvalResult`.
+
+    Mapping: ``None``/``True``/``""`` pass; ``False`` fails with
+    ``"check returned False"``; any other string fails with that string as the
+    reason.
+    """
+    if verdict is None or verdict is True or verdict == "":
+        return EvalResult(name=name, passed=True, reason="passed", metadata=metadata)
+    reason = "check returned False" if verdict is False else verdict
+    return EvalResult(name=name, passed=False, reason=reason, metadata=metadata)
+
+
 async def _run_case(case: EvalCase) -> EvalResult:
+    metadata = _readonly(case.metadata)
     try:
         maybe_output = case.run()
         output = (
@@ -118,23 +174,10 @@ async def _run_case(case: EvalCase) -> EvalResult:
             name=case.name,
             passed=False,
             reason=f"{type(exc).__name__}: {exc}",
-            metadata=_readonly(case.metadata),
+            metadata=metadata,
         )
 
-    if verdict is None or verdict is True:
-        return EvalResult(
-            name=case.name,
-            passed=True,
-            reason="passed",
-            metadata=_readonly(case.metadata),
-        )
-    reason = "check returned False" if verdict is False else verdict
-    return EvalResult(
-        name=case.name,
-        passed=False,
-        reason=reason,
-        metadata=_readonly(case.metadata),
-    )
+    return _verdict_to_result(case.name, verdict, metadata)
 
 
 async def run_eval_suite(
@@ -163,6 +206,53 @@ async def run_eval_suite(
         results=tuple([await _run_case(case) for case in cases]),
         min_accuracy=min_accuracy,
     )
+
+
+async def run_conversation_script(
+    script: ConversationScript,
+    kit: Kit,
+) -> EvalReport:
+    """Drive a multi-turn :class:`ConversationScript` through a single ``Kit``.
+
+    Each turn is sent via ``kit.turn(turn.user)``; because the same *kit*
+    carries conversation state across calls, later turns see the transcript of
+    earlier ones. The :class:`PatternResult` returned by each ``turn`` is passed
+    to that turn's :data:`EvalCheck`, and the verdict is normalized exactly like
+    :func:`run_eval_suite` does (``None``/``True``/``""`` pass; ``False`` and
+    other strings fail). Any exception raised by ``kit.turn`` or the check is
+    captured as a failed :class:`EvalResult` rather than propagated, so one bad
+    turn does not abort the remaining turns.
+
+    Args:
+        script: The named sequence of turns to evaluate.
+        kit: A :class:`~executionkit.kit.Kit` session whose provider satisfies
+            :class:`~executionkit.provider.ToolCallingProvider`. State accrues
+            on this kit as the script runs.
+
+    Returns:
+        An :class:`EvalReport` with one :class:`EvalResult` per turn, each named
+        ``f"{script.name}[{i}]"``. No ``min_accuracy`` is set, so the report
+        gates on a 100% pass rate via :attr:`EvalReport.passed`.
+    """
+    results: list[EvalResult] = []
+    empty_metadata: MappingProxyType[str, Any] = MappingProxyType({})
+    for index, turn in enumerate(script.turns):
+        name = f"{script.name}[{index}]"
+        try:
+            result: PatternResult[str] = await kit.turn(turn.user)
+            verdict = turn.check(result)
+        except Exception as exc:
+            results.append(
+                EvalResult(
+                    name=name,
+                    passed=False,
+                    reason=f"{type(exc).__name__}: {exc}",
+                    metadata=empty_metadata,
+                )
+            )
+            continue
+        results.append(_verdict_to_result(name, verdict, empty_metadata))
+    return EvalReport(results=tuple(results))
 
 
 def live_provider_from_env() -> Provider | None:

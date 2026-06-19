@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from executionkit._mock import MockProvider
+from executionkit.engine.rate_bucket import TokenBucket
 from executionkit.kit import Kit
 from executionkit.provider import LLMResponse
 from executionkit.types import PatternResult, TokenUsage, Tool
@@ -536,3 +537,92 @@ async def test_kit_turn_failure_leaves_messages_unchanged() -> None:
         await kit.turn("hi")
 
     assert kit.messages == before
+
+
+# ---------------------------------------------------------------------------
+# Rate limiting via TokenBucket
+# ---------------------------------------------------------------------------
+
+# A rate fast enough that acquire() never blocks meaningfully in tests, and a
+# capacity large enough to absorb several back-to-back dispatches without refill.
+_FAST_RATE = 1_000_000.0
+_BURST_CAPACITY = 100.0
+
+
+class _SpyBucket(TokenBucket):
+    """TokenBucket that counts how many times ``acquire`` is awaited."""
+
+    def __init__(self, rate: float, capacity: float) -> None:
+        super().__init__(rate=rate, capacity=capacity)
+        self.acquire_calls = 0
+
+    async def acquire(self) -> None:
+        self.acquire_calls += 1
+        await super().acquire()
+
+
+async def test_kit_rate_limiter_none_leaves_behaviour_unchanged() -> None:
+    """rate_limiter=None (the default) must not alter dispatch behaviour."""
+    p = MockProvider(responses=["the answer"] * 5)
+    kit = Kit(p)
+    assert kit._rate_limiter is None
+
+    result = await kit.consensus("What is 2+2?", num_samples=5)
+
+    assert result.value == "the answer"
+    assert kit.usage.llm_calls == 5
+
+
+async def test_kit_rate_limiter_token_acquired_without_hanging() -> None:
+    """A real TokenBucket paces dispatch but, with a high rate, never blocks."""
+    bucket = TokenBucket(rate=_FAST_RATE, capacity=_BURST_CAPACITY)
+    p = MockProvider(responses=["the answer"] * 5)
+    kit = Kit(p, rate_limiter=bucket)
+
+    result = await kit.consensus("What is 2+2?", num_samples=5)
+
+    assert result.value == "the answer"
+    assert kit.usage.llm_calls == 5
+    # One dispatch consumed exactly one token from the bucket.
+    assert bucket._tokens == pytest.approx(_BURST_CAPACITY - 1.0, abs=1e-3)
+
+
+async def test_kit_rate_limiter_acquire_invoked_per_dispatch() -> None:
+    """Every pattern dispatch funnels through _run_tracked and acquires a token."""
+    bucket = _SpyBucket(rate=_FAST_RATE, capacity=_BURST_CAPACITY)
+    p = MockProvider(responses=["x"] * 12)
+    kit = Kit(p, rate_limiter=bucket)
+
+    r1 = _make_result(input_tokens=1, output_tokens=1, llm_calls=1)
+    r2 = _make_result(input_tokens=1, output_tokens=1, llm_calls=1)
+    r3 = _make_result(input_tokens=1, output_tokens=1, llm_calls=1)
+    with (
+        patch("executionkit.kit.consensus", new=AsyncMock(return_value=r1)),
+        patch("executionkit.kit.refine_loop", new=AsyncMock(return_value=r2)),
+        patch("executionkit.kit.react_loop", new=AsyncMock(return_value=r3)),
+    ):
+        await kit.consensus("p1")
+        await kit.refine("p2")
+        await kit.react("p3", [])
+
+    # Three dispatches -> three acquire() awaits.
+    assert bucket.acquire_calls == 3
+
+
+async def test_kit_rate_limiter_acquire_runs_before_pattern() -> None:
+    """The token is acquired before the wrapped coroutine runs, even on failure."""
+    from executionkit.provider import BudgetExhaustedError
+
+    bucket = _SpyBucket(rate=_FAST_RATE, capacity=_BURST_CAPACITY)
+    kit = Kit(MockProvider(responses=["x"]), rate_limiter=bucket)
+
+    err = BudgetExhaustedError("over budget", cost=TokenUsage(llm_calls=1))
+    with (
+        patch("executionkit.kit.consensus", new=AsyncMock(side_effect=err)),
+        pytest.raises(BudgetExhaustedError),
+    ):
+        await kit.consensus("p")
+
+    # acquire() still ran for the dispatch that ultimately raised.
+    assert bucket.acquire_calls == 1
+    assert kit.usage.llm_calls == 1

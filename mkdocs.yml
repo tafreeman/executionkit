@@ -115,6 +115,7 @@ nav:
   - Recipes:
       - Multi-provider failover: recipes/failover.md
       - Cost-aware routing: recipes/cost-routing.md
+      - Conversational assistant: recipes/assistant.md
       - Combining patterns: recipes/composition.md
   - API Reference:
       - Core: api/core.md

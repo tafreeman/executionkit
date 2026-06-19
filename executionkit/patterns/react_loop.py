@@ -6,6 +6,7 @@ import asyncio
 import dataclasses
 import importlib.util
 import logging
+from collections.abc import Callable
 from itertools import chain
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
@@ -16,6 +17,7 @@ from executionkit.cost import CostTracker
 from executionkit.engine.messages import (
     assistant_message,
     assistant_tool_calls_message,
+    system_message,
     user_message,
 )
 from executionkit.engine.retry import RetryConfig  # noqa: TC001
@@ -33,7 +35,7 @@ from executionkit.provider import (
 from executionkit.types import PatternResult, TerminationReason, TokenUsage, Tool
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Awaitable, Mapping, Sequence
 
     from executionkit.types import CheckpointCallback
 
@@ -44,6 +46,14 @@ if TYPE_CHECKING:
 _DEFAULT_MAX_ROUNDS: int = 8
 _DEFAULT_MAX_OBSERVATION_CHARS: int = 12_000
 _DEFAULT_TEMPERATURE: float = 0.3
+
+# Prefix prepended to the summarizer output when injected as a system message.
+_SUMMARY_PREFIX: str = "Summary of earlier conversation: "
+
+# An async callback that condenses dropped history messages into a short string.
+# Receives the ordered messages trimming removed; returns the summary text. Not
+# exported from the public API — wire it via the react_loop(summarizer=...) param.
+HistorySummarizer = Callable[["Sequence[dict[str, Any]]"], "Awaitable[str]"]
 
 _JSON_SCHEMA_TYPE_MAP: dict[str, type | tuple[type, ...]] = {
     "string": str,
@@ -287,6 +297,29 @@ def _trim_messages(
     return [messages[0], *tail]
 
 
+async def _summarize_trimmed_window(
+    history: list[dict[str, Any]],
+    active_messages: list[dict[str, Any]],
+    summarizer: HistorySummarizer,
+) -> list[dict[str, Any]]:
+    """Return a new active window with a summary of the dropped messages injected.
+
+    ``_trim_messages`` keeps ``history[0]`` plus a recent tail, so the dropped
+    messages are the contiguous slice between the preserved first message and
+    that tail. They are passed (in order) to *summarizer*, and its output is
+    inserted as a system message right after the first message. *history* and
+    the caller's *active_messages* are not mutated — a fresh list is returned.
+    """
+    kept_tail_len = len(active_messages) - 1
+    dropped = history[1 : len(history) - kept_tail_len]
+    summary_text = await summarizer(dropped)
+    return [
+        active_messages[0],
+        system_message(_SUMMARY_PREFIX + summary_text),
+        *active_messages[1:],
+    ]
+
+
 def _validate_react_loop_args(
     provider: ToolCallingProvider,
     max_rounds: int,
@@ -464,6 +497,7 @@ async def react_loop(
     approval_gate: ApprovalGate | None = None,
     redact_trace_args: bool = True,
     on_checkpoint: CheckpointCallback | None = None,
+    summarizer: HistorySummarizer | None = None,
 ) -> PatternResult[str]:
     """Execute a think-act-observe tool-calling loop.
 
@@ -508,9 +542,18 @@ async def react_loop(
         on_checkpoint: Optional callback invoked after each round that dispatched
             tool calls, receiving ``(round, state)`` where ``round`` is 0-based
             and ``state`` is a JSON-serializable dict with keys ``round``,
-            ``last_response``, ``tool_calls_made`` (list of tool names), and
-            ``cost``. May be sync or async; exceptions are logged and swallowed
-            so a failing checkpoint never aborts the loop.
+            ``last_response``, ``tool_calls_made`` (list of tool names),
+            ``cost``, and ``messages`` (the full transcript so far, a list of
+            message dicts). May be sync or async; exceptions are logged and
+            swallowed so a failing checkpoint never aborts the loop.
+        summarizer: Optional async callback used together with
+            ``max_history_messages``. When trimming drops earlier messages, the
+            dropped messages (in order) are passed to ``summarizer`` and the
+            returned text is injected as a system message into the *per-round*
+            window sent to the provider, immediately after the preserved first
+            message. The stored transcript is never modified — only the active
+            window. ``None`` (the default) disables summarization, leaving
+            trimming behaviour unchanged.
 
     Returns:
         A :class:`PatternResult` whose ``value`` is the final LLM
@@ -525,6 +568,10 @@ async def react_loop(
         truncated_observations (int): Tool results truncated due to
             ``max_observation_chars``.
         messages_trimmed (int): Number of rounds where history was trimmed.
+        summarized (int): Number of rounds where trimming dropped messages and a
+            ``summarizer`` was supplied, so an earlier-conversation summary was
+            injected into that round's active window. Always 0 when no
+            ``summarizer`` is provided.
         messages (tuple[dict, ...]): The full conversation transcript after the
             loop, including the seeded input, every assistant/tool turn, and the
             final assistant answer. Feed back in via ``messages=`` to continue.
@@ -550,6 +597,7 @@ async def react_loop(
         "truncated_responses": 0,
         "truncated_observations": 0,
         "messages_trimmed": 0,
+        "summarized": 0,
         "termination_reason": None,
     }
     tool_schemas = [tool.to_schema() for tool in tools]
@@ -561,6 +609,11 @@ async def react_loop(
             active_messages = _trim_messages(history, max_history_messages)
             if len(active_messages) < len(history):
                 metadata["messages_trimmed"] = int(metadata["messages_trimmed"]) + 1
+                if summarizer is not None:
+                    active_messages = await _summarize_trimmed_window(
+                        history, active_messages, summarizer
+                    )
+                    metadata["summarized"] = int(metadata["summarized"]) + 1
         else:
             active_messages = history
         response = await checked_complete(
@@ -610,6 +663,7 @@ async def react_loop(
                 "last_response": response.content,
                 "tool_calls_made": [tc.name for tc in response.tool_calls],
                 "cost": dataclasses.asdict(tracker.snapshot()),
+                "messages": list(history),
             }
             await run_checkpoint(
                 on_checkpoint, round_num - 1, checkpoint_state, context="react_loop"

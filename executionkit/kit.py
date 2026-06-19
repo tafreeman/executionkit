@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
     from types import TracebackType
 
+    from executionkit.engine.rate_bucket import TokenBucket
     from executionkit.observability import TraceCallback
 
 
@@ -49,6 +50,10 @@ class Kit:
             disable tracking (e.g. in hot paths or tests).
         messages: Optional seed conversation (OpenAI-format message dicts) for
             multi-turn use via :meth:`turn`. Copied on construction.
+        rate_limiter: Optional :class:`~executionkit.engine.rate_bucket.TokenBucket`.
+            When provided, every pattern dispatch first awaits one token, pacing
+            calls to a sustained rate (and honouring any ``Retry-After`` penalty).
+            Defaults to ``None`` (unlimited).
 
     Conversation state:
         :attr:`messages` holds the running transcript across :meth:`turn` calls.
@@ -62,10 +67,12 @@ class Kit:
         *,
         track_cost: bool = True,
         messages: Sequence[dict[str, Any]] | None = None,
+        rate_limiter: TokenBucket | None = None,
     ) -> None:
         self.provider = provider
         self._tracker: CostTracker | None = CostTracker() if track_cost else None
         self.messages: list[dict[str, Any]] = list(messages) if messages else []
+        self._rate_limiter = rate_limiter
 
     @property
     def usage(self) -> TokenUsage:
@@ -77,6 +84,11 @@ class Kit:
         if self._tracker is not None:
             self._tracker.add_usage(cost)
 
+    async def _acquire_rate_limit(self) -> None:
+        """Await one rate-limit token (no-op when no limiter is configured)."""
+        if self._rate_limiter is not None:
+            await self._rate_limiter.acquire()
+
     async def _run_tracked(
         self, coro: Awaitable[PatternResult[Any]]
     ) -> PatternResult[Any]:
@@ -86,7 +98,12 @@ class Kit:
         ``MaxIterationsError``) carry the partial ``cost`` accrued before they
         were raised. Recording it here keeps :attr:`usage` honest even when a
         pattern aborts, instead of silently dropping the spend.
+
+        Every dispatch funnels through here, so the rate limiter (if any) is
+        awaited first — pacing all of consensus/refine/react/turn/map_reduce/pipe
+        through a single chokepoint.
         """
+        await self._acquire_rate_limit()
         try:
             result = await coro
         except ExecutionKitError as exc:

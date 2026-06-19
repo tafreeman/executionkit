@@ -20,10 +20,13 @@ from executionkit.engine.json_extraction import extract_json
 from executionkit.engine.rate_bucket import TokenBucket
 from executionkit.engine.retry import DEFAULT_RETRY, RetryConfig
 from executionkit.evals import (
+    ConversationScript,
     EvalCase,
     EvalReport,
     EvalResult,
+    Turn,
     live_provider_from_env,
+    run_conversation_script,
     run_eval_suite,
 )
 from executionkit.kit import Kit
@@ -85,6 +88,7 @@ __all__ = [
     "CheckpointCallback",
     "ConsensusFailedError",
     "ConvergenceDetector",
+    "ConversationScript",
     "CostTracker",
     "EvalCase",
     "EvalReport",
@@ -121,6 +125,7 @@ __all__ = [
     "ToolCallingProvider",
     "TraceCallback",
     "TraceEvent",
+    "Turn",
     "VotingStrategy",
     "Workflow",
     "WorkflowCheckpoint",
@@ -142,6 +147,7 @@ __all__ = [
     "react_loop_sync",
     "refine_loop",
     "refine_loop_sync",
+    "run_conversation_script",
     "run_eval_suite",
     "structured",
     "structured_sync",

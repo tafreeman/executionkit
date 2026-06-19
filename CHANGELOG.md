@@ -12,6 +12,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - Add `Kit.turn(user_text, tools=...)` plus a `Kit.messages` transcript (and an optional `messages=` seed on `Kit`), giving a stateful conversational API on top of `react_loop`
 - Add message-construction helpers `system_message`, `tool_message`, and `assistant_tool_calls_message` to `executionkit.engine.messages`
 - Add `examples/conversational_assistant.py` demonstrating multi-turn tool use with context carryover
+- Add a multi-turn eval harness — `ConversationScript`, `Turn`, and `run_conversation_script(script, kit)` — that drives a scripted conversation through a single `Kit` (state carries across turns) and returns an `EvalReport`, one result per turn
+- Add optional rate limiting to `Kit` via a `rate_limiter: TokenBucket | None` parameter; a token is acquired before every pattern dispatch
+- Add an optional `summarizer=` hook to `react_loop` that compresses history dropped by `max_history_messages` trimming into a system note for the active window (the stored transcript is unchanged); a `summarized` count is reported in metadata
+- `react_loop` checkpoint state now includes the running `messages` transcript, enabling conversation-level resume
+- Add a "Building a conversational assistant" recipe (`docs/recipes/assistant.md`) covering stateful turns, `structured()` intent/slot NLU, the streaming limitation, and `ConversationScript` evals
 
 ### Changed
 

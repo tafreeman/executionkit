@@ -1074,3 +1074,147 @@ class TestReactLoopConversation:
         provider = MockProvider(responses=[_make_final_response("x")])
         with pytest.raises(TypeError):
             await react_loop(provider, "hi", **{"bogus_kwarg": 123})
+
+
+# ---------------------------------------------------------------------------
+# Checkpoint transcript + summarize-on-trim
+# ---------------------------------------------------------------------------
+
+
+class TestReactLoopCheckpointMessages:
+    async def test_checkpoint_state_contains_transcript_messages(self) -> None:
+        """on_checkpoint state must carry a 'messages' list mirroring the roles
+        of the transcript built so far (user -> assistant(tool_calls) -> tool)."""
+        states: list[dict[str, Any]] = []
+
+        async def on_checkpoint(round_num: int, state: dict[str, Any]) -> None:
+            states.append(state)
+
+        provider = MockProvider(
+            responses=[
+                _make_tool_response("search", "tc1", {"query": "hello"}),
+                _make_final_response("done"),
+            ]
+        )
+
+        await react_loop(
+            provider,
+            "find hello",
+            tools=[_make_search_tool()],
+            on_checkpoint=on_checkpoint,
+        )
+
+        assert states, "Expected at least one checkpoint invocation"
+        messages = states[0]["messages"]
+        assert isinstance(messages, list)
+        # Checkpoint fires after the tool round: user -> assistant -> tool.
+        roles = [m["role"] for m in messages]
+        assert roles == ["user", "assistant", "tool"]
+
+
+async def _summarize(msgs: Any) -> str:
+    """Stub async summarizer recording how many messages it condensed."""
+    return f"{len(msgs)} earlier msgs"
+
+
+class TestReactLoopSummarizeOnTrim:
+    def _trimming_provider(self) -> MockProvider:
+        """Provider that drives three tool rounds then a final answer."""
+        tool_response = _make_tool_response("search", "tc1", {"query": "x"})
+        final_response = _make_final_response("Done")
+        return MockProvider(
+            responses=[tool_response, tool_response, tool_response, final_response]
+        )
+
+    async def test_summarizer_invoked_and_summary_injected(self) -> None:
+        """When trimming drops messages and a summarizer is supplied, the summary
+        appears as a system message in the provider's recorded call messages and
+        metadata['summarized'] is incremented."""
+        invoked: list[int] = []
+
+        async def summ(msgs: Any) -> str:
+            invoked.append(len(msgs))
+            return f"{len(msgs)} earlier msgs"
+
+        provider = self._trimming_provider()
+
+        result = await react_loop(
+            provider,
+            "find things",
+            tools=[_make_search_tool()],
+            max_rounds=8,
+            max_history_messages=3,
+            summarizer=summ,
+        )
+
+        assert invoked, "summarizer must have been invoked at least once"
+        assert result.metadata["summarized"] >= 1
+        assert result.metadata["messages_trimmed"] >= 1
+
+        # The injected summary must reach the provider as a system message.
+        system_contents = [
+            m["content"]
+            for call in provider.calls
+            for m in call.messages
+            if m.get("role") == "system"
+        ]
+        assert any("earlier msgs" in content for content in system_contents), (
+            "Expected the summary text to appear as a system message"
+        )
+        assert any(
+            content.startswith("Summary of earlier conversation: ")
+            for content in system_contents
+        )
+
+    async def test_no_summary_when_summarizer_none(self) -> None:
+        """With summarizer=None and trimming active, no system summary message is
+        injected and metadata['summarized'] stays 0."""
+        provider = self._trimming_provider()
+
+        result = await react_loop(
+            provider,
+            "find things",
+            tools=[_make_search_tool()],
+            max_rounds=8,
+            max_history_messages=3,
+        )
+
+        assert result.metadata["messages_trimmed"] >= 1
+        assert result.metadata["summarized"] == 0
+        system_msgs = [
+            m
+            for call in provider.calls
+            for m in call.messages
+            if m.get("role") == "system"
+        ]
+        assert system_msgs == [], "No system summary message should be injected"
+
+    async def test_stored_transcript_unaffected_by_summarization(self) -> None:
+        """Summarization only touches the per-round window; the stored transcript
+        in metadata['messages'] must remain the full history with no injected
+        summary system message."""
+        provider = self._trimming_provider()
+
+        result = await react_loop(
+            provider,
+            "find things",
+            tools=[_make_search_tool()],
+            max_rounds=8,
+            max_history_messages=3,
+            summarizer=_summarize,
+        )
+
+        transcript = result.metadata["messages"]
+        roles = [m["role"] for m in transcript]
+        # Three tool rounds then a final answer; no 'system' summary leaks in.
+        assert "system" not in roles
+        assert roles == [
+            "user",
+            "assistant",
+            "tool",
+            "assistant",
+            "tool",
+            "assistant",
+            "tool",
+            "assistant",
+        ]
