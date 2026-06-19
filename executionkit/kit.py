@@ -47,11 +47,25 @@ class Kit:
         track_cost: When ``True`` (default), accumulate usage in an internal
             :class:`~executionkit.cost.CostTracker`.  Set to ``False`` to
             disable tracking (e.g. in hot paths or tests).
+        messages: Optional seed conversation (OpenAI-format message dicts) for
+            multi-turn use via :meth:`turn`. Copied on construction.
+
+    Conversation state:
+        :attr:`messages` holds the running transcript across :meth:`turn` calls.
+        The single-shot pattern methods (:meth:`react`, :meth:`consensus`, …) do
+        not read or write it — use :meth:`turn` for stateful conversations.
     """
 
-    def __init__(self, provider: LLMProvider, *, track_cost: bool = True) -> None:
+    def __init__(
+        self,
+        provider: LLMProvider,
+        *,
+        track_cost: bool = True,
+        messages: Sequence[dict[str, Any]] | None = None,
+    ) -> None:
         self.provider = provider
         self._tracker: CostTracker | None = CostTracker() if track_cost else None
+        self.messages: list[dict[str, Any]] = list(messages) if messages else []
 
     @property
     def usage(self) -> TokenUsage:
@@ -117,6 +131,45 @@ class Kit:
         return await self._run_tracked(
             react_loop(tool_provider, prompt, tools, **kwargs)
         )
+
+    async def turn(
+        self,
+        user_text: str,
+        tools: Sequence[Tool] = (),
+        **kwargs: Any,
+    ) -> PatternResult[str]:
+        """Run one conversational turn, carrying history across calls.
+
+        Appends *user_text* to :attr:`messages`, runs
+        :func:`~executionkit.patterns.react_loop.react_loop` over the full
+        history, then replaces :attr:`messages` with the returned transcript so
+        the next ``turn`` continues the conversation. Cost folds into
+        :attr:`usage`, exactly like :meth:`react`.
+
+        The provider must satisfy
+        :class:`~executionkit.provider.ToolCallingProvider`; a :exc:`TypeError`
+        is raised otherwise. If the turn fails (e.g. budget exhausted),
+        :attr:`messages` is left unchanged so the turn can be retried.
+
+        All other keyword arguments are forwarded unchanged to ``react_loop``.
+        """
+        provider = self.provider
+        if not _provider_supports_tools(provider):
+            msg = (
+                f"turn() requires a ToolCallingProvider; "
+                f"{type(provider).__name__} does not support tool calling."
+            )
+            raise TypeError(msg)
+        tool_provider = cast("ToolCallingProvider", provider)
+        # Build the next history without mutating self.messages until the call
+        # succeeds, so a failed turn does not leave a dangling user message.
+        history = [*self.messages, user_message(user_text)]
+        result = await self._run_tracked(
+            react_loop(tool_provider, tools=tools, messages=history, **kwargs)
+        )
+        transcript = result.metadata.get("messages")
+        self.messages = list(transcript) if transcript is not None else history
+        return result
 
     async def map_reduce(
         self, inputs: Sequence[str], **kwargs: Any

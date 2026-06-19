@@ -441,3 +441,98 @@ async def test_kit_map_reduce_smoke_with_mock_provider() -> None:
     assert result.metadata["total_calls"] == 3
     # Cost attribution: kit.usage must reflect the 3 LLM calls made.
     assert kit.usage.llm_calls == 3
+
+
+# ---------------------------------------------------------------------------
+# Kit.turn — multi-turn conversation state
+# ---------------------------------------------------------------------------
+
+
+async def test_kit_turn_accumulates_messages() -> None:
+    kit = Kit(MockProvider(responses=["hi there", "bye now"]))
+
+    result1 = await kit.turn("hello")
+    assert result1.value == "hi there"
+    assert [m["role"] for m in kit.messages] == ["user", "assistant"]
+
+    result2 = await kit.turn("goodbye")
+    assert result2.value == "bye now"
+    assert [m["role"] for m in kit.messages] == [
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+    ]
+    assert kit.messages[2] == {"role": "user", "content": "goodbye"}
+
+
+async def test_kit_turn_passes_prior_history_to_provider() -> None:
+    provider = MockProvider(responses=["a", "b"])
+    kit = Kit(provider)
+
+    await kit.turn("first")
+    await kit.turn("second")
+
+    # On the 2nd turn the provider must see the full prior transcript + new turn.
+    assert provider.last_call is not None
+    roles = [m["role"] for m in provider.last_call.messages]
+    assert roles == ["user", "assistant", "user"]
+    assert provider.last_call.messages[-1]["content"] == "second"
+
+
+async def test_kit_turn_uses_seed_messages() -> None:
+    provider = MockProvider(responses=["ok"])
+    kit = Kit(provider, messages=[{"role": "system", "content": "be terse"}])
+
+    await kit.turn("hi")
+
+    assert provider.last_call is not None
+    assert provider.last_call.messages[0] == {
+        "role": "system",
+        "content": "be terse",
+    }
+
+
+async def test_kit_turn_accumulates_cost() -> None:
+    kit = Kit(MockProvider(responses=[_make_response("ans", 7, 3)]))
+
+    await kit.turn("hi")
+
+    assert kit.usage.input_tokens == 7
+    assert kit.usage.output_tokens == 3
+    assert kit.usage.llm_calls == 1
+
+
+async def test_kit_turn_rejects_non_tool_calling_provider() -> None:
+    class NoToolsProvider:
+        async def complete(
+            self,
+            messages: Sequence[dict[str, Any]],
+            *,
+            temperature: float | None = None,
+            max_tokens: int | None = None,
+            tools: Sequence[dict[str, Any]] | None = None,
+            **kwargs: Any,
+        ) -> LLMResponse:
+            raise NotImplementedError
+
+    kit = Kit(NoToolsProvider())
+    with pytest.raises(TypeError, match="ToolCallingProvider"):
+        await kit.turn("hi")
+
+
+async def test_kit_turn_failure_leaves_messages_unchanged() -> None:
+    """A failed turn must not leave a dangling user message in the transcript."""
+    from executionkit.provider import BudgetExhaustedError
+
+    err = BudgetExhaustedError("over budget", cost=TokenUsage(llm_calls=1))
+    kit = Kit(MockProvider(responses=["seed"]), messages=[{"role": "user", "x": "y"}])
+    before = list(kit.messages)
+
+    with (
+        patch("executionkit.kit.react_loop", new=AsyncMock(side_effect=err)),
+        pytest.raises(BudgetExhaustedError),
+    ):
+        await kit.turn("hi")
+
+    assert kit.messages == before

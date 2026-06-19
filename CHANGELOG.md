@@ -6,6 +6,17 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Add multi-turn conversation primitives. `react_loop` now accepts `messages=` (a prior conversation to continue, mutually exclusive with `prompt`) and returns the full updated transcript as `metadata["messages"]`, so callers can thread state across turns
+- Add `Kit.turn(user_text, tools=...)` plus a `Kit.messages` transcript (and an optional `messages=` seed on `Kit`), giving a stateful conversational API on top of `react_loop`
+- Add message-construction helpers `system_message`, `tool_message`, and `assistant_tool_calls_message` to `executionkit.engine.messages`
+- Add `examples/conversational_assistant.py` demonstrating multi-turn tool use with context carryover
+
+### Changed
+
+- `react_loop()` no longer silently swallows unknown keyword arguments (the `**_` sink was removed); an unsupported kwarg now raises `TypeError`. `prompt` is now optional (defaults to `None`) and `tools` defaults to `()` **(behavior change)**
+
 ## [0.2.0] - 2026-06-08
 
 ### Added

@@ -954,3 +954,123 @@ async def test_react_loop_zero_max_observation_chars_raises() -> None:
             tools=[],
             max_observation_chars=0,
         )
+
+
+# ---------------------------------------------------------------------------
+# Multi-turn conversation: messages= seeding + returned transcript
+# ---------------------------------------------------------------------------
+
+
+def _make_search_tool(return_value: str = "result") -> Tool:
+    async def _execute(query: str) -> str:
+        return return_value
+
+    return Tool(
+        name="search",
+        description="Search the web",
+        parameters={
+            "type": "object",
+            "properties": {"query": {"type": "string"}},
+            "required": ["query"],
+        },
+        execute=_execute,
+    )
+
+
+class TestReactLoopConversation:
+    async def test_messages_param_seeds_conversation(self) -> None:
+        provider = MockProvider(responses=[_make_final_response("hello back")])
+        history = [
+            {"role": "system", "content": "be nice"},
+            {"role": "user", "content": "hi"},
+        ]
+
+        result = await react_loop(provider, messages=history, tools=[])
+
+        assert result.value == "hello back"
+        assert provider.last_call is not None
+        assert provider.last_call.messages[0] == {
+            "role": "system",
+            "content": "be nice",
+        }
+
+    async def test_transcript_returned_in_metadata(self) -> None:
+        provider = MockProvider(responses=[_make_final_response("answer")])
+
+        result = await react_loop(provider, "ask")
+
+        transcript = result.metadata["messages"]
+        assert isinstance(transcript, tuple)
+        assert transcript[0] == {"role": "user", "content": "ask"}
+        assert transcript[-1] == {"role": "assistant", "content": "answer"}
+
+    async def test_transcript_can_continue_conversation(self) -> None:
+        provider1 = MockProvider(responses=[_make_final_response("first")])
+        result1 = await react_loop(provider1, "q1")
+
+        history = [*result1.metadata["messages"], {"role": "user", "content": "q2"}]
+        provider2 = MockProvider(responses=[_make_final_response("second")])
+        result2 = await react_loop(provider2, messages=history)
+
+        assert result2.value == "second"
+        assert provider2.last_call is not None
+        roles = [m["role"] for m in provider2.last_call.messages]
+        assert roles == ["user", "assistant", "user"]
+
+    async def test_caller_messages_not_mutated(self) -> None:
+        provider = MockProvider(responses=[_make_final_response("ok")])
+        history = [{"role": "user", "content": "hi"}]
+
+        await react_loop(provider, messages=history)
+
+        assert history == [{"role": "user", "content": "hi"}]
+
+    async def test_transcript_records_tool_round(self) -> None:
+        provider = MockProvider(
+            responses=[
+                _make_tool_response("search", "tc1", {"query": "hello"}),
+                _make_final_response("done"),
+            ]
+        )
+
+        result = await react_loop(provider, "find hello", tools=[_make_search_tool()])
+
+        roles = [m["role"] for m in result.metadata["messages"]]
+        # user -> assistant(tool_calls) -> tool(result) -> assistant(final)
+        assert roles == ["user", "assistant", "tool", "assistant"]
+
+    async def test_max_iterations_metadata_includes_transcript(self) -> None:
+        # Always returns a tool call -> never terminates naturally.
+        provider = MockProvider(
+            responses=[_make_tool_response("search", "tc1", {"query": "x"})]
+        )
+
+        with pytest.raises(MaxIterationsError) as exc_info:
+            await react_loop(provider, "go", tools=[_make_search_tool()], max_rounds=2)
+
+        assert "messages" in exc_info.value.metadata
+        assert isinstance(exc_info.value.metadata["messages"], tuple)
+
+    async def test_prompt_and_messages_mutually_exclusive(self) -> None:
+        provider = MockProvider(responses=[_make_final_response("x")])
+        with pytest.raises(ValueError, match="not both"):
+            await react_loop(
+                provider, "hi", messages=[{"role": "user", "content": "hi"}]
+            )
+
+    async def test_requires_prompt_or_messages(self) -> None:
+        provider = MockProvider(responses=[_make_final_response("x")])
+        with pytest.raises(ValueError, match="requires either prompt or messages"):
+            await react_loop(provider)
+
+    async def test_empty_messages_rejected(self) -> None:
+        provider = MockProvider(responses=[_make_final_response("x")])
+        with pytest.raises(ValueError, match="non-empty"):
+            await react_loop(provider, messages=[])
+
+    async def test_unknown_kwarg_rejected(self) -> None:
+        # The **_ sink was removed: unknown kwargs now raise TypeError instead of
+        # being silently swallowed (fixes the silent messages= footgun).
+        provider = MockProvider(responses=[_make_final_response("x")])
+        with pytest.raises(TypeError):
+            await react_loop(provider, "hi", **{"bogus_kwarg": 123})

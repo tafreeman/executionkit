@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import importlib.util
-import json
 import logging
 from itertools import chain
 from types import MappingProxyType
@@ -14,6 +13,11 @@ from typing import TYPE_CHECKING, Any
 from executionkit._constants import DEFAULT_MAX_TOKENS
 from executionkit.approval import ApprovalGate, ApprovalRequest
 from executionkit.cost import CostTracker
+from executionkit.engine.messages import (
+    assistant_message,
+    assistant_tool_calls_message,
+    user_message,
+)
 from executionkit.engine.retry import RetryConfig  # noqa: TC001
 from executionkit.observability import TraceCallback, TraceEvent, emit_trace
 from executionkit.patterns.base import (
@@ -313,23 +317,28 @@ def _validate_react_loop_args(
         )
 
 
+def _seed_messages(
+    prompt: str | None, messages: Sequence[dict[str, Any]] | None
+) -> list[dict[str, Any]]:
+    """Return the initial conversation list from *prompt* xor *messages*.
+
+    Exactly one of *prompt* / *messages* must be supplied. The result is always
+    a fresh ``list`` copy, so a caller's *messages* are never mutated by the loop.
+    """
+    if prompt is not None and messages is not None:
+        raise ValueError("react_loop() accepts prompt or messages, not both")
+    if messages is not None:
+        if not messages:
+            raise ValueError("react_loop() messages must be non-empty")
+        return list(messages)
+    if prompt is None:
+        raise ValueError("react_loop() requires either prompt or messages")
+    return [user_message(prompt)]
+
+
 def _build_assistant_message(response: Any) -> dict[str, Any]:
     """Build the assistant-role message dict from an LLM response with tool calls."""
-    return {
-        "role": "assistant",
-        "content": response.content or None,
-        "tool_calls": [
-            {
-                "id": tc.id,
-                "type": "function",
-                "function": {
-                    "name": tc.name,
-                    "arguments": json.dumps(dict(tc.arguments)),
-                },
-            }
-            for tc in response.tool_calls
-        ],
-    }
+    return assistant_tool_calls_message(response.content, response.tool_calls)
 
 
 async def _execute_tool_calls_round(
@@ -439,9 +448,10 @@ async def _execute_tool_calls_round(
 
 async def react_loop(
     provider: ToolCallingProvider,
-    prompt: str,
-    tools: Sequence[Tool],
+    prompt: str | None = None,
+    tools: Sequence[Tool] = (),
     *,
+    messages: Sequence[dict[str, Any]] | None = None,
     max_rounds: int = _DEFAULT_MAX_ROUNDS,
     max_observation_chars: int = _DEFAULT_MAX_OBSERVATION_CHARS,
     tool_timeout: float | None = None,
@@ -454,7 +464,6 @@ async def react_loop(
     approval_gate: ApprovalGate | None = None,
     redact_trace_args: bool = True,
     on_checkpoint: CheckpointCallback | None = None,
-    **_: Any,
 ) -> PatternResult[str]:
     """Execute a think-act-observe tool-calling loop.
 
@@ -464,10 +473,19 @@ async def react_loop(
     ends when the LLM responds without tool calls (final answer) or
     ``max_rounds`` is exhausted.
 
+    Supply **either** *prompt* (a single new user turn) **or** *messages* (a
+    full prior conversation to continue), not both.  Passing *messages* enables
+    multi-turn assistants: the returned ``metadata["messages"]`` holds the
+    complete updated transcript (the input history plus this run's assistant
+    turns, tool results, and final answer) ready to feed into the next call.
+
     Args:
         provider: LLM provider to call.
-        prompt: Initial user prompt.
+        prompt: Initial user prompt. Sugar for ``messages=[user_message(prompt)]``;
+            mutually exclusive with *messages*.
         tools: Sequence of :class:`Tool` definitions available to the LLM.
+        messages: A prior conversation (OpenAI-format message dicts) to continue
+            instead of starting from *prompt*. The list is copied, never mutated.
         max_rounds: Maximum think-act-observe cycles.
         max_observation_chars: Truncation limit for each tool result.
         tool_timeout: Per-call timeout override.  Falls back to
@@ -507,6 +525,9 @@ async def react_loop(
         truncated_observations (int): Tool results truncated due to
             ``max_observation_chars``.
         messages_trimmed (int): Number of rounds where history was trimmed.
+        messages (tuple[dict, ...]): The full conversation transcript after the
+            loop, including the seeded input, every assistant/tool turn, and the
+            final assistant answer. Feed back in via ``messages=`` to continue.
         termination_reason (TerminationReason | None): How the loop ended.
             ``TerminationReason.NATURAL`` when the LLM returned a final
             answer; ``TerminationReason.MAX_ITERATIONS`` when ``max_rounds``
@@ -533,15 +554,15 @@ async def react_loop(
     }
     tool_schemas = [tool.to_schema() for tool in tools]
     tool_lookup: dict[str, Tool] = {tool.name: tool for tool in tools}
-    messages: list[dict[str, Any]] = [{"role": "user", "content": prompt}]
+    history = _seed_messages(prompt, messages)
 
     for round_num in range(1, max_rounds + 1):
         if max_history_messages is not None:
-            active_messages = _trim_messages(messages, max_history_messages)
-            if len(active_messages) < len(messages):
+            active_messages = _trim_messages(history, max_history_messages)
+            if len(active_messages) < len(history):
                 metadata["messages_trimmed"] = int(metadata["messages_trimmed"]) + 1
         else:
-            active_messages = messages
+            active_messages = history
         response = await checked_complete(
             provider,
             active_messages,
@@ -559,15 +580,16 @@ async def react_loop(
         # No tool calls means the LLM is done — return the content.
         if not response.has_tool_calls:
             metadata["termination_reason"] = TerminationReason.NATURAL
+            history.append(assistant_message(response.content))
             return PatternResult[str](
                 value=response.content,
                 score=None,
                 cost=tracker.to_usage(),
-                metadata=MappingProxyType(dict(metadata)),
+                metadata=MappingProxyType({**metadata, "messages": tuple(history)}),
             )
 
         # Append assistant message with tool calls to conversation
-        messages.append(_build_assistant_message(response))
+        history.append(_build_assistant_message(response))
 
         # Execute each tool call and append results
         await _execute_tool_calls_round(
@@ -576,7 +598,7 @@ async def react_loop(
             tool_timeout,
             max_observation_chars,
             metadata,
-            messages,
+            history,
             trace=trace,
             approval_gate=approval_gate,
             redact_trace_args=redact_trace_args,
@@ -594,6 +616,7 @@ async def react_loop(
             )
 
     metadata["termination_reason"] = TerminationReason.MAX_ITERATIONS
+    metadata["messages"] = tuple(history)
     raise MaxIterationsError(
         "react_loop() reached max_rounds without a final answer",
         cost=tracker.to_usage(),
