@@ -68,6 +68,10 @@ sbom.json
 AGENTS.md
 CLAUDE.md
 
+# BMAD framework scaffolding (local-only, auto-generated)
+_bmad/
+docs/project-scan-report.json
+
 # Internal analysis
 docs/analysis/
 
