@@ -28,7 +28,7 @@ jobs:
       OLLAMA_LINUX_AMD64_SHA256: "88c110a6c9a9130e5ed0aa90f47e8ddb013cb638d834e11ddf1517615704d34c"
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v6
