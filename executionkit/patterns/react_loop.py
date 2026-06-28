@@ -51,9 +51,15 @@ _DEFAULT_TEMPERATURE: float = 0.3
 _SUMMARY_PREFIX: str = "Summary of earlier conversation: "
 
 # An async callback that condenses dropped history messages into a short string.
-# Receives the ordered messages trimming removed; returns the summary text. Not
-# exported from the public API — wire it via the react_loop(summarizer=...) param.
-HistorySummarizer = Callable[["Sequence[dict[str, Any]]"], "Awaitable[str]"]
+# Receives the ordered messages trimming removed; returns either the summary text,
+# or a ``(summary_text, TokenUsage)`` pair so the tokens the summarizer itself
+# spent are folded into the loop's cost accounting and counted against ``max_cost``.
+# Returning a bare ``str`` is treated as zero reported usage. Not exported from the
+# public API — wire it via the react_loop(summarizer=...) param.
+HistorySummarizer = Callable[
+    ["Sequence[dict[str, Any]]"],
+    "Awaitable[str | tuple[str, TokenUsage]]",
+]
 
 _JSON_SCHEMA_TYPE_MAP: dict[str, type | tuple[type, ...]] = {
     "string": str,
@@ -297,22 +303,50 @@ def _trim_messages(
     return [messages[0], *tail]
 
 
+def _split_summary_result(
+    result: str | tuple[str, TokenUsage],
+) -> tuple[str, TokenUsage]:
+    """Normalise a summarizer return into ``(summary_text, reported_usage)``.
+
+    A summarizer may return a bare string (no usage reported, counted as zero)
+    or a ``(text, TokenUsage)`` pair so the tokens it spent are accounted.
+    """
+    if isinstance(result, tuple):
+        return result[0], result[1]
+    return result, TokenUsage()
+
+
 async def _summarize_trimmed_window(
     history: list[dict[str, Any]],
     active_messages: list[dict[str, Any]],
     summarizer: HistorySummarizer,
+    tracker: CostTracker,
+    summary_cache: dict[int, str],
 ) -> list[dict[str, Any]]:
     """Return a new active window with a summary of the dropped messages injected.
 
     ``_trim_messages`` keeps ``history[0]`` plus a recent tail, so the dropped
     messages are the contiguous slice between the preserved first message and
-    that tail. They are passed (in order) to *summarizer*, and its output is
-    inserted as a system message right after the first message. *history* and
-    the caller's *active_messages* are not mutated — a fresh list is returned.
+    that tail. Because *history* only ever grows by appending, that slice is a
+    stable prefix identified solely by its end boundary, so the boundary indexes
+    *summary_cache*: a window whose boundary is unchanged across rounds reuses
+    the cached summary and the *summarizer* is not called again.
+
+    On a cache miss the dropped messages are passed (in order) to *summarizer*;
+    any :class:`~executionkit.types.TokenUsage` it reports is folded into
+    *tracker* so the next round's budget check counts it against ``max_cost``.
+    The summary is inserted as a system message right after the first message.
+    *history* and the caller's *active_messages* are not mutated — a fresh list
+    is returned.
     """
     kept_tail_len = len(active_messages) - 1
-    dropped = history[1 : len(history) - kept_tail_len]
-    summary_text = await summarizer(dropped)
+    boundary = len(history) - kept_tail_len
+    summary_text = summary_cache.get(boundary)
+    if summary_text is None:
+        dropped = history[1:boundary]
+        summary_text, reported_usage = _split_summary_result(await summarizer(dropped))
+        tracker.add_usage(reported_usage)
+        summary_cache[boundary] = summary_text
     return [
         active_messages[0],
         system_message(_SUMMARY_PREFIX + summary_text),
@@ -555,6 +589,13 @@ async def react_loop(
             window. ``None`` (the default) disables summarization, leaving
             trimming behaviour unchanged.
 
+            The callback may return either the summary text or a
+            ``(text, TokenUsage)`` pair; reported usage is folded into the
+            loop's cost accounting and counted against ``max_cost`` on the
+            following round. Summaries are memoized by the dropped-window
+            boundary, so a window that is unchanged across rounds is summarized
+            at most once rather than re-summarized each round.
+
     Returns:
         A :class:`PatternResult` whose ``value`` is the final LLM
         response, ``score`` is ``None``, and ``metadata`` includes
@@ -603,6 +644,9 @@ async def react_loop(
     tool_schemas = [tool.to_schema() for tool in tools]
     tool_lookup: dict[str, Tool] = {tool.name: tool for tool in tools}
     history = _seed_messages(prompt, messages)
+    # Memoizes summaries by dropped-window boundary so a stable window is
+    # summarized at most once even when trimming recurs across rounds.
+    summary_cache: dict[int, str] = {}
 
     for round_num in range(1, max_rounds + 1):
         if max_history_messages is not None:
@@ -611,7 +655,11 @@ async def react_loop(
                 metadata["messages_trimmed"] = int(metadata["messages_trimmed"]) + 1
                 if summarizer is not None:
                     active_messages = await _summarize_trimmed_window(
-                        history, active_messages, summarizer
+                        history,
+                        active_messages,
+                        summarizer,
+                        tracker,
+                        summary_cache,
                     )
                     metadata["summarized"] = int(metadata["summarized"]) + 1
         else:

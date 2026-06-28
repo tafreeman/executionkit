@@ -16,7 +16,10 @@ import pytest
 
 from executionkit._mock import MockProvider
 from executionkit.approval import ApprovalGate
+from executionkit.cost import CostTracker
+from executionkit.engine.messages import assistant_message, user_message
 from executionkit.patterns.react_loop import (
+    _summarize_trimmed_window,
     _trim_messages,
     react_loop,
 )
@@ -26,7 +29,7 @@ from executionkit.provider import (
     PatternError,
     ToolCall,
 )
-from executionkit.types import PatternResult, TerminationReason, Tool
+from executionkit.types import PatternResult, TerminationReason, TokenUsage, Tool
 
 # ---------------------------------------------------------------------------
 # Local response-builder helpers (mirror the module-level helpers in the
@@ -1218,3 +1221,105 @@ class TestReactLoopSummarizeOnTrim:
             "tool",
             "assistant",
         ]
+
+
+class TestReactLoopSummarizerCostAndMemo:
+    """The summarizer must be cost-accounted and memoized per stable window."""
+
+    def _trimming_provider(self) -> MockProvider:
+        tool_response = _make_tool_response("search", "tc1", {"query": "x"})
+        final_response = _make_final_response("Done")
+        return MockProvider(
+            responses=[tool_response, tool_response, tool_response, final_response]
+        )
+
+    async def test_summarizer_tokens_counted_in_cost(self) -> None:
+        """A summarizer that reports TokenUsage must have those tokens reflected
+        in the run's accumulated cost, on top of the provider's own usage."""
+        per_summary = TokenUsage(input_tokens=100, output_tokens=40, llm_calls=1)
+
+        async def summ(msgs: Any) -> tuple[str, TokenUsage]:
+            return f"{len(msgs)} earlier msgs", per_summary
+
+        with_summarizer = await react_loop(
+            self._trimming_provider(),
+            "find things",
+            tools=[TestReactLoop()._make_search_tool()],
+            max_rounds=8,
+            max_history_messages=3,
+            summarizer=summ,
+        )
+        baseline = await react_loop(
+            self._trimming_provider(),
+            "find things",
+            tools=[TestReactLoop()._make_search_tool()],
+            max_rounds=8,
+            max_history_messages=3,
+        )
+
+        rounds_summarized = int(with_summarizer.metadata["summarized"])
+        assert rounds_summarized >= 1
+        # The provider-side usage is identical between the two runs (same script),
+        # so the whole delta must be exactly the summarizer's reported tokens.
+        expected_extra_in = per_summary.input_tokens * rounds_summarized
+        expected_extra_out = per_summary.output_tokens * rounds_summarized
+        assert (
+            with_summarizer.cost.input_tokens - baseline.cost.input_tokens
+            == expected_extra_in
+        )
+        assert (
+            with_summarizer.cost.output_tokens - baseline.cost.output_tokens
+            == expected_extra_out
+        )
+
+    async def test_string_only_summarizer_adds_no_cost(self) -> None:
+        """A summarizer returning a bare string reports zero usage, so cost
+        matches a run with no summarizer (backward-compatible default)."""
+
+        async def summ(msgs: Any) -> str:
+            return f"{len(msgs)} earlier msgs"
+
+        with_summarizer = await react_loop(
+            self._trimming_provider(),
+            "find things",
+            tools=[TestReactLoop()._make_search_tool()],
+            max_rounds=8,
+            max_history_messages=3,
+            summarizer=summ,
+        )
+        baseline = await react_loop(
+            self._trimming_provider(),
+            "find things",
+            tools=[TestReactLoop()._make_search_tool()],
+            max_rounds=8,
+            max_history_messages=3,
+        )
+        assert with_summarizer.cost == baseline.cost
+
+    async def test_stable_window_summarized_at_most_once(self) -> None:
+        """Repeated summarization rounds over an unchanged dropped window must
+        invoke the summarizer at most once and account its tokens once."""
+        invocations: list[int] = []
+        reported = TokenUsage(input_tokens=70, output_tokens=30, llm_calls=1)
+
+        async def summ(msgs: Any) -> tuple[str, TokenUsage]:
+            invocations.append(len(msgs))
+            return f"{len(msgs)} msgs", reported
+
+        # A fixed history whose trim boundary does not change between calls: the
+        # active window is history[0] plus a 2-message tail every round.
+        history = [user_message("q0")] + [
+            assistant_message(f"m{i}") for i in range(1, 7)
+        ]
+        active = [history[0], *history[-2:]]
+        tracker = CostTracker()
+        cache: dict[int, str] = {}
+
+        first = await _summarize_trimmed_window(history, active, summ, tracker, cache)
+        second = await _summarize_trimmed_window(history, active, summ, tracker, cache)
+
+        assert len(invocations) == 1, "stable window must summarize at most once"
+        # Both rounds reuse the same injected summary text.
+        assert first[1]["content"] == second[1]["content"]
+        # Tokens are counted exactly once, not once per round.
+        assert tracker.to_usage() == reported
