@@ -107,6 +107,11 @@ class LLMResponse:
 
     Handles both OpenAI (``prompt_tokens`` / ``completion_tokens``) and
     Anthropic (``input_tokens`` / ``output_tokens``) usage key formats.
+
+    The library redacts ``content`` before emitting it in any trace it owns.
+    ``raw`` is the verbatim, *unredacted* provider payload and is therefore
+    caller-owned: the library never emits it, and a caller that logs or traces
+    ``raw`` is responsible for redacting any credentials it may contain.
     """
 
     content: str
@@ -115,6 +120,7 @@ class LLMResponse:
     usage: MappingProxyType[str, Any] = field(
         default_factory=lambda: MappingProxyType({})
     )
+    # Unredacted, caller-owned provider payload — see the class docstring.
     raw: Any = None
 
     @property
