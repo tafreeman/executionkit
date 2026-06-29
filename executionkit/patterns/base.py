@@ -22,6 +22,7 @@ from executionkit.provider import (
     LLMProvider,
     LLMResponse,
     StreamingProvider,
+    _redact_sensitive,
 )
 from executionkit.types import StreamingPatternResult, TokenUsage
 
@@ -246,6 +247,10 @@ async def checked_complete(
                 "cost": tracker.to_usage(),
                 "input_tokens": response.input_tokens,
                 "output_tokens": response.output_tokens,
+                # Response bodies can echo credentials supplied in the prompt;
+                # redact before the library emits them so a secret in the
+                # completion never leaks through the trace callback.
+                "content": _redact_sensitive(response.content),
             },
         ),
     )
@@ -347,6 +352,9 @@ async def checked_stream(
                     "cost": tracker.to_usage(),
                     "input_tokens": response.input_tokens,
                     "output_tokens": response.output_tokens,
+                    # Redact before emitting: a streamed completion can carry a
+                    # credential echoed from the prompt or upstream payload.
+                    "content": _redact_sensitive(response.content),
                 },
             ),
         )

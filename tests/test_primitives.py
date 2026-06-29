@@ -388,3 +388,37 @@ async def test_plan_unwraps_pattern_result_and_accumulates_cost() -> None:
     assert result.cost.llm_calls == 3
     assert result.cost.input_tokens == 10
     assert result.cost.output_tokens == 5
+
+
+async def test_response_secret_redacted_in_library_trace() -> None:
+    """A credential echoed in a response body must never reach the trace
+    callback verbatim; the library redacts the content it emits."""
+    from executionkit.patterns.consensus import consensus
+
+    secret = "sk-ABCD1234efgh5678ijklSECRET"
+    leaky_answer = f"the key is {secret} keep it safe"
+
+    events: list[TraceEvent] = []
+
+    async def trace(event: TraceEvent) -> None:
+        events.append(event)
+
+    await consensus(
+        MockProvider(responses=[leaky_answer]),
+        "question",
+        num_samples=1,
+        trace=trace,
+    )
+
+    # No event the library emitted may carry the raw secret anywhere in its
+    # payload, including the response-end event that now reports content.
+    for event in events:
+        assert secret not in str(dict(event.payload)), (
+            f"secret leaked in {event.kind} trace payload"
+        )
+
+    end_events = [e for e in events if e.kind == "llm_call_end"]
+    assert end_events, "expected a llm_call_end event reporting the response"
+    redacted_content = end_events[-1].payload["content"]
+    assert secret not in redacted_content
+    assert "[REDACTED]" in redacted_content
