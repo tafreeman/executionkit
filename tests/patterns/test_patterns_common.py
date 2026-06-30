@@ -586,6 +586,19 @@ def test_no_await_between_check_and_reserve_stream() -> None:
             self.events.append("await")
             self.generic_visit(node)
 
+        def visit_AsyncWith(self, node: ast.AsyncWith) -> None:
+            # `async with` desugars to __aenter__/__aexit__ awaits — a suspension
+            # point exactly like `await`. Record it so an `async with` can't slip
+            # into the critical section undetected (it produces no ast.Await node).
+            self.events.append("await")
+            self.generic_visit(node)
+
+        def visit_AsyncFor(self, node: ast.AsyncFor) -> None:
+            # `async for` desugars to __anext__ awaits — also a suspension point
+            # with no ast.Await node of its own.
+            self.events.append("await")
+            self.generic_visit(node)
+
     visitor = _OrderedEventVisitor()
     visitor.visit(stream_node)
     events = visitor.events
