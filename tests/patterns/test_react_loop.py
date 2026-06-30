@@ -15,7 +15,7 @@ from typing import Any
 import pytest
 
 from executionkit._mock import MockProvider
-from executionkit.approval import ApprovalGate
+from executionkit.approval import ApprovalGate, ApprovalRequest
 from executionkit.cost import CostTracker
 from executionkit.engine.messages import assistant_message, user_message
 from executionkit.patterns.react_loop import (
@@ -127,6 +127,62 @@ class TestReactLoop:
         assert result.metadata["tool_calls_made"] == 3
         # Three 0.2s tools run concurrently (~0.2s); sequential would be ~0.6s.
         assert elapsed < 0.45, f"tool calls ran sequentially ({elapsed:.2f}s)"
+
+    async def test_unexpected_error_in_one_tool_does_not_cancel_siblings(
+        self,
+    ) -> None:
+        # An approval gate that RAISES for one tool injects an *unexpected* error
+        # into _run_one (distinct from a tool that returns an error string). With
+        # the resilient gather, the sibling tools must still complete and the
+        # failing one surfaces a per-tool "failed" observation rather than the
+        # whole round being cancelled.
+        async def _ok(query: str) -> str:
+            return f"ran:{query}"
+
+        def _make(name: str) -> Tool:
+            return Tool(
+                name=name,
+                description=name,
+                parameters={
+                    "type": "object",
+                    "properties": {"query": {"type": "string"}},
+                    "required": ["query"],
+                },
+                execute=_ok,
+            )
+
+        async def _gate_cb(req: ApprovalRequest) -> bool:
+            if req.subject == "boom":
+                raise RuntimeError("approval backend exploded")
+            return True
+
+        multi = LLMResponse(
+            content="",
+            finish_reason="tool_calls",
+            tool_calls=(
+                ToolCall(id="tc1", name="alpha", arguments={"query": "a"}),
+                ToolCall(id="tc2", name="boom", arguments={"query": "b"}),
+                ToolCall(id="tc3", name="beta", arguments={"query": "c"}),
+            ),
+            usage=MappingProxyType({"prompt_tokens": 10, "completion_tokens": 5}),
+        )
+        provider = MockProvider(responses=[multi, _make_final_response("done")])
+
+        result = await react_loop(
+            provider,
+            "go",
+            tools=[_make("alpha"), _make("boom"), _make("beta")],
+            approval_gate=ApprovalGate(_gate_cb),
+            max_rounds=4,
+        )
+
+        # All three calls are accounted for — the boom raise did not abort the round.
+        assert result.metadata["tool_calls_made"] == 3
+        tool_msgs = [m for m in provider.calls[1].messages if m.get("role") == "tool"]
+        by_id = {m["tool_call_id"]: m["content"] for m in tool_msgs}
+        assert "ran:a" in by_id["tc1"]
+        assert "ran:c" in by_id["tc3"]
+        assert "failed" in by_id["tc2"].lower()
 
     async def test_multiple_tool_rounds_before_final_answer(self) -> None:
 

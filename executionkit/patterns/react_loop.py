@@ -20,6 +20,7 @@ from executionkit.engine.messages import (
     system_message,
     user_message,
 )
+from executionkit.engine.parallel import gather_resilient
 from executionkit.engine.retry import RetryConfig  # noqa: TC001
 from executionkit.observability import TraceCallback, TraceEvent, emit_trace
 from executionkit.patterns.base import (
@@ -496,9 +497,20 @@ async def _execute_tool_calls_round(
         )
         return tc, observation
 
-    results = await asyncio.gather(*[_run_one(tc) for tc in tool_calls])
+    # Materialize once so the gather and the result loop iterate the same order.
+    calls = list(tool_calls)
+    # gather_resilient (return_exceptions=True): an UNEXPECTED raise inside a single
+    # _run_one (e.g. an approval-gate or trace error) surfaces as a per-tool failure
+    # rather than cancelling every sibling tool in the round. _run_one already maps
+    # tool-execution errors to observation strings, so this only catches the
+    # unexpected. Order is preserved, so results[i] pairs with calls[i].
+    results = await gather_resilient([_run_one(tc) for tc in calls])
 
-    for tc, observation in results:
+    for tc, result in zip(calls, results, strict=True):
+        if isinstance(result, BaseException):
+            observation = f"Tool '{tc.name}' failed: {type(result).__name__}"
+        else:
+            _tc, observation = result
         metadata["tool_calls_made"] = int(metadata["tool_calls_made"]) + 1
         if observation.endswith("\n[truncated]"):
             metadata["truncated_observations"] = (
