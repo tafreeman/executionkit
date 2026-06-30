@@ -501,6 +501,18 @@ def test_no_await_between_check_and_reserve() -> None:
             self.events.append("await")
             self.generic_visit(node)
 
+        def visit_AsyncWith(self, node: ast.AsyncWith) -> None:
+            # `async with` (__aenter__/__aexit__) is a suspension point with no
+            # ast.Await node of its own — record it so it can't slip into the
+            # critical section undetected.
+            self.events.append("await")
+            self.generic_visit(node)
+
+        def visit_AsyncFor(self, node: ast.AsyncFor) -> None:
+            # `async for` (__anext__) is likewise a suspension point.
+            self.events.append("await")
+            self.generic_visit(node)
+
     visitor = _OrderedEventVisitor()
     visitor.visit(before_attempt_node)
     events = visitor.events
