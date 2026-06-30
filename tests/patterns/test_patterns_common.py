@@ -32,6 +32,7 @@ from executionkit.patterns.base import (
     _note_truncation,
     _TrackedProvider,
     checked_complete,
+    checked_stream,
     validate_score,
 )
 from executionkit.patterns.consensus import consensus
@@ -500,6 +501,18 @@ def test_no_await_between_check_and_reserve() -> None:
             self.events.append("await")
             self.generic_visit(node)
 
+        def visit_AsyncWith(self, node: ast.AsyncWith) -> None:
+            # `async with` (__aenter__/__aexit__) is a suspension point with no
+            # ast.Await node of its own — record it so it can't slip into the
+            # critical section undetected.
+            self.events.append("await")
+            self.generic_visit(node)
+
+        def visit_AsyncFor(self, node: ast.AsyncFor) -> None:
+            # `async for` (__anext__) is likewise a suspension point.
+            self.events.append("await")
+            self.generic_visit(node)
+
     visitor = _OrderedEventVisitor()
     visitor.visit(before_attempt_node)
     events = visitor.events
@@ -523,4 +536,107 @@ def test_no_await_between_check_and_reserve() -> None:
         "checked_complete._before_attempt.  This breaks the asyncio budget-safety "
         "guarantee — no other coroutine must be schedulable between the budget check "
         "and the call reservation.  See executionkit/cost.py module docstring."
+    )
+
+
+def test_no_await_between_check_and_reserve_stream() -> None:
+    """No ``await`` may appear between _check_budget and reserve_call() in
+    checked_stream's top-level no-await critical section.
+
+    Sister guard to test_no_await_between_check_and_reserve: checked_stream
+    upholds the same asyncio budget-safety invariant as checked_complete, but in
+    its own function body rather than a nested closure (and was previously
+    unguarded).  The visitor skips nested functions (e.g. _tracked_stream) so
+    only checked_stream's own critical section is asserted.
+    """
+    import inspect
+
+    source = inspect.getsource(checked_stream)
+    tree = ast.parse(textwrap.dedent(source))
+
+    stream_node: ast.AsyncFunctionDef | None = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "checked_stream":
+            stream_node = node
+            break
+
+    assert stream_node is not None, "checked_stream function not found in source"
+
+    class _OrderedEventVisitor(ast.NodeVisitor):
+        """Record check/reserve/await in source order, skipping nested funcs."""
+
+        def __init__(self) -> None:
+            self.events: list[str] = []
+            self._depth = 0
+
+        def _maybe_descend(self, node: ast.AST) -> None:
+            # Descend into checked_stream itself (depth 0) but not nested
+            # functions like _tracked_stream, whose awaits are unrelated to the
+            # top-level critical section.
+            if self._depth == 0:
+                self._depth += 1
+                self.generic_visit(node)
+                self._depth -= 1
+
+        def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+            self._maybe_descend(node)
+
+        def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+            self._maybe_descend(node)
+
+        def visit_Call(self, node: ast.Call) -> None:
+            if isinstance(node.func, ast.Name) and node.func.id == "_check_budget":
+                self.events.append("check")
+            elif (
+                isinstance(node.func, ast.Attribute)
+                and node.func.attr == "reserve_call"
+            ):
+                self.events.append("reserve")
+            self.generic_visit(node)
+
+        def visit_Await(self, node: ast.Await) -> None:
+            self.events.append("await")
+            self.generic_visit(node)
+
+        def visit_AsyncFor(self, node: ast.AsyncFor) -> None:
+            self.events.append("await")
+            self.generic_visit(node)
+
+        def visit_AsyncWith(self, node: ast.AsyncWith) -> None:
+            self.events.append("await")
+            self.generic_visit(node)
+
+        def visit_AsyncWith(self, node: ast.AsyncWith) -> None:
+            # `async with` desugars to __aenter__/__aexit__ awaits — a suspension
+            # point exactly like `await`. Record it so an `async with` can't slip
+            # into the critical section undetected (it produces no ast.Await node).
+            self.events.append("await")
+            self.generic_visit(node)
+
+        def visit_AsyncFor(self, node: ast.AsyncFor) -> None:
+            # `async for` desugars to __anext__ awaits — also a suspension point
+            # with no ast.Await node of its own.
+            self.events.append("await")
+            self.generic_visit(node)
+
+    visitor = _OrderedEventVisitor()
+    visitor.visit(stream_node)
+    events = visitor.events
+
+    assert "reserve" in events, "reserve_call() not found in checked_stream"
+    assert "check" in events, "_check_budget() not found in checked_stream"
+
+    first_check_idx = events.index("check")
+    reserve_idx = events.index("reserve")
+
+    assert first_check_idx < reserve_idx, (
+        "_check_budget() must appear before reserve_call() in checked_stream"
+    )
+
+    between_events = events[first_check_idx:reserve_idx]
+    assert "await" not in between_events, (
+        "An ``await`` was found between _check_budget and reserve_call() in "
+        "checked_stream.  This breaks the asyncio budget-safety guarantee — no "
+        "other coroutine must be schedulable between the budget check and the "
+        "call reservation.  See executionkit/cost.py module docstring."
     )
