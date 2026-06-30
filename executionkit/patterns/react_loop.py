@@ -508,9 +508,16 @@ async def _execute_tool_calls_round(
 
     for tc, result in zip(calls, results, strict=True):
         if isinstance(result, BaseException):
+            # Control-flow exceptions (CancelledError, KeyboardInterrupt,
+            # SystemExit) are BaseException but not Exception — they must
+            # propagate, never become a tool observation. gather_resilient
+            # returns a child CancelledError as a value (return_exceptions=True),
+            # so re-raise it here rather than stringifying it.
+            if not isinstance(result, Exception):
+                raise result
             observation = f"Tool '{tc.name}' failed: {type(result).__name__}"
         else:
-            _tc, observation = result
+            _, observation = result
         metadata["tool_calls_made"] = int(metadata["tool_calls_made"]) + 1
         if observation.endswith("\n[truncated]"):
             metadata["truncated_observations"] = (
