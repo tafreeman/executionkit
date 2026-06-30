@@ -184,6 +184,53 @@ class TestReactLoop:
         assert "ran:c" in by_id["tc3"]
         assert "failed" in by_id["tc2"].lower()
 
+    async def test_cancellederror_in_tool_propagates_not_swallowed(self) -> None:
+        # A CancelledError raised inside _run_one (here via the approval gate) is
+        # a BaseException, NOT an Exception. gather_resilient(return_exceptions=
+        # True) returns it as a value; the loop must RE-RAISE it (propagate the
+        # cancellation), never stringify it into a tool observation. Regression
+        # guard: the original bare gather propagated it, so the resilient gather
+        # must not silently swallow control-flow signals.
+        async def _ok(query: str) -> str:
+            return f"ran:{query}"
+
+        def _make(name: str) -> Tool:
+            return Tool(
+                name=name,
+                description=name,
+                parameters={
+                    "type": "object",
+                    "properties": {"query": {"type": "string"}},
+                    "required": ["query"],
+                },
+                execute=_ok,
+            )
+
+        async def _gate_cb(req: ApprovalRequest) -> bool:
+            if req.subject == "boom":
+                raise asyncio.CancelledError()
+            return True
+
+        multi = LLMResponse(
+            content="",
+            finish_reason="tool_calls",
+            tool_calls=(
+                ToolCall(id="tc1", name="alpha", arguments={"query": "a"}),
+                ToolCall(id="tc2", name="boom", arguments={"query": "b"}),
+            ),
+            usage=MappingProxyType({"prompt_tokens": 10, "completion_tokens": 5}),
+        )
+        provider = MockProvider(responses=[multi, _make_final_response("done")])
+
+        with pytest.raises(asyncio.CancelledError):
+            await react_loop(
+                provider,
+                "go",
+                tools=[_make("alpha"), _make("boom")],
+                approval_gate=ApprovalGate(_gate_cb),
+                max_rounds=4,
+            )
+
     async def test_multiple_tool_rounds_before_final_answer(self) -> None:
 
         call1 = _make_tool_response("search", "tc1", {"query": "first"})

@@ -17,8 +17,13 @@ async def gather_resilient(
 ) -> list[Any | BaseException]:
     """Run coroutines concurrently, returning exceptions as values.
 
-    Uses ``asyncio.gather(return_exceptions=True)`` with a semaphore to
-    limit concurrency. ``CancelledError`` still propagates.
+    Uses ``asyncio.gather(return_exceptions=True)`` with a semaphore to limit
+    concurrency. NOTE: with ``return_exceptions=True`` a *child* coroutine's
+    ``CancelledError`` (or any ``BaseException``) is returned as a value in the
+    result list, NOT propagated — only cancellation of the gather task itself
+    propagates. Callers must inspect the results and re-raise any non-``Exception``
+    ``BaseException`` (``CancelledError`` / ``KeyboardInterrupt`` / ``SystemExit``)
+    so control-flow signals are never silently swallowed.
 
     Args:
         coros: List of coroutines to execute.
