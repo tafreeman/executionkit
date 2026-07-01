@@ -598,14 +598,6 @@ def test_no_await_between_check_and_reserve_stream() -> None:
             self.events.append("await")
             self.generic_visit(node)
 
-        def visit_AsyncFor(self, node: ast.AsyncFor) -> None:
-            self.events.append("await")
-            self.generic_visit(node)
-
-        def visit_AsyncWith(self, node: ast.AsyncWith) -> None:
-            self.events.append("await")
-            self.generic_visit(node)
-
         def visit_AsyncWith(self, node: ast.AsyncWith) -> None:
             # `async with` desugars to __aenter__/__aexit__ awaits — a suspension
             # point exactly like `await`. Record it so an `async with` can't slip
