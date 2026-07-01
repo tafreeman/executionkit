@@ -18,6 +18,15 @@ if TYPE_CHECKING:
 # Minimum accuracy required for LIVE / non-deterministic eval suites.
 # Deterministic golden suites must still achieve 100% (report.passed).
 # This named constant avoids magic numbers and makes the threshold auditable.
+#
+# This is a documented STARTING FLOOR chosen as a reasonable opt-in bar for a
+# small, hand-curated live corpus — it is NOT a number observed from running
+# any suite against a real endpoint (no such run has happened in this repo).
+# tests/test_eval_live_cases.py (LIVE_CORPUS, gated by @pytest.mark.live) uses
+# this same constant so there is exactly one committed live-accuracy threshold
+# to tune rather than several near-duplicate ones drifting apart over time.
+# Revisit once LIVE_CORPUS has run enough times in
+# .github/workflows/live-eval.yml to justify a data-backed value.
 LIVE_EVAL_MIN_ACCURACY: float = 0.9
 
 EvalRun: TypeAlias = Callable[[], Awaitable[Any] | Any]

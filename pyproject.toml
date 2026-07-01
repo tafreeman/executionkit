@@ -72,6 +72,9 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 addopts = "--cov=executionkit --cov-report=term-missing"
+markers = [
+    "live: opt-in tests that call a real model via live_provider_from_env(); collected but self-skipped without EXECUTIONKIT_LIVE_EVAL=1 (see tests/test_eval_live_cases.py).",
+]
 
 [tool.coverage.run]
 branch = true

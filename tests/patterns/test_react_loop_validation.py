@@ -18,6 +18,7 @@ import pytest
 
 from executionkit._mock import MockProvider
 from executionkit.patterns.react_loop import (
+    _schema_needs_tier_b,
     _subset_validate_tool_args,
     _validate_tool_args,
     react_loop,
@@ -134,14 +135,148 @@ def test_falls_back_to_tier_a_when_jsonschema_absent(
 
     schema = {
         "type": "object",
+        "properties": {"count": {"type": "integer"}},
+        "required": ["count"],
+    }
+    # A Tier-A-only schema (no enum/min/max/etc.) still validates fine on the
+    # default (no-jsonschema) path, and the one-time notice still fires.
+    with caplog.at_level(logging.DEBUG, logger="executionkit.patterns.react_loop"):
+        assert _validate_tool_args(schema, {"count": 5}) is None
+    assert any("subset validator" in record.message for record in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# _schema_needs_tier_b — pure schema-shape check (Item EK-4)
+# ---------------------------------------------------------------------------
+
+
+def test_schema_needs_tier_b_false_for_tier_a_only_schema() -> None:
+    schema = {
+        "type": "object",
+        "properties": {"query": {"type": "string"}},
+        "required": ["query"],
+        "additionalProperties": False,
+    }
+    assert _schema_needs_tier_b(schema) is False
+
+
+def test_schema_needs_tier_b_true_for_top_level_enum() -> None:
+    schema = {
+        "type": "object",
+        "properties": {"color": {"type": "string", "enum": ["red", "green"]}},
+    }
+    assert _schema_needs_tier_b(schema) is True
+
+
+def test_schema_needs_tier_b_true_for_nested_object_property() -> None:
+    schema = {
+        "type": "object",
+        "properties": {
+            "user": {
+                "type": "object",
+                "properties": {"age": {"type": "integer", "maximum": 120}},
+            }
+        },
+    }
+    assert _schema_needs_tier_b(schema) is True
+
+
+def test_schema_needs_tier_b_true_for_array_items() -> None:
+    schema = {
+        "type": "array",
+        "items": {"type": "string", "pattern": "^[A-Z]+$"},
+    }
+    assert _schema_needs_tier_b(schema) is True
+
+
+def test_schema_needs_tier_b_false_for_array_of_plain_objects() -> None:
+    schema = {
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {"name": {"type": "string"}},
+        },
+    }
+    assert _schema_needs_tier_b(schema) is False
+
+
+# ---------------------------------------------------------------------------
+# Fail-closed — Tier-B-only constraints must be REJECTED, not silently passed,
+# when jsonschema is unavailable (Item EK-4).
+# ---------------------------------------------------------------------------
+
+
+def test_fails_closed_on_enum_violation_when_jsonschema_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An enum violation must be rejected even without jsonschema installed.
+
+    Before the fail-closed fix, Tier A does not understand ``enum`` at all, so
+    it silently accepted any string value — including ones outside the enum.
+    """
+    # Patch the attribute on the real submodule object (not by string import
+    # path): the patterns package re-exports a `react_loop` *function* under
+    # the same name as this module, so the string-path form of setattr
+    # resolves to that function instead of the module.
+    react_loop_module = sys.modules["executionkit.patterns.react_loop"]
+    monkeypatch.setattr(react_loop_module, "_jsonschema_available", lambda: False)
+    schema = {
+        "type": "object",
         "properties": {"color": {"type": "string", "enum": ["red", "green"]}},
         "required": ["color"],
     }
-    # An enum violation is a Tier-B-only check; with jsonschema "absent" the
-    # subset validator lets it through (returns None) and logs the notice once.
-    with caplog.at_level(logging.DEBUG, logger="executionkit.patterns.react_loop"):
-        assert _validate_tool_args(schema, {"color": "blue"}) is None
-    assert any("subset validator" in record.message for record in caplog.records)
+    error = _validate_tool_args(schema, {"color": "blue"})
+    assert error is not None
+    assert "jsonschema" in error.lower()
+
+
+def test_fails_closed_on_nested_maximum_violation_when_jsonschema_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A nested ``maximum`` violation must be rejected without jsonschema.
+
+    Tier A only checks top-level property types, so a nested numeric bound is
+    invisible to it; the schema-shape check must catch this and fail closed
+    with an actionable error instead of rubber-stamping the arguments.
+    """
+    react_loop_module = sys.modules["executionkit.patterns.react_loop"]
+    monkeypatch.setattr(react_loop_module, "_jsonschema_available", lambda: False)
+    schema = {
+        "type": "object",
+        "properties": {
+            "user": {
+                "type": "object",
+                "properties": {"age": {"type": "integer", "maximum": 120}},
+                "required": ["age"],
+            }
+        },
+        "required": ["user"],
+    }
+    error = _validate_tool_args(schema, {"user": {"age": 200}})
+    assert error is not None
+    assert "jsonschema" in error.lower()
+
+
+def test_tier_a_only_schema_still_validates_when_jsonschema_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A schema using only Tier-A-expressible constraints is unaffected.
+
+    The fail-closed check must not raise false positives for schemas that Tier
+    A can fully validate on its own (required fields, additionalProperties,
+    and top-level types) — only schemas that *need* Tier B should be rejected.
+    """
+    react_loop_module = sys.modules["executionkit.patterns.react_loop"]
+    monkeypatch.setattr(react_loop_module, "_jsonschema_available", lambda: False)
+    schema = {
+        "type": "object",
+        "properties": {"query": {"type": "string"}},
+        "required": ["query"],
+        "additionalProperties": False,
+    }
+    assert _validate_tool_args(schema, {"query": "hello"}) is None
+    assert _validate_tool_args(schema, {}) is not None
+    assert _validate_tool_args(schema, {"query": "hi", "extra": 1}) is not None
 
 
 # ---------------------------------------------------------------------------

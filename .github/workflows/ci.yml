@@ -5,6 +5,13 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+    # Default types (opened, synchronize, reopened) drive the normal `test`
+    # and `security` jobs below, unchanged. `labeled` is added ONLY so the
+    # `live-eval-pr` job (bottom of this file) can trigger when someone adds
+    # the `eval-live` label — `test` and `security` explicitly skip labeled
+    # events (see their `if:` conditions) so this does not make them re-run
+    # on every label add/remove.
+    types: [opened, synchronize, reopened, labeled]
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -13,6 +20,7 @@ jobs:
   test:
     name: "Python ${{ matrix.python-version }} on ${{ matrix.os }}"
     runs-on: ${{ matrix.os }}
+    if: github.event_name != 'pull_request' || github.event.action != 'labeled'
     strategy:
       fail-fast: false
       matrix:
@@ -57,6 +65,7 @@ jobs:
   security:
     name: "Security scan (Bandit)"
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.action != 'labeled'
     steps:
       - uses: actions/checkout@v6
 
@@ -73,3 +82,59 @@ jobs:
 
       - name: Dependency audit (pip-audit)
         run: pip install pip-audit && pip-audit --requirement requirements.lock
+
+  live-eval-pr:
+    name: "Live eval (pytest -m live, label-gated)"
+    # Opt-in real-model evidence for LIVE_CORPUS (tests/test_eval_live_cases.py)
+    # on demand from a pull request. Deliberately NOT part of the required
+    # `test` job so a flaky/slow real-model call can never block a merge: it
+    # only runs when the `eval-live` label is present on the PR (add the
+    # label to trigger it; GitHub does not replay `labeled` events for jobs
+    # added after a label was first applied, so re-add the label or re-run
+    # the workflow manually if needed). Nightly real-endpoint coverage
+    # already exists via .github/workflows/live-eval.yml's own schedule
+    # trigger, which now also runs this same `pytest -m live` corpus — see
+    # that file for the "Run LIVE_CORPUS" step.
+    #
+    # Requires EXECUTIONKIT_API_KEY (+ EXECUTIONKIT_BASE_URL/EXECUTIONKIT_MODEL)
+    # configured as repository/environment secrets. The "Run LIVE_CORPUS" step
+    # below only exports EXECUTIONKIT_LIVE_EVAL=1 when EXECUTIONKIT_BASE_URL is
+    # actually non-empty at runtime (plain shell check, not a GitHub Actions
+    # expression, so the behaviour is easy to verify locally). This matters
+    # because live_provider_from_env() *raises* ValueError if LIVE_EVAL=1 is
+    # set but BASE_URL/MODEL are blank — exporting it unconditionally would
+    # turn a missing-secret repo into a hard CI failure instead of a clean
+    # skip. With this guard: no secrets configured -> LIVE_EVAL stays unset ->
+    # live_provider_from_env() returns None -> `pytest -m live` collects
+    # LIVE_CORPUS and skips it -> job goes green without calling a real model.
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'pull_request' &&
+      github.event.action == 'labeled' &&
+      github.event.label.name == 'eval-live'
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install --require-hashes -r requirements.lock && pip install -e "." --no-deps
+
+      - name: Run LIVE_CORPUS (pytest -m live)
+        env:
+          EXECUTIONKIT_BASE_URL: ${{ secrets.EXECUTIONKIT_BASE_URL }}
+          EXECUTIONKIT_MODEL: ${{ secrets.EXECUTIONKIT_MODEL }}
+          EXECUTIONKIT_API_KEY: ${{ secrets.EXECUTIONKIT_API_KEY }}
+        run: |
+          # Only enable live evals when the endpoint secret is actually
+          # configured; otherwise leave EXECUTIONKIT_LIVE_EVAL unset so
+          # live_provider_from_env() returns None and pytest -m live
+          # self-skips instead of raising ValueError for a blank BASE_URL.
+          if [ -n "$EXECUTIONKIT_BASE_URL" ]; then
+            export EXECUTIONKIT_LIVE_EVAL=1
+          fi
+          pytest -m live --no-cov -p no:cacheprovider -v

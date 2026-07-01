@@ -1,10 +1,15 @@
 name: Live Eval (real model)
 
 # Real-endpoint evidence for the opt-in live tiers (per-pattern regression +
-# judge calibration). This is NOT a required gate: it runs on demand and weekly
-# against a local Ollama model so the env-gated live evals actually execute and
-# their results are uploaded as an artifact. It never runs on pull_request, so a
-# flaky model response can never block a PR.
+# judge calibration + LIVE_CORPUS). This is NOT a required gate: it runs on
+# demand and weekly against a local Ollama model so the env-gated live evals
+# actually execute and their results are uploaded as an artifact. It never
+# runs on pull_request, so a flaky model response can never block a PR.
+#
+# This weekly schedule is the "nightly" cadence referenced by the label-gated
+# `live-eval-pr` job in ci.yml: LIVE_CORPUS (tests/test_eval_live_cases.py,
+# @pytest.mark.live) gets real-endpoint coverage here on a fixed schedule
+# regardless of whether any PR currently carries the `eval-live` label.
 
 on:
   workflow_dispatch:
@@ -67,6 +72,18 @@ jobs:
         run: |
           pytest tests/test_live_regression.py tests/test_judge_calibration.py \
             -v --no-cov -p no:cacheprovider --junitxml=live-eval-results.xml
+
+      - name: Run LIVE_CORPUS (pytest -m live)
+        run: |
+          pytest -m live -v --no-cov -p no:cacheprovider --junitxml=live-corpus-results.xml
+
+      - name: Upload LIVE_CORPUS results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: live-corpus-results
+          path: live-corpus-results.xml
+          if-no-files-found: warn
 
       - name: Upload eval results
         if: always()
