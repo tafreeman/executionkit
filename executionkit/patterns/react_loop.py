@@ -201,6 +201,41 @@ def _jsonschema_validate_tool_args(
     return None
 
 
+_TIER_A_UNEXPRESSIBLE: tuple[str, ...] = (
+    "enum",
+    "minimum",
+    "maximum",
+    "minLength",
+    "maxLength",
+    "pattern",
+    "anyOf",
+    "oneOf",
+    "allOf",
+)
+
+
+def _schema_needs_tier_b(schema: Mapping[str, Any]) -> bool:
+    """Return True if *schema* (recursively) uses a constraint Tier A cannot check.
+
+    Tier A only checks required fields, ``additionalProperties: false``, and
+    top-level property types — it cannot express ``enum``, numeric/string
+    bounds, ``pattern``, or the ``anyOf``/``oneOf``/``allOf`` combinators. This
+    walks nested ``object`` properties and ``array`` items looking for any of
+    those constraints so the caller can fail closed instead of silently
+    accepting arguments Tier A rubber-stamps.
+    """
+    if any(key in schema for key in _TIER_A_UNEXPRESSIBLE):
+        return True
+    if schema.get("type") == "object":
+        return any(
+            _schema_needs_tier_b(prop_schema)
+            for prop_schema in schema.get("properties", {}).values()
+        )
+    if schema.get("type") == "array" and isinstance(schema.get("items"), dict):
+        return _schema_needs_tier_b(schema["items"])
+    return False
+
+
 def _validate_tool_args(
     parameters_schema: Mapping[str, Any], arguments: dict[str, Any]
 ) -> str | None:
@@ -212,6 +247,11 @@ def _validate_tool_args(
     * **Tier B** (when ``jsonschema`` is installed): full JSON Schema validation
       for the constraints Tier A cannot express.
 
+    When ``jsonschema`` is not installed and the schema uses a constraint Tier A
+    cannot express (see :data:`_TIER_A_UNEXPRESSIBLE`), this fails closed with
+    an actionable error rather than silently accepting arguments that were
+    never actually checked against that constraint.
+
     Returns None if the arguments are valid, otherwise an error string suitable
     for surfacing to the model as a tool observation.
     """
@@ -221,6 +261,13 @@ def _validate_tool_args(
     if _jsonschema_available():
         return _jsonschema_validate_tool_args(parameters_schema, arguments)
     _warn_subset_validator_once()
+    if _schema_needs_tier_b(parameters_schema):
+        return (
+            "Tool schema uses a constraint the built-in validator cannot check "
+            "(e.g. enum/minimum/maximum/pattern) and the optional 'jsonschema' "
+            "package is not installed; install it with "
+            "'pip install executionkit[jsonschema]' to validate this schema"
+        )
     return None
 
 
