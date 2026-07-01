@@ -189,7 +189,9 @@ def test_schema_needs_tier_b_true_for_array_items() -> None:
     assert _schema_needs_tier_b(schema) is True
 
 
-def test_schema_needs_tier_b_false_for_array_of_plain_objects() -> None:
+def test_schema_needs_tier_b_true_for_array_of_plain_objects() -> None:
+    """Tier A's subset validator never descends into array items, so any
+    object-shaped item (even with only plain property types) is unchecked."""
     schema = {
         "type": "array",
         "items": {
@@ -197,6 +199,11 @@ def test_schema_needs_tier_b_false_for_array_of_plain_objects() -> None:
             "properties": {"name": {"type": "string"}},
         },
     }
+    assert _schema_needs_tier_b(schema) is True
+
+
+def test_schema_needs_tier_b_false_for_array_of_scalars() -> None:
+    schema = {"type": "array", "items": {"type": "string"}}
     assert _schema_needs_tier_b(schema) is False
 
 
