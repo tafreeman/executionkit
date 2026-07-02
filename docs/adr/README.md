@@ -18,6 +18,7 @@ Records follow the [MADR template](https://adr.github.io/madr/).
 | [ADR-009](009-approval-gate-timeout-policy.md) | Three-option timeout policy for ApprovalGate | Accepted | 2026-06-18 |
 | [ADR-010](010-optional-otel-span-emission.md) | importlib probe for optional OpenTelemetry integration | Accepted | 2026-06-18 |
 | [ADR-011](011-map-reduce-pattern.md) | gather_strict map phase with single reduce call | Accepted | 2026-06-18 |
+| [ADR-012](012-stdlib-mcp-server.md) | Stdlib-only stdio MCP server inside the package | Accepted | 2026-07-02 |
 
 ## Format
 
