@@ -6,7 +6,7 @@ import asyncio
 import dataclasses
 import importlib.util
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from itertools import chain
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
@@ -36,7 +36,7 @@ from executionkit.provider import (
 from executionkit.types import PatternResult, TerminationReason, TokenUsage, Tool
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Mapping, Sequence
+    from collections.abc import Awaitable, Sequence
 
     from executionkit.types import CheckpointCallback
 
@@ -214,26 +214,45 @@ _TIER_A_UNEXPRESSIBLE: tuple[str, ...] = (
 )
 
 
-def _schema_needs_tier_b(schema: Mapping[str, Any]) -> bool:
+def _schema_needs_tier_b(schema: Any, *, is_top_level: bool = True) -> bool:
     """Return True if *schema* (recursively) uses a constraint Tier A cannot check.
 
-    Tier A only checks required fields, ``additionalProperties: false``, and
-    top-level property types — it cannot express ``enum``, numeric/string
-    bounds, ``pattern``, or the ``anyOf``/``oneOf``/``allOf`` combinators. This
-    walks nested ``object`` properties and ``array`` items looking for any of
-    those constraints so the caller can fail closed instead of silently
-    accepting arguments Tier A rubber-stamps.
+    Tier A's ``_subset_validate_tool_args`` is a flat, single-level validator:
+    it only checks required fields, ``additionalProperties: false``, and
+    property types at the TOP level of the schema — it never descends into
+    nested ``object`` properties, and ``_check_arg_type`` never inspects
+    ``items`` at all (it only confirms the property itself is a ``list``). So
+    any ``required``/``additionalProperties``/``properties`` below the top
+    level, or ANY ``items`` constraint at any level (even a plain scalar
+    type), is silently unchecked by Tier A — on top of the top-level-only
+    ``enum``/bounds/``pattern``/combinator gap. This walks the schema looking
+    for any of those constraints so the caller can fail closed instead of
+    silently accepting arguments Tier A rubber-stamps.
+
+    JSON Schema (draft 6+) also permits a bare boolean as a (sub)schema:
+    ``True`` accepts anything (trivially satisfied, no Tier B needed) and
+    ``False`` rejects everything (which Tier A cannot enforce, so Tier B is
+    needed). A malformed, non-Mapping/non-bool schema is treated the same as
+    ``False`` — fail closed rather than crash.
     """
+    if not isinstance(schema, Mapping):
+        return schema is not True
+    nested_only_keys = ("properties", "required", "additionalProperties")
     if any(key in schema for key in _TIER_A_UNEXPRESSIBLE):
         return True
-    if schema.get("type") == "object":
-        return any(
-            _schema_needs_tier_b(prop_schema)
-            for prop_schema in schema.get("properties", {}).values()
+    if not is_top_level and any(key in schema for key in nested_only_keys):
+        return True
+    if "items" in schema:
+        return True
+    properties = schema.get("properties")
+    return (
+        (schema.get("type") == "object" or "properties" in schema)
+        and isinstance(properties, Mapping)
+        and any(
+            _schema_needs_tier_b(prop_schema, is_top_level=False)
+            for prop_schema in properties.values()
         )
-    if schema.get("type") == "array" and isinstance(schema.get("items"), dict):
-        return _schema_needs_tier_b(schema["items"])
-    return False
+    )
 
 
 def _validate_tool_args(
