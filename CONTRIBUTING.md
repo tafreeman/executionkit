@@ -159,7 +159,10 @@ ExecutionKit is a pattern library, not a framework. Reject changes that add:
 - Dashboard, routing, or spend-tracking UI
 - Stateful graph runtimes or durable execution
 - Native provider adapters beyond the OpenAI-compatible format
-- Multi-agent handoff or orchestration primitives
+- Multi-agent handoff or cross-agent orchestration — that tier lives in
+  [agentic-runtime-platform](https://github.com/tafreeman/agentic-runtime-platform);
+  ExecutionKit's `Router`/`Workflow`/`Plan`/`ApprovalGate` stay single-run
+  composition primitives
 
 If in doubt, open an issue before writing code.
 
