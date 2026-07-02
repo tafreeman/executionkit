@@ -44,6 +44,7 @@ from executionkit.mcp._constants import (
 from executionkit.mcp.tools import (
     ProviderFactory,
     ToolExecutionError,
+    _memoize_provider,
     get_handler,
     list_tools,
     provider_from_env,
@@ -101,8 +102,14 @@ class MCPServer:
                 :func:`~executionkit.mcp.tools.provider_from_env`. Inject a
                 factory returning a ``MockProvider`` in tests.
         """
+        # Memoize only the default env factory: each Provider it builds may own
+        # an httpx.AsyncClient (with the executionkit[httpx] extra installed),
+        # so constructing one per tools/call would leak clients. An injected
+        # factory stays caller-managed and is invoked as-is.
         self._provider_factory: ProviderFactory = (
-            provider_factory if provider_factory is not None else provider_from_env
+            provider_factory
+            if provider_factory is not None
+            else _memoize_provider(provider_from_env)
         )
         self._initialized: bool = False
 
@@ -190,6 +197,16 @@ class MCPServer:
 
         request_id = message.get("id", _NO_ID)
         is_notification = request_id is _NO_ID
+
+        if message.get("jsonrpc") != JSONRPC_VERSION:
+            if is_notification:
+                return None
+            return _error_response(
+                request_id,
+                INVALID_REQUEST,
+                f"Request 'jsonrpc' must be '{JSONRPC_VERSION}'",
+            )
+
         method = message.get("method")
 
         if not isinstance(method, str):
@@ -206,6 +223,15 @@ class MCPServer:
         # Notifications: never respond. Unknown notifications are ignored.
         if is_notification:
             return None
+
+        # MCP handshake gating: before a successful `initialize`, only
+        # `initialize` itself and `ping` are served.
+        if not self._initialized and method not in ("initialize", "ping"):
+            return _error_response(
+                request_id,
+                INVALID_REQUEST,
+                "Server not initialized: send 'initialize' before other requests",
+            )
 
         if method == "initialize":
             return self._handle_initialize(request_id, params)
@@ -281,9 +307,12 @@ async def handle_message(
     Constructs a fresh :class:`MCPServer` and dispatches *message*. Handy for
     unit tests that only need to exercise a single request/response pair; for a
     multi-message conversation reuse one :class:`MCPServer` instance so
-    ``initialize`` state carries across calls.
+    ``initialize`` state carries across calls. The one-shot server is treated
+    as already initialized — handshake gating only makes sense across a
+    conversation.
     """
     server = MCPServer(provider_factory=provider_factory)
+    server._initialized = True
     return await server.handle_message(message)
 
 

@@ -17,12 +17,13 @@ import pytest
 from executionkit._mock import MockProvider
 from executionkit.mcp._constants import (
     INVALID_PARAMS,
+    INVALID_REQUEST,
     METHOD_NOT_FOUND,
     PARSE_ERROR,
     PROTOCOL_VERSION,
 )
 from executionkit.mcp.server import MCPServer, handle_message
-from executionkit.mcp.tools import provider_from_env
+from executionkit.mcp.tools import _memoize_provider, provider_from_env
 from executionkit.provider import LLMProvider, LLMResponse
 
 # ---------------------------------------------------------------------------
@@ -31,8 +32,15 @@ from executionkit.provider import LLMProvider, LLMResponse
 
 
 def _make_server(provider: LLMProvider | None) -> MCPServer:
-    """Build a server whose provider factory returns *provider* (or ``None``)."""
-    return MCPServer(provider_factory=lambda: provider)
+    """Build an already-initialized server whose factory returns *provider*.
+
+    Marked initialized so tool-dispatch tests skip the handshake; the handshake
+    and its gating are covered by ``TestHandshake`` and
+    ``TestPreInitializeGating``.
+    """
+    server = MCPServer(provider_factory=lambda: provider)
+    server._initialized = True
+    return server
 
 
 def _initialize_request(protocol_version: str = PROTOCOL_VERSION) -> dict:
@@ -284,6 +292,7 @@ class TestReactLoopCall:
 
     async def test_react_loop_rejects_non_tool_calling_provider(self) -> None:
         server = MCPServer(provider_factory=_NonToolProvider)
+        server._initialized = True
         response = await server.handle_message(
             _tools_call_request("react_loop", {"prompt": "hi"})
         )
@@ -467,3 +476,77 @@ async def test_handle_message_convenience_one_shot() -> None:
         "consensus",
         "react_loop",
     }
+
+
+# ---------------------------------------------------------------------------
+# Handshake gating, JSON-RPC version validation, default-factory memoization
+# ---------------------------------------------------------------------------
+
+
+class TestPreInitializeGating:
+    async def test_tools_request_before_initialize_is_rejected(self) -> None:
+        server = MCPServer(provider_factory=lambda: None)
+        response = await server.handle_message(
+            {"jsonrpc": "2.0", "id": 7, "method": "tools/list"}
+        )
+        assert response is not None
+        assert response["error"]["code"] == INVALID_REQUEST
+        assert "initialize" in response["error"]["message"]
+
+    async def test_ping_is_allowed_before_initialize(self) -> None:
+        server = MCPServer(provider_factory=lambda: None)
+        response = await server.handle_message(
+            {"jsonrpc": "2.0", "id": 8, "method": "ping"}
+        )
+        assert response is not None
+        assert response["result"] == {}
+
+    async def test_tools_request_allowed_after_initialize(self) -> None:
+        server = MCPServer(provider_factory=lambda: None)
+        await server.handle_message(_initialize_request())
+        response = await server.handle_message(
+            {"jsonrpc": "2.0", "id": 9, "method": "tools/list"}
+        )
+        assert response is not None
+        assert "result" in response
+
+
+class TestJsonRpcVersionValidation:
+    async def test_missing_jsonrpc_field_is_invalid_request(self) -> None:
+        server = _make_server(None)
+        response = await server.handle_message({"id": 4, "method": "ping"})
+        assert response is not None
+        assert response["error"]["code"] == INVALID_REQUEST
+
+    async def test_wrong_jsonrpc_version_is_invalid_request(self) -> None:
+        server = _make_server(None)
+        response = await server.handle_message(
+            {"jsonrpc": "1.0", "id": 5, "method": "ping"}
+        )
+        assert response is not None
+        assert response["error"]["code"] == INVALID_REQUEST
+
+    async def test_notification_with_wrong_version_is_ignored(self) -> None:
+        server = _make_server(None)
+        response = await server.handle_message(
+            {"jsonrpc": "1.0", "method": "notifications/initialized"}
+        )
+        assert response is None
+
+
+class TestDefaultProviderFactoryMemoization:
+    def test_first_non_none_provider_is_cached(self) -> None:
+        calls: list[int] = []
+        first = MockProvider(responses=["a"])
+        second = MockProvider(responses=["b"])
+        results: list[LLMProvider | None] = [None, first, second]
+
+        def factory() -> LLMProvider | None:
+            calls.append(1)
+            return results[len(calls) - 1]
+
+        wrapped = _memoize_provider(factory)
+        assert wrapped() is None  # unconfigured result is NOT cached
+        assert wrapped() is first  # first real provider is cached...
+        assert wrapped() is first  # ...and reused; `second` is never built
+        assert len(calls) == 2
