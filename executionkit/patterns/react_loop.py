@@ -214,37 +214,44 @@ _TIER_A_UNEXPRESSIBLE: tuple[str, ...] = (
 )
 
 
-def _schema_needs_tier_b(
-    schema: Mapping[str, Any], *, is_top_level: bool = True
-) -> bool:
+def _schema_needs_tier_b(schema: Any, *, is_top_level: bool = True) -> bool:
     """Return True if *schema* (recursively) uses a constraint Tier A cannot check.
 
     Tier A's ``_subset_validate_tool_args`` is a flat, single-level validator:
     it only checks required fields, ``additionalProperties: false``, and
     property types at the TOP level of the schema — it never descends into
-    nested ``object`` properties or ``array`` items. So any ``required``,
-    ``additionalProperties``, or ``properties`` constraint below the top
-    level is silently unchecked by Tier A, on top of the top-level-only
-    ``enum``/bounds/``pattern``/combinator gap. This walks nested ``object``
-    properties and ``array`` items looking for any of those constraints so
-    the caller can fail closed instead of silently accepting arguments Tier A
-    rubber-stamps.
+    nested ``object`` properties, and ``_check_arg_type`` never inspects
+    ``items`` at all (it only confirms the property itself is a ``list``). So
+    any ``required``/``additionalProperties``/``properties`` below the top
+    level, or ANY ``items`` constraint at any level (even a plain scalar
+    type), is silently unchecked by Tier A — on top of the top-level-only
+    ``enum``/bounds/``pattern``/combinator gap. This walks the schema looking
+    for any of those constraints so the caller can fail closed instead of
+    silently accepting arguments Tier A rubber-stamps.
+
+    JSON Schema (draft 6+) also permits a bare boolean as a (sub)schema:
+    ``True`` accepts anything (trivially satisfied, no Tier B needed) and
+    ``False`` rejects everything (which Tier A cannot enforce, so Tier B is
+    needed). A malformed, non-Mapping/non-bool schema is treated the same as
+    ``False`` — fail closed rather than crash.
     """
+    if not isinstance(schema, Mapping):
+        return schema is not True
     nested_only_keys = ("properties", "required", "additionalProperties")
     if any(key in schema for key in _TIER_A_UNEXPRESSIBLE):
         return True
     if not is_top_level and any(key in schema for key in nested_only_keys):
         return True
-    if (schema.get("type") == "object" or "properties" in schema) and any(
-        _schema_needs_tier_b(prop_schema, is_top_level=False)
-        for prop_schema in schema.get("properties", {}).values()
-    ):
+    if "items" in schema:
         return True
-    items = schema.get("items")
+    properties = schema.get("properties")
     return (
-        (schema.get("type") == "array" or "items" in schema)
-        and isinstance(items, Mapping)
-        and _schema_needs_tier_b(items, is_top_level=False)
+        (schema.get("type") == "object" or "properties" in schema)
+        and isinstance(properties, Mapping)
+        and any(
+            _schema_needs_tier_b(prop_schema, is_top_level=False)
+            for prop_schema in properties.values()
+        )
     )
 
 

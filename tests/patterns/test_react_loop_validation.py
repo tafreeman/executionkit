@@ -202,8 +202,42 @@ def test_schema_needs_tier_b_true_for_array_of_plain_objects() -> None:
     assert _schema_needs_tier_b(schema) is True
 
 
-def test_schema_needs_tier_b_false_for_array_of_scalars() -> None:
+def test_schema_needs_tier_b_true_for_array_of_scalars() -> None:
+    """_check_arg_type never inspects `items` at all — even a plain scalar
+    item type is unchecked by Tier A, so it must require Tier B too."""
     schema = {"type": "array", "items": {"type": "string"}}
+    assert _schema_needs_tier_b(schema) is True
+
+
+def test_schema_needs_tier_b_false_for_array_without_items() -> None:
+    """No `items` constraint at all means there's nothing for Tier B to add."""
+    schema = {"type": "array"}
+    assert _schema_needs_tier_b(schema) is False
+
+
+def test_schema_needs_tier_b_handles_boolean_schemas() -> None:
+    """JSON Schema draft 6+ permits a bare boolean as a (sub)schema:
+    `True` accepts anything (no Tier B needed), `False` rejects everything
+    (which Tier A cannot enforce)."""
+    assert _schema_needs_tier_b(True) is False
+    assert _schema_needs_tier_b(False) is True
+
+    schema = {
+        "type": "object",
+        "properties": {"foo": True, "bar": False},
+    }
+    assert _schema_needs_tier_b(schema) is True
+
+    schema_only_true = {"type": "object", "properties": {"foo": True}}
+    assert _schema_needs_tier_b(schema_only_true) is False
+
+
+def test_schema_needs_tier_b_handles_malformed_schema_without_crashing() -> None:
+    """A malformed, non-Mapping/non-bool (sub)schema must fail closed rather
+    than raise AttributeError/TypeError from `.get()`/`in` on a non-Mapping."""
+    assert _schema_needs_tier_b(42) is True
+    assert _schema_needs_tier_b(None) is True
+    schema = {"type": "object", "properties": "not-a-mapping"}
     assert _schema_needs_tier_b(schema) is False
 
 
