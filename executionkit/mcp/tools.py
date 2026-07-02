@@ -84,6 +84,27 @@ def provider_from_env() -> LLMProvider | None:
     )
 
 
+def _memoize_provider(factory: ProviderFactory) -> ProviderFactory:
+    """Wrap *factory* so its first non-``None`` provider is built once and reused.
+
+    ``None`` results (provider unconfigured) are not cached, so configuration
+    that appears later is still picked up; once a provider has been built it is
+    reused for every subsequent call. Reuse matters when the optional
+    ``executionkit[httpx]`` extra is installed: each ``Provider`` then owns an
+    ``httpx.AsyncClient``, and building a fresh one per ``tools/call`` would
+    accumulate unclosed clients for the life of the server process.
+    """
+    cached: LLMProvider | None = None
+
+    def _cached_factory() -> LLMProvider | None:
+        nonlocal cached
+        if cached is None:
+            cached = factory()
+        return cached
+
+    return _cached_factory
+
+
 def _require_provider(provider_factory: ProviderFactory) -> LLMProvider:
     """Return a provider from *provider_factory*, else raise ToolExecutionError."""
     provider = provider_factory()

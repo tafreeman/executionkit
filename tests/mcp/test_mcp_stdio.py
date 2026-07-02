@@ -69,7 +69,7 @@ def test_stdio_initialize_list_and_call_round_trip() -> None:
     child_env["PYTHONPATH"] = _repo_root()
     child_env["PYTHONIOENCODING"] = "utf-8"
 
-    completed = subprocess.run(  # noqa: S603
+    completed = subprocess.run(
         [sys.executable, "-m", "executionkit.mcp"],
         input=_encode(requests),
         capture_output=True,
@@ -102,5 +102,5 @@ def test_stdio_initialize_list_and_call_round_trip() -> None:
 
 def _repo_root() -> str:
     """Return the repo root so the subprocess imports the in-tree package."""
-    # tests/mcp/test_mcp_stdio.py -> repo root is three parents up.
+    # tests/mcp/test_mcp_stdio.py -> parents[2] (two directories up) is the repo root.
     return str(pathlib.Path(__file__).resolve().parents[2])

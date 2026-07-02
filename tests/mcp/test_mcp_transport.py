@@ -34,7 +34,14 @@ class TestServeLoop:
         # response), and a tools/list request — then EOF.
         reader = io.StringIO(
             "\n"
-            + json.dumps({"jsonrpc": "2.0", "id": 1, "method": "ping"})
+            + json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {"protocolVersion": "2025-06-18", "capabilities": {}},
+                }
+            )
             + "\n"
             + json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"})
             + "\n"
@@ -46,10 +53,11 @@ class TestServeLoop:
         await server.serve(reader, writer)
 
         responses = _lines(writer.getvalue())
-        # Two responses: ping (id 1) and tools/list (id 2). Notification: none.
+        # Two responses: initialize (id 1) and tools/list (id 2); the
+        # notification produces none.
         ids = [response["id"] for response in responses]
         assert ids == [1, 2]
-        assert responses[0]["result"] == {}
+        assert responses[0]["result"]["capabilities"] == {"tools": {}}
         assert {t["name"] for t in responses[1]["result"]["tools"]} == {
             "consensus",
             "react_loop",
@@ -132,7 +140,17 @@ class TestServeStdio:
     ) -> None:
         provider = MockProvider(responses=["ok"])
         fake_stdin = io.StringIO(
-            json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}) + "\n"
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 0,
+                    "method": "initialize",
+                    "params": {"protocolVersion": "2025-06-18", "capabilities": {}},
+                }
+            )
+            + "\n"
+            + json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+            + "\n"
         )
         fake_stdout = io.StringIO()
         # io.StringIO has no reconfigure(), so serve_stdio's getattr guard skips
@@ -143,8 +161,9 @@ class TestServeStdio:
         await serve_stdio(provider_factory=lambda: provider)
 
         responses = _lines(fake_stdout.getvalue())
-        assert responses[0]["id"] == 1
-        assert {t["name"] for t in responses[0]["result"]["tools"]} == {
+        assert responses[0]["id"] == 0
+        assert responses[1]["id"] == 1
+        assert {t["name"] for t in responses[1]["result"]["tools"]} == {
             "consensus",
             "react_loop",
         }
