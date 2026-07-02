@@ -141,11 +141,14 @@ ExecutionKit also exposes small stdlib-only primitives for the glue code around 
 - **Secure-by-default.** API key masking, broad credential redaction in errors, top-level JSON-Schema tool validation, prompt-injection-hardened default evaluator, and optional approval gates.
 - **Eval-aware.** A deterministic golden suite and a model-failure corpus assert *output correctness* (not just coverage) in normal CI, with `EvalReport.accuracy`/`summary()` metrics; judge-calibration and live-provider regression tiers stay explicitly env-gated.
 
+## MCP server
+
+`python -m executionkit.mcp` starts a stdlib-only [Model Context Protocol](https://modelcontextprotocol.io) server over stdio (newline-delimited JSON-RPC 2.0) exposing two patterns as MCP tools: `consensus` and `react_loop` — the latter restricted to a fixed, side-effect-free demo toolset, so MCP callers cannot register arbitrary code ([ADR-012](docs/adr/012-stdlib-mcp-server.md)). The backing model resolves from the same `EXECUTIONKIT_BASE_URL` / `EXECUTIONKIT_MODEL` / `EXECUTIONKIT_API_KEY` env vars as the live-eval provider; without them the server still starts and answers `initialize`/`tools/list`, and `tools/call` returns a structured `isError` result naming the missing configuration. Only the `tools` capability is advertised — no runtime dependency was added (ADR-004 holds).
+
 ## Deliberately out of scope / roadmap
 
 See [`CONTRIBUTING.md` — Anti-Scope](CONTRIBUTING.md#anti-scope) for what ExecutionKit rejects as a pattern library, not a framework. On top of that, as of v0.2.0:
 
-- **MCP server authoring** — ExecutionKit consumes any OpenAI-compatible endpoint but does not yet expose its patterns as MCP tools. Near-term roadmap, not shipped.
 - **Anthropic Message Batches fan-out** — `consensus()`/`pipe()` fan out via `asyncio` concurrency today, not the batch API. Near-term roadmap, not shipped.
 - **RAG / embeddings / vector search** — deliberately out of scope. Retrieval belongs in the calling application or a dedicated vector store, not the reasoning-pattern layer.
 
