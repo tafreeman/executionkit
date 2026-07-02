@@ -117,16 +117,16 @@ See the [Quick Start guide](https://tafreeman.github.io/executionkit/getting-sta
 |---------|--------------|
 | **[Consensus](https://tafreeman.github.io/executionkit/patterns/consensus/)** | Run *N* parallel calls, vote on the result, return the majority answer with confidence. |
 | **[Iterative Refinement](https://tafreeman.github.io/executionkit/patterns/iterative-refinement/)** | Generate, score, refine. Bounded loop with a quality gate. |
-| **[ReAct Tool Loop](https://tafreeman.github.io/executionkit/patterns/react-loop/)** | Think-act-observe loop with JSON-Schema-validated tool calls. |
+| **[ReAct Tool Loop](https://tafreeman.github.io/executionkit/patterns/react-loop/)** | Think-act-observe loop with progressive structured-output guardrails: a dependency-free subset validator runs first, and a full JSON-Schema check layers on when `jsonschema` is installed — failing closed on schemas the subset validator can't express rather than under-validating. |
 | **[Structured Output](https://tafreeman.github.io/executionkit/patterns/structured/)** | Parse JSON responses with custom validators and automatic repair retries. |
 | **[Pipe](https://tafreeman.github.io/executionkit/patterns/pipe/)** | Chain patterns end-to-end with a shared budget. |
 
 ## Lightweight primitives
 
-ExecutionKit also exposes small stdlib-only primitives for the glue code around pattern calls:
+ExecutionKit also exposes small stdlib-only primitives for the glue code around pattern calls, including a set of single-run agent-orchestration primitives (`Router`, `Workflow`/`Step`, `Plan`/`PlanStep`, `ApprovalGate`) — composition within one execution, not multi-agent handoff, which stays [out of scope](CONTRIBUTING.md#anti-scope):
 
 - **Evals.** `EvalCase` and `run_eval_suite()` run deterministic golden checks in CI; `live_provider_from_env()` enables opt-in live checks via `EXECUTIONKIT_LIVE_EVAL=1`, `EXECUTIONKIT_BASE_URL`, and `EXECUTIONKIT_MODEL`.
-- **Observability.** `TraceEvent` callbacks can receive structured events for LLM calls, retries, tool calls, workflow steps, plan steps, approvals, cost, and latency.
+- **Observability.** `TraceEvent` callbacks can receive structured events for LLM calls, retries, tool calls, workflow steps, plan steps, approvals, cost, and latency; when `opentelemetry-api` is installed, `llm_span()` wraps each LLM call in a real OTel span whose attributes (`llm.model`, `llm.input_tokens`, `llm.output_tokens`, `cost_usd`) are designed to map onto the OpenTelemetry GenAI semantic conventions without requiring the dependency at all.
 - **Routing.** `Router` and `RouteRule` select a provider before a pattern call without changing the pattern implementation.
 - **Workflow and planning.** `Workflow`/`Step` execute simple dependency-ordered fan-out DAGs; `Plan`/`PlanStep` execute ordered plan-then-act flows.
 - **Approval gates.** `ApprovalGate` can require human or policy approval before tool execution, workflow steps, or plan steps.
@@ -137,8 +137,17 @@ ExecutionKit also exposes small stdlib-only primitives for the glue code around 
 - **Zero SDK lock-in.** Structural `LLMProvider` protocol — any conforming object works without inheritance.
 - **Composable.** Patterns are async functions. Wrap them, chain them with `pipe()`, or drop them inside a larger orchestrator like [agentic-runtime-platform](https://github.com/tafreeman/agentic-runtime-platform).
 - **Budget-aware.** TOCTOU-safe `max_cost` enforcement across parallel calls; `llm_calls` counts every dispatched wire attempt, including failed retries.
+- **Resilient by construction.** `RetryConfig`'s retryable allowlist plus a `TokenBucket` rate-limit strategy (`engine/retry.py`, `engine/rate_bucket.py`) give `with_retry()` circuit-breaker / bulkhead-style behavior: retryable failures back off with full jitter, a 429's `retry_after` immediately drains the bucket and arms a cooldown, and non-retryable errors fail fast instead of being retried into a cascading failure.
 - **Secure-by-default.** API key masking, broad credential redaction in errors, top-level JSON-Schema tool validation, prompt-injection-hardened default evaluator, and optional approval gates.
 - **Eval-aware.** A deterministic golden suite and a model-failure corpus assert *output correctness* (not just coverage) in normal CI, with `EvalReport.accuracy`/`summary()` metrics; judge-calibration and live-provider regression tiers stay explicitly env-gated.
+
+## Deliberately out of scope / roadmap
+
+See [`CONTRIBUTING.md` — Anti-Scope](CONTRIBUTING.md#anti-scope) for what ExecutionKit rejects as a pattern library, not a framework. On top of that, as of v0.2.0:
+
+- **MCP server authoring** — ExecutionKit consumes any OpenAI-compatible endpoint but does not yet expose its patterns as MCP tools. Near-term roadmap, not shipped.
+- **Anthropic Message Batches fan-out** — `consensus()`/`pipe()` fan out via `asyncio` concurrency today, not the batch API. Near-term roadmap, not shipped.
+- **RAG / embeddings / vector search** — deliberately out of scope. Retrieval belongs in the calling application or a dedicated vector store, not the reasoning-pattern layer.
 
 ## Built for Platform Teams
 

@@ -396,10 +396,14 @@ limit.
 
 ### `engine/json_extraction.py` — extract_json
 
-Three-strategy extractor for JSON embedded in LLM prose:
+Three-strategy extractor for JSON embedded in LLM prose. The module is
+deliberately regex-free — fence detection uses `str.find` so an unterminated
+fence in untrusted input degrades to a linear scan instead of risking the
+polynomial backtracking a `.*?` pattern can incur under `DOTALL`:
 
 1. Raw `json.loads()` on stripped text.
-2. Regex to strip ` ```json ``` ` or generic ` ``` ``` ` markdown fences.
+2. Markdown code fences located with `str.find`: the first ` ```json ` fence,
+   then the first generic ` ``` ` fence whose body starts with `{` or `[`.
 3. Balanced-brace scan: finds the first `{` or `[`, tracks nesting depth while
    respecting string boundaries and escape sequences, extracts the substring
    ending at depth zero.
