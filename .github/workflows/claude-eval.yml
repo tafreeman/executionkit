@@ -1,0 +1,77 @@
+name: Claude-in-CI Eval
+
+# Advisory, model-judged eval tier: runs scripts/claude_ci_eval.py, which asks
+# the Claude Code CLI (headless `claude -p`) to judge whether each case in the
+# committed failure corpus (tests/eval_failure_cases.py) documents the right
+# expected behaviour. This is a DISTINCT tier from:
+#   - the deterministic golden suite (tests/test_eval_failure_corpus.py),
+#     which runs unconditionally in ci.yml and asserts ExecutionKit's own
+#     code, not a model's opinion of it;
+#   - the opt-in live-provider tiers in live-eval.yml / the `live-eval-pr`
+#     job in ci.yml, which call a real OpenAI-compatible endpoint.
+#
+# Like those live tiers, a flaky or unavailable model call must never block a
+# merge, so this workflow:
+#   - never runs on `push`/plain `pull_request` open/sync (only an explicit
+#     opt-in label, manual dispatch, or the weekly schedule);
+#   - is NEVER added to required status checks in branch protection;
+#   - skips cleanly (exit 0) when ANTHROPIC_API_KEY is absent — see the
+#     "Check secret presence" step below, which short-circuits before the
+#     eval step even attempts to run.
+#
+# To run on a PR: add the `run-claude-eval` label. GitHub does not replay
+# `labeled` events for jobs added after a label was first applied on a PR —
+# re-add the label or use workflow_dispatch if the job doesn't trigger.
+
+on:
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+  schedule:
+    - cron: "0 8 * * 1" # Mondays 08:00 UTC — same weekly cadence family as live-eval.yml's Monday run.
+
+permissions:
+  contents: read
+
+jobs:
+  claude-eval:
+    name: "Claude-in-CI eval (advisory, label/schedule-gated)"
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule' ||
+      (github.event_name == 'pull_request' &&
+       github.event.action == 'labeled' &&
+       github.event.label.name == 'run-claude-eval')
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install --require-hashes -r requirements.lock && pip install -e "." --no-deps
+
+      - name: Check secret presence
+        id: secret_check
+        run: |
+          if [ -n "$ANTHROPIC_API_KEY" ]; then
+            echo "has_key=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_key=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::ANTHROPIC_API_KEY not configured; claude-ci-eval will skip cleanly."
+          fi
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Install Claude Code CLI
+        if: steps.secret_check.outputs.has_key == 'true'
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Run Claude-in-CI eval
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python scripts/claude_ci_eval.py

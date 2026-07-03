@@ -19,6 +19,7 @@ Records follow the [MADR template](https://adr.github.io/madr/).
 | [ADR-010](010-optional-otel-span-emission.md) | importlib probe for optional OpenTelemetry integration | Accepted | 2026-06-18 |
 | [ADR-011](011-map-reduce-pattern.md) | gather_strict map phase with single reduce call | Accepted | 2026-06-18 |
 | [ADR-012](012-stdlib-mcp-server.md) | Stdlib-only stdio MCP server inside the package | Accepted | 2026-07-02 |
+| [ADR-013](013-claude-in-ci-eval.md) | Claude-in-CI eval tier via headless CLI | Accepted | 2026-07-02 |
 
 ## Format
 
