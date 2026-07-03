@@ -74,6 +74,12 @@ jobs:
             -v --no-cov -p no:cacheprovider --junitxml=live-eval-results.xml
 
       - name: Run LIVE_CORPUS (pytest -m live)
+        # !cancelled(): LIVE_CORPUS must execute even when the eval-tier step
+        # above fails — otherwise a calibration regression starves the corpus
+        # of real-endpoint runs entirely (this exact starvation happened on
+        # the 2026-06-15..29 schedule: three tier failures meant LIVE_CORPUS
+        # never ran once). The job still reports failure if either step fails.
+        if: ${{ !cancelled() }}
         run: |
           pytest -m live -v --no-cov -p no:cacheprovider --junitxml=live-corpus-results.xml
 

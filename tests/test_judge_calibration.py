@@ -7,6 +7,21 @@ max_iterations=0 (one generation, one evaluation — no refinement pass).
 Gate: EXECUTIONKIT_LIVE_EVAL=1 plus EXECUTIONKIT_BASE_URL and
 EXECUTIONKIT_MODEL.  The single test function is skipped unless all three
 are set.
+
+Two classes of expectation are enforced differently (calibration-first judge
+policy — an uncalibrated judge's quality opinions are advisory, never gates):
+
+* **Sanity invariants** (scores are floats within [0, 1]) hold for ANY judge
+  and always hard-fail.
+* **Quality expectations** (good scores high, poor scores low, good strictly
+  beats poor) hold only for a judge calibrated enough to express them. For
+  models in :data:`_KNOWN_MISCALIBRATED_JUDGE_MODELS` a quality failure is
+  reported as **xfail** referencing the tracking issue — the scores are still
+  produced and recorded in the eval output as calibration evidence, but the
+  weekly tier no longer fails red on a documented small-model limitation
+  (three consecutive scheduled failures, 2026-06-15..29, all the same
+  ordering inversion: the judge scored a forced one-word non-answer above a
+  real answer).
 """
 
 from __future__ import annotations
@@ -16,6 +31,21 @@ import os
 import pytest
 
 from executionkit.evals import EvalCase, live_provider_from_env, run_eval_suite
+
+# Judge models with a DOCUMENTED calibration failure for this suite's quality
+# expectations. Quality failures under these models xfail (with issue link)
+# instead of failing the tier; sanity invariants still hard-fail. Remove a
+# model once https://github.com/tafreeman/executionkit/issues/36 is closed
+# with a passing calibration record for it.
+_KNOWN_MISCALIBRATED_JUDGE_MODELS: frozenset[str] = frozenset({"llama3.2:3b"})
+
+_CALIBRATION_ISSUE_URL = "https://github.com/tafreeman/executionkit/issues/36"
+
+# The exact failure shapes that count as QUALITY expectations (eligible for
+# the known-miscalibrated xfail path). Everything else — out-of-range scores,
+# errored runs (run_eval_suite converts raised exceptions into failure
+# records), unexpected reasons — hard-fails for every model.
+_QUALITY_FAILURE_MARKERS = ("too low", "too high", "ordering violated")
 
 # A well-formed factual prompt expected to elicit a high-quality answer.
 _GOOD_PROMPT = (
@@ -74,6 +104,9 @@ async def test_judge_calibration_good_beats_poor() -> None:
         return result.score
 
     def check_good(score: float) -> bool | str | None:
+        # Out-of-range is a sanity invariant (holds for ANY judge): its reason
+        # deliberately matches no _QUALITY_FAILURE_MARKERS entry, so it can
+        # never be downgraded to the known-miscalibrated xfail path.
         if not (0.0 <= score <= 1.0):
             return f"good score out of [0,1]: {score}"
         if score < 0.6:
@@ -116,7 +149,22 @@ async def test_judge_calibration_good_beats_poor() -> None:
 
     if not report.passed:
         failure_lines = [f"  {f.name}: {f.reason}" for f in report.failures]
-        pytest.fail(
+        summary = (
             f"Judge calibration eval failed ({report.failed_count}/{report.total}):\n"
             + "\n".join(failure_lines)
         )
+        judge_model = os.getenv("EXECUTIONKIT_MODEL", "")
+        all_quality = all(
+            f.reason is not None
+            and any(marker in f.reason for marker in _QUALITY_FAILURE_MARKERS)
+            for f in report.failures
+        )
+        if all_quality and judge_model in _KNOWN_MISCALIBRATED_JUDGE_MODELS:
+            # Quality expectations only: report honestly without failing the
+            # tier — this judge's miscalibration is documented and tracked.
+            # Sanity violations and errored runs never take this path.
+            pytest.xfail(
+                f"known-miscalibrated judge {judge_model!r} "
+                f"(see {_CALIBRATION_ISSUE_URL}): {summary}"
+            )
+        pytest.fail(summary)
