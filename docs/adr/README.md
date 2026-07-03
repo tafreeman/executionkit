@@ -21,6 +21,7 @@ Records follow the [MADR template](https://adr.github.io/madr/).
 | [ADR-012](012-stdlib-mcp-server.md) | Stdlib-only stdio MCP server inside the package | Accepted | 2026-07-02 |
 | [ADR-013](013-claude-in-ci-eval.md) | Claude-in-CI eval tier via headless CLI | Accepted | 2026-07-02 |
 | [ADR-014](014-message-batches.md) | Anthropic Message Batches fan-out via stdlib HTTP | Accepted | 2026-07-03 |
+| [ADR-015](015-react-loop-tool-sandbox.md) | react_loop tool-execution sandbox contract | Accepted | 2026-07-03 |
 
 ## Format
 

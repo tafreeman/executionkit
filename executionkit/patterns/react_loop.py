@@ -48,6 +48,12 @@ _DEFAULT_MAX_ROUNDS: int = 8
 _DEFAULT_MAX_OBSERVATION_CHARS: int = 12_000
 _DEFAULT_TEMPERATURE: float = 0.3
 
+# Per-round ceiling on model-requested tool calls. Everything in a round runs
+# concurrently, so an unbounded round is an unbounded concurrent fan-out — a
+# buggy or adversarial model requesting hundreds of calls must hit a wall.
+# Generous relative to real models (typically < 10 parallel calls per turn).
+_DEFAULT_MAX_TOOL_CALLS_PER_ROUND: int = 32
+
 # Prefix prepended to the summarizer output when injected as a system message.
 _SUMMARY_PREFIX: str = "Summary of earlier conversation: "
 
@@ -428,6 +434,7 @@ def _validate_react_loop_args(
     tool_timeout: float | None,
     max_tokens: int,
     max_history_messages: int | None,
+    max_tool_calls_per_round: int,
 ) -> None:
     """Raise ValueError / TypeError for invalid react_loop arguments."""
     if not _provider_supports_tools(provider):
@@ -437,6 +444,10 @@ def _validate_react_loop_args(
         )
     if max_rounds < 1:
         raise ValueError(f"max_rounds must be >= 1, got {max_rounds}")
+    if max_tool_calls_per_round < 1:
+        raise ValueError(
+            f"max_tool_calls_per_round must be >= 1, got {max_tool_calls_per_round}"
+        )
     if max_observation_chars < 1:
         raise ValueError(
             f"max_observation_chars must be >= 1, got {max_observation_chars}"
@@ -483,6 +494,7 @@ async def _execute_tool_calls_round(
     metadata: dict[str, Any],
     messages: list[dict[str, Any]],
     *,
+    max_tool_calls_per_round: int = _DEFAULT_MAX_TOOL_CALLS_PER_ROUND,
     trace: TraceCallback | None = None,
     approval_gate: ApprovalGate | None = None,
     redact_trace_args: bool = True,
@@ -564,7 +576,13 @@ async def _execute_tool_calls_round(
         return tc, observation
 
     # Materialize once so the gather and the result loop iterate the same order.
-    calls = list(tool_calls)
+    all_calls = list(tool_calls)
+    # Bound the concurrent fan-out: everything past the per-round cap is never
+    # executed — it still receives a tool-role rejection observation below so
+    # the conversation stays well-formed (every tool_call_id must be answered),
+    # and the model can retry with fewer calls next round.
+    calls = all_calls[:max_tool_calls_per_round]
+    rejected_calls = all_calls[max_tool_calls_per_round:]
     # gather_resilient (return_exceptions=True): an UNEXPECTED raise inside a single
     # _run_one (e.g. an approval-gate or trace error) surfaces as a per-tool failure
     # rather than cancelling every sibling tool in the round. _run_one already maps
@@ -597,6 +615,22 @@ async def _execute_tool_calls_round(
             }
         )
 
+    # Rejected surplus calls were never executed (no start/end trace events);
+    # each still gets a tool-role answer so the transcript stays well-formed.
+    for tc in rejected_calls:
+        metadata["rejected_tool_calls"] = int(metadata["rejected_tool_calls"]) + 1
+        messages.append(
+            {
+                "role": "tool",
+                "tool_call_id": tc.id,
+                "content": (
+                    f"Tool call rejected: this round requested {len(all_calls)} "
+                    f"tool calls, exceeding the limit of "
+                    f"{max_tool_calls_per_round}. Retry with fewer calls."
+                ),
+            }
+        )
+
 
 async def react_loop(
     provider: ToolCallingProvider,
@@ -607,6 +641,7 @@ async def react_loop(
     max_rounds: int = _DEFAULT_MAX_ROUNDS,
     max_observation_chars: int = _DEFAULT_MAX_OBSERVATION_CHARS,
     tool_timeout: float | None = None,
+    max_tool_calls_per_round: int = _DEFAULT_MAX_TOOL_CALLS_PER_ROUND,
     temperature: float = _DEFAULT_TEMPERATURE,
     max_tokens: int = DEFAULT_MAX_TOKENS,
     max_cost: TokenUsage | None = None,
@@ -643,6 +678,10 @@ async def react_loop(
         max_observation_chars: Truncation limit for each tool result.
         tool_timeout: Per-call timeout override.  Falls back to
             ``tool.timeout`` if ``None``.
+        max_tool_calls_per_round: Ceiling on model-requested tool calls
+            executed in a single round (they run concurrently, so this bounds
+            the fan-out). Surplus calls are never executed; each receives a
+            rejection observation telling the model to retry with fewer.
         temperature: Sampling temperature (lower = more deterministic).
         max_tokens: Maximum tokens per LLM completion.
         max_cost: Optional token/call budget.
@@ -689,6 +728,8 @@ async def react_loop(
     Metadata:
         rounds (int): Number of think-act-observe cycles completed.
         tool_calls_made (int): Total individual tool invocations.
+        rejected_tool_calls (int): Model-requested calls never executed because
+            a round exceeded ``max_tool_calls_per_round``.
         truncated_responses (int): LLM responses truncated due to
             ``finish_reason=length``.
         truncated_observations (int): Tool results truncated due to
@@ -715,11 +756,13 @@ async def react_loop(
         tool_timeout,
         max_tokens,
         max_history_messages,
+        max_tool_calls_per_round,
     )
     tracker = CostTracker()
     metadata: dict[str, Any] = {
         "rounds": 0,
         "tool_calls_made": 0,
+        "rejected_tool_calls": 0,
         "truncated_responses": 0,
         "truncated_observations": 0,
         "messages_trimmed": 0,
@@ -785,6 +828,7 @@ async def react_loop(
             max_observation_chars,
             metadata,
             history,
+            max_tool_calls_per_round=max_tool_calls_per_round,
             trace=trace,
             approval_gate=approval_gate,
             redact_trace_args=redact_trace_args,
