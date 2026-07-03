@@ -96,10 +96,11 @@ select = ["E", "F", "W", "I", "N", "UP", "S", "B", "A", "C4", "SIM", "TCH", "RUF
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S101", "S105", "S106"]
-# S603 fires on some ruff versions for the subprocess round-trip test and not
-# on others; a config-level ignore satisfies both where an inline `# noqa`
+# S603 fires on some ruff versions for these fixed-argv subprocess calls and
+# not on others; a config-level ignore satisfies both where an inline `# noqa`
 # trips RUF100 (unused-noqa) on the versions that don't emit S603.
 "tests/mcp/test_mcp_stdio.py" = ["S603"]
+"scripts/claude_ci_eval.py" = ["S603"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["executionkit"]
