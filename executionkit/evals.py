@@ -20,13 +20,17 @@ if TYPE_CHECKING:
 # This named constant avoids magic numbers and makes the threshold auditable.
 #
 # This is a documented STARTING FLOOR chosen as a reasonable opt-in bar for a
-# small, hand-curated live corpus — it is NOT a number observed from running
-# any suite against a real endpoint (no such run has happened in this repo).
-# tests/test_eval_live_cases.py (LIVE_CORPUS, gated by @pytest.mark.live) uses
-# this same constant so there is exactly one committed live-accuracy threshold
-# to tune rather than several near-duplicate ones drifting apart over time.
-# Revisit once LIVE_CORPUS has run enough times in
-# .github/workflows/live-eval.yml to justify a data-backed value.
+# small, hand-curated live corpus. LIVE_CORPUS (tests/test_eval_live_cases.py,
+# gated by @pytest.mark.live) uses this same constant so there is exactly one
+# committed live-accuracy threshold to tune rather than several near-duplicate
+# ones drifting apart over time.
+#
+# Real-endpoint evidence: first executed 2026-07-03 against Ollama llama3.2:3b
+# in .github/workflows/live-eval.yml (gh run 28667089980 — the corpus met this
+# floor; junitxml uploaded as the live-corpus-results artifact). Earlier weekly
+# runs never reached LIVE_CORPUS because a judge-calibration failure aborted
+# the job first; the workflow now runs it regardless (if: !cancelled()).
+# Revisit the floor once several weekly runs justify a data-backed value.
 LIVE_EVAL_MIN_ACCURACY: float = 0.9
 
 EvalRun: TypeAlias = Callable[[], Awaitable[Any] | Any]
