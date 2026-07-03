@@ -13,6 +13,7 @@ from executionkit.approval import (
     ApprovalRequest,
     ApprovalTimeoutError,
 )
+from executionkit.batches import AnthropicBatchClient, consensus_batch, map_batch
 from executionkit.compose import PatternStep, pipe
 from executionkit.cost import CostTracker, estimate_cost
 from executionkit.engine.convergence import ConvergenceDetector
@@ -79,6 +80,7 @@ __version__ = "0.2.0"
 
 __all__ = [
     "DEFAULT_RETRY",
+    "AnthropicBatchClient",
     "ApprovalDecision",
     "ApprovalDeniedError",
     "ApprovalGate",
@@ -134,11 +136,13 @@ __all__ = [
     "checked_complete",
     "checked_stream",
     "consensus",
+    "consensus_batch",
     "consensus_sync",
     "emit_trace",
     "estimate_cost",
     "extract_json",
     "live_provider_from_env",
+    "map_batch",
     "map_reduce",
     "map_reduce_sync",
     "pipe",

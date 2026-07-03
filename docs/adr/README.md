@@ -20,6 +20,7 @@ Records follow the [MADR template](https://adr.github.io/madr/).
 | [ADR-011](011-map-reduce-pattern.md) | gather_strict map phase with single reduce call | Accepted | 2026-06-18 |
 | [ADR-012](012-stdlib-mcp-server.md) | Stdlib-only stdio MCP server inside the package | Accepted | 2026-07-02 |
 | [ADR-013](013-claude-in-ci-eval.md) | Claude-in-CI eval tier via headless CLI | Accepted | 2026-07-02 |
+| [ADR-014](014-message-batches.md) | Anthropic Message Batches fan-out via stdlib HTTP | Accepted | 2026-07-03 |
 
 ## Format
 

@@ -145,11 +145,14 @@ ExecutionKit also exposes small stdlib-only primitives for the glue code around 
 
 `python -m executionkit.mcp` starts a stdlib-only [Model Context Protocol](https://modelcontextprotocol.io) server over stdio (newline-delimited JSON-RPC 2.0) exposing two patterns as MCP tools: `consensus` and `react_loop` — the latter restricted to a fixed, side-effect-free demo toolset, so MCP callers cannot register arbitrary code ([ADR-012](docs/adr/012-stdlib-mcp-server.md)). The backing model resolves from the same `EXECUTIONKIT_BASE_URL` / `EXECUTIONKIT_MODEL` / `EXECUTIONKIT_API_KEY` env vars as the live-eval provider; without them the server still starts and answers `initialize`/`tools/list`, and `tools/call` returns a structured `isError` result naming the missing configuration. Only the `tools` capability is advertised — no runtime dependency was added (ADR-004 holds).
 
+## Message Batches fan-out
+
+For fan-outs where nobody is waiting on a socket, `consensus_batch()` and `map_batch()` (`executionkit/batches.py`) submit the samples as a single [Anthropic Message Batches](https://docs.anthropic.com/en/docs/build-with-claude/batch-processing) job over a stdlib `urllib` client — no new dependency (ADR-004 holds) — and poll until it ends. `consensus_batch` scores samples with the *same* `tally_votes` implementation as the live `consensus()` pattern (extracted to `engine/voting.py`), so the two transports cannot drift; `map_batch` returns responses in prompt order as the "map" half of a map-reduce. Any errored/expired batch entry raises rather than being silently dropped ([ADR-014](docs/adr/014-message-batches.md)). The live `consensus()` remains the right choice for latency-sensitive interactive calls.
+
 ## Deliberately out of scope / roadmap
 
 See [`CONTRIBUTING.md` — Anti-Scope](CONTRIBUTING.md#anti-scope) for what ExecutionKit rejects as a pattern library, not a framework. On top of that, as of v0.2.0:
 
-- **Anthropic Message Batches fan-out** — `consensus()`/`pipe()` fan out via `asyncio` concurrency today, not the batch API. Near-term roadmap, not shipped.
 - **RAG / embeddings / vector search** — deliberately out of scope. Retrieval belongs in the calling application or a dedicated vector store, not the reasoning-pattern layer.
 
 ## Built for Platform Teams

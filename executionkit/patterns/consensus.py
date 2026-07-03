@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import collections
-import re
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
@@ -12,12 +10,13 @@ from executionkit.cost import CostTracker
 from executionkit.engine.messages import user_message
 from executionkit.engine.parallel import gather_strict
 from executionkit.engine.retry import RetryConfig  # noqa: TC001
+from executionkit.engine.voting import tally_votes
 from executionkit.patterns.base import checked_complete
-from executionkit.provider import ConsensusFailedError, LLMProvider
 from executionkit.types import PatternResult, TokenUsage, VotingStrategy
 
 if TYPE_CHECKING:
     from executionkit.observability import TraceCallback
+    from executionkit.provider import LLMProvider
 
 
 _DEFAULT_TEMPERATURE: float = 0.9
@@ -25,11 +24,6 @@ _DEFAULT_TEMPERATURE: float = 0.9
 
 _DEFAULT_CONSENSUS_CONCURRENCY: int = 5
 """Default concurrency cap for consensus fan-out (smaller than engine default)."""
-
-
-def _normalize(text: str) -> str:
-    """Strip and collapse internal whitespace for voting comparison."""
-    return re.sub(r"\s+", " ", text.strip())
 
 
 async def consensus(
@@ -112,38 +106,20 @@ async def consensus(
 
     responses = await gather_strict(coros, max_concurrency=max_concurrency)
     contents = [r.content for r in responses]
-    normalized = [_normalize(c) for c in contents]
 
-    counter: collections.Counter[str] = collections.Counter(normalized)
-
-    if strategy == VotingStrategy.UNANIMOUS:
-        if len(counter) != 1:
-            raise ConsensusFailedError(
-                f"Unanimous consensus failed: {len(counter)} distinct responses "
-                f"from {num_samples} samples"
-            )
-        winner = contents[0]
-        agreement_ratio = 1.0
-        tie_count = 0
-    else:
-        # MAJORITY: pick the most common response
-        most_common = counter.most_common()
-        top_count = most_common[0][1]
-        tie_count = sum(1 for _, count in most_common if count == top_count)
-        winner_normalized = most_common[0][0]
-        winner_idx = normalized.index(winner_normalized)
-        winner = contents[winner_idx]
-        agreement_ratio = top_count / num_samples
+    # Voting semantics live in engine/voting.py, shared verbatim with the
+    # Message Batches fan-out (executionkit/batches.py).
+    tally = tally_votes(contents, strategy)
 
     return PatternResult[str](
-        value=winner,
-        score=agreement_ratio,
+        value=tally.winner,
+        score=tally.agreement_ratio,
         cost=tracker.to_usage(),
         metadata=MappingProxyType(
             {
-                "agreement_ratio": agreement_ratio,
-                "unique_responses": len(counter),
-                "tie_count": tie_count,
+                "agreement_ratio": tally.agreement_ratio,
+                "unique_responses": tally.unique_responses,
+                "tie_count": tally.tie_count,
             }
         ),
     )
