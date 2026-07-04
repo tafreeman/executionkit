@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 
 from executionkit import Provider, structured
@@ -19,3 +20,7 @@ async def main() -> None:
             "for ExecutionKit.",
         )
         print(result.value)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
