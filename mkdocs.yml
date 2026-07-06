@@ -23,19 +23,11 @@ validation:
 
 theme:
   name: material
+  # Console design system is a g100 dark-only language — no light scheme.
   palette:
-    - scheme: slate
-      primary: custom
-      accent: custom
-      toggle:
-        icon: material/brightness-4
-        name: Switch to light mode
-    - scheme: default
-      primary: custom
-      accent: custom
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
+    scheme: slate
+    primary: black
+    accent: cyan
   features:
     - navigation.tabs
     - navigation.sections
@@ -49,13 +41,16 @@ theme:
     - content.tabs.link
   icon:
     repo: fontawesome/brands/github
+  font:
+    text: IBM Plex Sans
+    code: IBM Plex Mono
   # Note: social cards are NOT enabled here. To generate og:image/Twitter card
   # meta tags, add the 'social' plugin under `plugins:` and install cairosvg+pillow.
 
 extra_css:
-  - stylesheets/tokens.css   # design-token variables — must load before ember.css
-  - stylesheets/extra.css    # legacy overrides (loaded before ember so ember wins)
-  - stylesheets/ember.css    # ember/console design layer — must be last to win cascade
+  - stylesheets/tokens.css
+  - stylesheets/console.css
+  - stylesheets/landing.css
 
 plugins:
   - search

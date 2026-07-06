@@ -1,0 +1,416 @@
+/*
+  Agentic Runtime Platform — landing page components (Console)
+
+  Components used by docs/index.md, composed from the Console design
+  system: cinematic hero under a scrim, mono eyebrows, Carbon tiles
+  (square, hairline, flat), tag pills, and the horizon rule (styled
+  globally on `hr` in console.css). No glows, no gradients in chrome,
+  no rounded corners — status dots and tag pills are the only circles.
+
+  Note on units: MkDocs Material sets a 20px root, so px-true sizes are
+  written as scaled rem here rather than the tokens' composite styles.
+*/
+
+/* ============================================================
+   1. Hero — cinematic imagery, bottom-anchored content on a scrim
+   ============================================================ */
+
+.console-hero {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  margin: 0 0 0.2rem;
+  border: 1px solid var(--border-subtle-00);
+  border-radius: var(--radius-0);
+  /* Restrained: void black with a dim trace of the brand imagery on the
+     right edge — the content carries the hero, not the backdrop. */
+  background:
+    linear-gradient(90deg,
+      var(--void) 0%,
+      rgba(0, 0, 0, 0.94) 55%,
+      rgba(0, 0, 0, 0.68) 100%),
+    url("../assets/hero-cinematic.jpg") right center / cover no-repeat,
+    var(--void);
+  overflow: hidden;
+}
+
+.console-hero .hero-inner {
+  position: relative;
+  z-index: 1;
+  padding: 2.4rem 2rem 1.6rem;
+  max-width: 46rem;
+}
+
+.hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.8rem;
+  margin-bottom: 0.9rem;
+}
+
+.hero-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--horizon-30);
+}
+
+.console-hero h1 {
+  font-family: var(--font-sans);
+  font-size: clamp(1.7rem, 4.5vw, 2.7rem);
+  font-weight: var(--fw-light);
+  letter-spacing: var(--tracking-display);
+  line-height: 1.13;
+  color: var(--text-primary);
+  margin: 0 0 0.8rem;
+}
+
+.console-hero .hero-sub {
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  letter-spacing: var(--tracking-body);
+  line-height: 1.5;
+  color: var(--text-secondary);
+  max-width: 34rem;
+  margin: 0 0 1.3rem;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin: 0 0 1.4rem;
+}
+
+.hero-actions .md-button {
+  margin: 0;
+}
+
+/* Status tag — outline tag with a live dot (dots: the only circles) */
+.status-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: 1.1rem;
+  padding: 0 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: var(--tracking-caption);
+  border: 1px solid var(--border-strong-01);
+  border-radius: var(--radius-full);
+  color: var(--green-30);
+  background: transparent;
+  text-transform: uppercase;
+}
+
+.status-tag::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--support-success);
+  animation: status-breathe 700ms var(--ease-expressive) infinite alternate;
+}
+
+@keyframes status-breathe {
+  from { opacity: 1; }
+  to   { opacity: 0.45; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-tag::before { animation: none; }
+}
+
+/* Terminal line — code-02 on a near-black field */
+.term {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: var(--tracking-caption);
+  line-height: 1.6;
+  color: var(--text-secondary);
+  background: rgba(0, 0, 0, 0.7);
+  border: 1px solid var(--border-subtle-00);
+  border-radius: var(--radius-0);
+  padding: 0.5em 0.9em;
+  margin: 0;
+  max-width: 100%;
+}
+
+.term .term-prompt { color: var(--horizon-40); user-select: none; }
+.term .term-cmd    { color: var(--text-primary); }
+.term .term-comment { color: var(--text-helper); }
+
+/* ============================================================
+   2. Stack tags — outline tag pills in a hairline-topped row
+   ============================================================ */
+
+.trusted-stack {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 2.6rem;
+  padding: 0.8rem 0 0;
+}
+
+.trusted-stack span {
+  display: inline-flex;
+  align-items: center;
+  height: 1.1rem;
+  padding: 0 0.5rem;
+  border: 1px solid var(--border-strong-01);
+  border-radius: var(--radius-full);
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: var(--tracking-caption);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* ============================================================
+   3. Section kickers and forward links
+   ============================================================ */
+
+.section-kicker {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-helper);
+  margin: 3rem 0 0;
+}
+
+.md-typeset .section-kicker + h2 {
+  margin-top: 0.3rem;
+}
+
+.md-typeset a.link-forward {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: var(--tracking-caption);
+}
+
+.md-typeset a.link-forward::after {
+  content: " →";
+}
+
+/* ============================================================
+   4. Feature grid — Carbon tiles
+   ============================================================ */
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 0.8rem;
+  margin: 1.4rem 0 1rem;
+}
+
+.feature-card {
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+  background: var(--layer-01);
+  border: 1px solid var(--border-subtle-00);
+  border-radius: var(--radius-0);
+  transition: background-color var(--duration-fast-02) var(--ease-productive),
+              border-color var(--duration-fast-02) var(--ease-productive);
+}
+
+.feature-card:hover {
+  background: var(--layer-hover-01);
+}
+
+.fc-icon {
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  margin-bottom: 0.7rem;
+  color: var(--icon-secondary);
+}
+
+.fc-icon svg {
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
+}
+
+.md-typeset .fc-title {
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  font-weight: var(--fw-regular);
+  line-height: 1.4;
+  color: var(--text-primary);
+  margin: 0 0 0.45rem;
+}
+
+.md-typeset .feature-card .fc-body {
+  flex: 1;
+  font-size: 0.7rem;
+  letter-spacing: var(--tracking-body);
+  line-height: 1.45;
+  color: var(--text-secondary);
+  margin: 0 0 0.8rem;
+}
+
+.md-typeset a.fc-link {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: var(--tracking-caption);
+}
+
+.md-typeset a.fc-link::after {
+  content: " →";
+}
+
+/* Engineering-practice variant: four cards as a deliberate 2×2 */
+.feature-grid.practice-grid {
+  grid-template-columns: repeat(auto-fit, minmax(21rem, 1fr));
+}
+
+/* ============================================================
+   5. Stat strip — data callouts, hairline column dividers
+   ============================================================ */
+
+.stat-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  margin: 1.5rem 0 1rem;
+  border-top: 1px solid var(--border-subtle-00);
+  border-bottom: 1px solid var(--border-subtle-00);
+}
+
+.stat-strip .stat-item {
+  padding: 1rem 1rem 1.1rem;
+  border-left: 1px solid var(--border-subtle-00);
+}
+
+.stat-strip .stat-item:first-child {
+  border-left: none;
+}
+
+.stat-strip .stat-value {
+  font-family: var(--font-mono);
+  font-size: 1.4rem;
+  font-weight: var(--fw-regular);
+  line-height: 1.1;
+  color: var(--text-highlight);
+  margin-bottom: 0.3rem;
+}
+
+.stat-strip .stat-label {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-helper);
+}
+
+/* ============================================================
+   6. Documentation nav cards — tiles with mono headers
+   ============================================================ */
+
+.doc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  gap: 0.8rem;
+  margin: 1.4rem 0 1rem;
+}
+
+.doc-card {
+  padding: 1rem 1.1rem;
+  background: var(--layer-01);
+  border: 1px solid var(--border-subtle-00);
+  border-radius: var(--radius-0);
+}
+
+.md-typeset .dc-title {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: var(--fw-regular);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-helper);
+  border-bottom: 1px solid var(--border-subtle-00);
+  padding-bottom: 0.5rem;
+  margin: 0 0 0.7rem;
+}
+
+.md-typeset .doc-card ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.md-typeset .doc-card ul li {
+  margin: 0 0 0.5rem;
+  padding: 0;
+  font-size: 0.68rem;
+  letter-spacing: var(--tracking-body);
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.md-typeset .doc-card ul li:last-child {
+  margin-bottom: 0;
+}
+
+/* ============================================================
+   7. CTA card — selected-tile pattern (3px horizon left bar)
+   ============================================================ */
+
+.cta-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 3rem 0 1rem;
+  padding: 1.4rem 1.6rem;
+  background: var(--layer-01);
+  border: 1px solid var(--border-subtle-00);
+  border-left: 3px solid var(--horizon-40);
+  border-radius: var(--radius-0);
+}
+
+.md-typeset .cta-card h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: var(--fw-regular);
+  color: var(--text-primary);
+}
+
+.md-typeset .cta-card p {
+  margin: 0;
+  max-width: 34rem;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+
+/* ============================================================
+   8. Mobile
+   ============================================================ */
+
+@media (max-width: 600px) {
+  .console-hero .hero-inner {
+    padding: 3rem 1rem 1.2rem;
+  }
+
+  .console-hero h1 {
+    font-size: 1.5rem;
+  }
+
+  .term {
+    font-size: 0.58rem;
+  }
+
+  .stat-strip .stat-value {
+    font-size: 1.1rem;
+  }
+
+  .cta-card {
+    padding: 1.1rem 1rem;
+  }
+}
