@@ -102,10 +102,12 @@ Key modules:
 |--------|------|
 | `provider.py` | `LLMProvider` protocol, `Provider` class, error hierarchy |
 | `types.py` | Frozen value types (`PatternResult`, `TokenUsage`, `Tool`) |
-| `patterns/` | `consensus`, `refine_loop`, `react_loop` |
-| `engine/` | `ConvergenceDetector`, retry, parallel, JSON extraction |
+| `patterns/` | `consensus`, `refine_loop`, `react_loop`, `structured`, `map_reduce` |
+| `engine/` | `ConvergenceDetector`, retry, parallel, JSON extraction, messages, rate bucket, voting |
 | `compose.py` | `pipe()` composition |
 | `kit.py` | `Kit` session facade |
+| `batches.py` | Anthropic Message Batches transport (`consensus_batch`, `map_batch`) |
+| `mcp/` | stdlib stdio MCP server (`python -m executionkit.mcp`) |
 
 ## Commit Convention
 

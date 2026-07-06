@@ -120,6 +120,7 @@ See the [Quick Start guide](https://tafreeman.github.io/executionkit/getting-sta
 | **[ReAct Tool Loop](https://tafreeman.github.io/executionkit/patterns/react-loop/)** | Think-act-observe loop with progressive structured-output guardrails: a dependency-free subset validator runs first, and a full JSON-Schema check layers on when `jsonschema` is installed — failing closed on schemas the subset validator can't express rather than under-validating. |
 | **[Structured Output](https://tafreeman.github.io/executionkit/patterns/structured/)** | Parse JSON responses with custom validators and automatic repair retries. |
 | **[Pipe](https://tafreeman.github.io/executionkit/patterns/pipe/)** | Chain patterns end-to-end with a shared budget. |
+| **[Map-Reduce](https://tafreeman.github.io/executionkit/patterns/map-reduce/)** | Fan out over a collection of inputs in parallel, process each independently, then reduce to a single answer. |
 
 ## Lightweight primitives
 

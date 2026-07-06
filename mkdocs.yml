@@ -107,6 +107,7 @@ nav:
       - ReAct Tool Loop: patterns/react-loop.md
       - Structured Output: patterns/structured.md
       - Pipe (Composition): patterns/pipe.md
+      - Map-Reduce: patterns/map-reduce.md
   - Recipes:
       - Multi-provider failover: recipes/failover.md
       - Cost-aware routing: recipes/cost-routing.md

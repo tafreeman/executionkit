@@ -17,6 +17,9 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - Add an optional `summarizer=` hook to `react_loop` that compresses history dropped by `max_history_messages` trimming into a system note for the active window (the stored transcript is unchanged); a `summarized` count is reported in metadata
 - `react_loop` checkpoint state now includes the running `messages` transcript, enabling conversation-level resume
 - Add a "Building a conversational assistant" recipe (`docs/recipes/assistant.md`) covering stateful turns, `structured()` intent/slot NLU, the streaming limitation, and `ConversationScript` evals
+- Add the `map_reduce()` pattern — parallel fan-out over a collection of inputs, each processed independently, then reduced to a single answer (ADR-011)
+- Add a stdlib-only MCP server — `python -m executionkit.mcp` speaks newline-delimited JSON-RPC 2.0 over stdio and exposes `consensus` and a demo-toolset-restricted `react_loop` as MCP tools (ADR-012)
+- Add Anthropic Message Batches fan-out — `consensus_batch()` and `map_batch()` submit samples as a single batch job over a stdlib `urllib` client and score with the same `tally_votes` as the live `consensus()` pattern (ADR-014)
 
 ### Changed
 

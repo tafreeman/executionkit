@@ -36,6 +36,7 @@ shape every design decision:
 ```
 executionkit/
 ├── __init__.py          — public API surface; sync wrappers
+├── _constants.py        — shared default constants (max tokens, concurrency)
 ├── types.py             — frozen value types: PatternResult, TokenUsage, Tool, VotingStrategy, Evaluator
 ├── errors.py            — 9-class exception hierarchy (F-06: extracted from provider.py)
 ├── provider.py          — LLMProvider protocol, ToolCallingProvider protocol,
@@ -47,6 +48,9 @@ executionkit/
 ├── compose.py           — pipe() composition helper, PatternStep protocol
 ├── kit.py               — Kit session facade (provider + cumulative usage)
 ├── _mock.py             — MockProvider test double (satisfies both protocols)
+├── batches.py           — consensus_batch() / map_batch() over Anthropic Message
+│                          Batches via stdlib urllib; shares tally_votes with the
+│                          live consensus pattern (ADR-014)
 ├── evals.py             — deterministic golden evals and env-gated live eval helper
 ├── observability.py     — TraceEvent, TraceCallback, and async trace emission
 ├── routing.py           — Router and RouteRule provider selection primitives
@@ -59,14 +63,24 @@ executionkit/
 │   │                      if-chains (F-05/F-08); _TrackedProvider.supports_tools delegates
 │   │                      to wrapped provider via getattr (F-04)
 │   ├── consensus.py     — parallel majority/unanimous voting
+│   ├── map_reduce.py    — parallel fan-out map over many inputs + single reduce (ADR-011)
 │   ├── refine_loop.py   — iterative score-guided refinement
 │   ├── react_loop.py    — tool-calling think-act-observe loop
 │   └── structured.py    — JSON extraction, validation, and repair retries
-└── engine/
-    ├── convergence.py   — ConvergenceDetector (delta + patience)
-    ├── retry.py         — RetryConfig, with_retry() exponential backoff
-    ├── parallel.py      — gather_strict() / gather_resilient() semaphore wrappers
-    └── json_extraction.py — extract_json() multi-strategy JSON parser
+├── engine/
+│   ├── convergence.py   — ConvergenceDetector (delta + patience)
+│   ├── retry.py         — RetryConfig, with_retry() exponential backoff
+│   ├── parallel.py      — gather_strict() / gather_resilient() semaphore wrappers
+│   ├── json_extraction.py — extract_json() multi-strategy JSON parser
+│   ├── messages.py      — message-construction helpers (system/tool/assistant shapes)
+│   ├── rate_bucket.py   — TokenBucket adaptive rate-limit strategy
+│   └── voting.py        — pure vote tallying shared by consensus() and batches.py
+└── mcp/
+    ├── __main__.py      — entry point: python -m executionkit.mcp
+    ├── _constants.py    — named protocol constants for the MCP server
+    ├── _demo_tools.py   — fixed, side-effect-free demo toolset for the react_loop MCP tool
+    ├── server.py        — stdlib stdio MCP server, newline-delimited JSON-RPC 2.0 (ADR-012)
+    └── tools.py         — MCP tool definitions and dispatch
 ```
 
 ### Dependency graph (arrows = "imports from")
@@ -85,15 +99,21 @@ patterns/consensus  ──► cost, engine/parallel, engine/retry, patterns/base
 patterns/refine_loop ──► cost, engine/convergence, engine/retry, patterns/base, provider, types
 patterns/react_loop  ──► approval, cost, engine/retry, patterns/base, provider, types, observability
 patterns/structured  ──► engine/json_extraction, engine/retry, patterns/base, provider, types
+patterns/map_reduce  ──► _constants, cost, engine/messages, engine/parallel, engine/retry, patterns/base, provider, types
+batches   ──► _constants, engine/messages, engine/voting, errors, types
 provider  ──► types, errors  (re-exports all 9 error classes from errors.py)
 errors    ──► types
 cost      ──► types
 engine/*  ──► provider (retry only)
+engine/voting ──► errors, types
+mcp/server ──► executionkit (public API), mcp/_constants, mcp/tools
 ```
 
 The dependency flows strictly downward. No engine module imports a pattern;
 no types module imports provider details. This keeps the layering clean and
-prevents circular imports.
+prevents circular imports. The one deliberate exception is `mcp/`, which sits
+*above* the package: it is an adapter that imports the public API to expose
+patterns as MCP tools, and nothing in the package imports it back.
 
 ---
 
