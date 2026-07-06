@@ -1,0 +1,430 @@
+/*
+  Agentic Runtime Platform — Console design system overlay
+  Maps Console tokens (tokens.css) onto MkDocs Material's CSS custom
+  properties and chrome. Console is a g100 dark-only language: square
+  corners, 1px hairline borders, flat elevation (no glows), IBM Plex,
+  horizon cyan as the single interactive hue.
+
+  Token source: docs/stylesheets/tokens.css (verbatim copy of the
+  Console Design System project's tokens/).
+*/
+
+@import url("tokens.css");
+
+/* ============================================================
+   1. Map Console tokens → MkDocs Material CSS properties
+   ============================================================ */
+
+[data-md-color-scheme="slate"],
+[data-md-color-scheme="default"] {
+  /* Core surface */
+  --md-default-bg-color:           var(--background);   /* #161616 */
+  --md-default-bg-color--light:    var(--layer-01);     /* #262626 */
+  --md-default-bg-color--lighter:  var(--layer-02);     /* #393939 */
+  --md-default-bg-color--lightest: var(--gray-90);
+
+  /* Foreground / text */
+  --md-default-fg-color:           var(--text-primary);   /* #f4f4f4 */
+  --md-default-fg-color--light:    var(--text-secondary); /* #e0e0e0 */
+  --md-default-fg-color--lighter:  var(--text-helper);    /* #c6c6c6 */
+  --md-default-fg-color--lightest: var(--border-subtle-00);
+
+  /* Horizon accent (primary) */
+  --md-primary-fg-color:           var(--interactive);        /* #33b1ff */
+  --md-primary-fg-color--light:    var(--horizon-30);
+  --md-primary-fg-color--dark:     var(--interactive-active);
+  --md-primary-bg-color:           var(--text-on-color);
+  --md-primary-bg-color--light:    rgba(0, 0, 0, 0.75);
+
+  /* Accent interactive */
+  --md-accent-fg-color:            var(--interactive);
+  --md-accent-fg-color--transparent: var(--background-hover);
+  --md-accent-bg-color:            var(--text-on-color);
+
+  /* Typeset */
+  --md-typeset-a-color:            var(--link-primary);
+  --md-typeset-color:              var(--text-primary);
+  --md-typeset-mark-color:         rgba(241, 194, 27, 0.24); /* yellow-30 */
+  --md-typeset-kbd-color:          var(--layer-01);
+  --md-typeset-kbd-border-color:   var(--border-subtle-00);
+  --md-typeset-kbd-accent-color:   var(--text-helper);
+  --md-typeset-table-color:        var(--border-subtle-00);
+
+  /* Code blocks — Carbon g100 syntax roles */
+  --md-code-bg-color:              var(--layer-01);
+  --md-code-hl-color:              var(--background-selected);
+  --md-code-fg-color:              var(--text-primary);
+  --md-code-hl-keyword-color:      var(--syntax-keyword);
+  --md-code-hl-string-color:       var(--syntax-string);
+  --md-code-hl-comment-color:      var(--syntax-comment);
+  --md-code-hl-number-color:       var(--syntax-number);
+  --md-code-hl-function-color:     var(--syntax-function);
+  --md-code-hl-operator-color:     var(--syntax-punctuation);
+
+  /* Admonitions */
+  --md-admonition-fg-color:        var(--text-primary);
+  --md-admonition-bg-color:        var(--layer-01);
+
+  /* Feedback */
+  --md-feedback-fg-color:          var(--text-secondary);
+  --md-feedback-bg-color:          var(--layer-01);
+
+  /* Footer */
+  --md-footer-bg-color:            var(--void);
+  --md-footer-bg-color--dark:      var(--void);
+  --md-footer-fg-color:            var(--text-secondary);
+  --md-footer-fg-color--light:     var(--text-helper);
+  --md-footer-fg-color--lighter:   var(--border-subtle-00);
+}
+
+::selection {
+  background: var(--horizon-40);
+  color: var(--black);
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+/* ============================================================
+   2. Top navigation — near-black bar, hairline edge
+   ============================================================ */
+
+.md-header {
+  background: rgba(0, 0, 0, 0.85);
+  border-bottom: 1px solid var(--border-subtle-00);
+  box-shadow: none;
+}
+
+.md-header__title {
+  font-family: var(--font-mono);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0;
+  color: var(--text-primary);
+}
+
+/* Nav tabs — mono, active gets the 2px horizon bottom bar */
+.md-tabs {
+  background: var(--void);
+  border-bottom: 1px solid var(--border-subtle-00);
+}
+
+.md-tabs__link {
+  color: var(--text-helper);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: var(--tracking-caption);
+  transition: color var(--duration-fast-02) var(--ease-productive),
+              box-shadow var(--duration-fast-02) var(--ease-productive);
+}
+
+.md-tabs__link:hover {
+  color: var(--text-primary);
+}
+
+.md-tabs__item--active .md-tabs__link,
+.md-tabs__link--active {
+  color: var(--text-primary);
+  box-shadow: inset 0 -2px 0 var(--horizon-40);
+}
+
+/* ============================================================
+   3. Sidebar navigation — mono labels, horizon active rail
+   ============================================================ */
+
+.md-sidebar {
+  background: var(--background);
+}
+
+.md-nav__title {
+  background: transparent;
+  color: var(--text-helper);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: var(--fw-regular);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.md-nav__link {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: var(--tracking-caption);
+  transition: color var(--duration-fast-02) var(--ease-productive);
+}
+
+.md-nav__link:hover {
+  color: var(--text-primary);
+}
+
+.md-nav__link--active {
+  color: var(--horizon-40);
+  box-shadow: inset 3px 0 0 var(--horizon-40);
+  padding-left: var(--spacing-03);
+}
+
+/* ============================================================
+   4. Content typeset — Plex Sans body, Carbon headings
+   ============================================================ */
+
+.md-content {
+  background: var(--background);
+}
+
+.md-typeset {
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 0.78rem; /* body-01 at Material's 20px root */
+  letter-spacing: var(--tracking-body);
+  line-height: 1.5;
+}
+
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3,
+.md-typeset h4,
+.md-typeset h5,
+.md-typeset h6 {
+  font-family: var(--font-sans);
+  color: var(--text-primary);
+}
+
+.md-typeset h1 {
+  font-size: 2.1rem;               /* heading-06 */
+  font-weight: var(--fw-light);
+  letter-spacing: var(--tracking-display);
+  line-height: 1.2;
+  margin-bottom: 0.6rem;
+}
+
+.md-typeset h2 {
+  font-size: 1.4rem;               /* heading-05 */
+  font-weight: var(--fw-regular);
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  border-bottom: 1px solid var(--border-subtle-00);
+  padding-bottom: 0.35rem;
+  margin-top: 2.2rem;
+}
+
+.md-typeset h3 {
+  font-size: 1rem;                 /* heading-03 */
+  font-weight: var(--fw-regular);
+  line-height: 1.4;
+}
+
+.md-typeset h4 {
+  font-size: 0.8rem;               /* heading-02 */
+  font-weight: var(--fw-semibold);
+}
+
+.md-typeset a {
+  color: var(--link-primary);
+  text-decoration: none;
+  transition: color var(--duration-fast-02) var(--ease-productive);
+}
+
+.md-typeset a:hover {
+  color: var(--link-primary-hover);
+  text-decoration: underline;
+}
+
+/* Horizontal rule = the horizon rule, the brand's signature edge */
+.md-typeset hr {
+  height: 1px;
+  border: none;
+  background: var(--gradient-horizon);
+  margin: 3rem 0;
+}
+
+/* Inline code — mono on layer, square */
+.md-typeset code {
+  background: var(--layer-01);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle-00);
+  border-radius: var(--radius-0);
+  font-family: var(--font-mono);
+  font-size: 0.84em;
+  letter-spacing: var(--tracking-caption);
+  padding: 0.1em 0.4em;
+}
+
+/* Code blocks — flat layer, hairline, no shadow */
+.md-typeset pre {
+  background: var(--layer-01);
+  border: 1px solid var(--border-subtle-00);
+  border-radius: var(--radius-0);
+  box-shadow: none;
+}
+
+.md-typeset pre > code {
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 0.7rem; /* code-02 */
+  line-height: 1.43;
+  padding: 0.8rem 1rem;
+}
+
+/* Tables — Carbon data table: mono headers, hairline rows, square */
+.md-typeset table:not([class]) {
+  border: 1px solid var(--border-subtle-00);
+  border-radius: var(--radius-0);
+  box-shadow: none;
+  font-size: 0.7rem;
+}
+
+.md-typeset table:not([class]) th {
+  background: var(--layer-01);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border-strong-01);
+}
+
+.md-typeset table:not([class]) td {
+  border-top: 1px solid var(--border-subtle-00);
+  color: var(--text-secondary);
+}
+
+.md-typeset table:not([class]) tr:hover td {
+  background: var(--layer-hover-01);
+}
+
+/* Admonitions — layer + 3px status bar, square */
+.md-typeset .admonition,
+.md-typeset details {
+  background: var(--layer-01);
+  border: 1px solid var(--border-subtle-00);
+  border-radius: var(--radius-0);
+  box-shadow: none;
+}
+
+.md-typeset .admonition-title,
+.md-typeset summary {
+  background: var(--layer-02);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-caption);
+  text-transform: uppercase;
+}
+
+.md-typeset .admonition.note,
+.md-typeset details.note,
+.md-typeset .admonition.info,
+.md-typeset details.info {
+  border-left: 3px solid var(--support-info);
+}
+
+.md-typeset .admonition.tip,
+.md-typeset details.tip,
+.md-typeset .admonition.success,
+.md-typeset details.success {
+  border-left: 3px solid var(--support-success);
+}
+
+.md-typeset .admonition.warning,
+.md-typeset details.warning {
+  border-left: 3px solid var(--support-warning);
+}
+
+.md-typeset .admonition.danger,
+.md-typeset details.danger,
+.md-typeset .admonition.failure,
+.md-typeset details.failure {
+  border-left: 3px solid var(--support-error);
+}
+
+/* Search — Carbon field */
+.md-search__form {
+  background: var(--field-01);
+  border: 1px solid var(--border-subtle-00);
+  border-radius: var(--radius-0);
+  box-shadow: none;
+}
+
+.md-search__form:focus-within {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+  border-color: transparent;
+}
+
+.md-search__input {
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+
+.md-search__input::placeholder {
+  color: var(--text-placeholder);
+}
+
+/* ============================================================
+   5. Buttons — Carbon button pair (primary fill / secondary outline)
+   ============================================================ */
+
+.md-typeset .md-button {
+  background: transparent;
+  border: 1px solid var(--gray-10);
+  border-radius: var(--radius-0);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
+  font-weight: var(--fw-regular);
+  letter-spacing: var(--tracking-body);
+  padding: 0.62em 1.3em;
+  transition: background-color var(--duration-fast-02) var(--ease-productive),
+              border-color var(--duration-fast-02) var(--ease-productive),
+              color var(--duration-fast-02) var(--ease-productive);
+}
+
+.md-typeset .md-button:hover {
+  background: var(--gray-10);
+  border-color: var(--gray-10);
+  color: var(--text-inverse);
+  text-decoration: none;
+}
+
+.md-typeset .md-button--primary {
+  background: var(--interactive);
+  border-color: transparent;
+  color: var(--text-on-color);
+}
+
+.md-typeset .md-button--primary:hover {
+  background: var(--interactive-hover);
+  border-color: transparent;
+  color: var(--text-on-color);
+}
+
+/* ============================================================
+   6. Footer — void black, hairline top
+   ============================================================ */
+
+.md-footer {
+  background: var(--void);
+  border-top: 1px solid var(--border-subtle-00);
+}
+
+.md-footer-meta {
+  background: var(--void);
+}
+
+.md-footer__link {
+  color: var(--text-secondary);
+  transition: color var(--duration-fast-02) var(--ease-productive);
+}
+
+.md-footer__link:hover {
+  color: var(--link-primary);
+}
+
+/* Landing page components (hero, tiles, stat strip, doc cards) live in
+   landing.css — loaded after this file via mkdocs.yml extra_css. */

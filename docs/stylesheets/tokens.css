@@ -1,272 +1,297 @@
 /*
-  Andy Freeman Portfolio — Design Tokens
-  Brand: AI engineering portfolio. Linear-inspired dark theme as primary,
-  Paper & Ink editorial as secondary print/light surface.
-  Source: decks-generated/src/tokens/themes.ts (Linear, Paper & Ink themes)
+  Agentic Runtime Platform — Console design system tokens
+  Source: Console Design System (claude.ai/design project e0885419) —
+  IBM Carbon v11 base (g100 dark theme, Plex type, 8px spacing scale)
+  with the horizon-cyan accent spectrum. Copied verbatim from the design
+  project's tokens/; keep in sync with the design project, do not fork
+  values locally.
 */
 
-@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=DM+Serif+Display&display=swap");
-/* Note: Inter was removed — it is not referenced by any font token (--font-body/display/mono all use JetBrains Mono). */
+/* Console — webfonts
+   IBM Plex loaded from Google Fonts CDN (no binaries were provided).
+   Weights: Sans 300/400/450/600 · Mono 400/600 · Serif 300/400 italic */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;450;600&family=IBM+Plex+Serif:ital,wght@0,300;0,400;1,300;1,400&display=swap');
+
+/* ============================================================
+   Console — Color tokens
+   Base palette: IBM Carbon v11 (gray / cyan / teal / support scales)
+   Theme: g100-derived dark theme with a cool "event horizon"
+   accent replacing Carbon blue as the interactive hue.
+   ============================================================ */
 
 :root {
-  /* ============ PRIMARY: Console (near-black + clay) ============ */
-  /* Lifted from the Prompts UI / repo social-preview cards */
-  --bg:           #08080c;
-  --bg-deep:      #050507;
-  --surface:      #101018;
-  --surface-2:    #16161e;
-  --surface-deep: #0a0a10;
+  /* ---- Base palette (Carbon scales, exact values) ---- */
+  --black: #000000;
+  --white: #ffffff;
 
-  --border:       #2c2c36;
-  --border-soft:  #1d1d26;
+  --gray-10: #f4f4f4;
+  --gray-20: #e0e0e0;
+  --gray-30: #c6c6c6;
+  --gray-40: #a8a8a8;
+  --gray-50: #8d8d8d;
+  --gray-60: #6f6f6f;
+  --gray-70: #525252;
+  --gray-80: #393939;
+  --gray-90: #262626;
+  --gray-100: #161616;
+  --gray-90-hover: #333333;
+  --gray-80-hover: #474747;
+  --gray-70-hover: #636363;
 
-  /* Text hierarchy */
-  --fg-1:         #ececde;  /* primary cream */
-  --fg-2:         #8a8a82;  /* muted / supporting */
-  --fg-3:         #50504a;  /* dim / decorative */
-  --fg-on-accent: #0a0a10;
+  /* Horizon (Carbon cyan scale) — the event-horizon accent, cool & sleek */
+  --horizon-20: #bae6ff;
+  --horizon-30: #82cfff;
+  --horizon-40: #33b1ff;
+  --horizon-50: #1192e8;
+  --horizon-60: #0072c3;
+  --horizon-70: #00539a;
+  --horizon-40-hover: #059fff;
+  --horizon-50-hover: #0f7ec8;
 
-  /* Brand accent — clay / ember */
-  --accent:       #d97757;
-  --accent-hover: #e48970;
-  --accent-press: #b8603f;
-  --accent-glow:  rgba(217, 119, 87, 0.22);
-  --accent-soft:  rgba(217, 119, 87, 0.10);
-  --accent-2:     #e8a285;  /* warm gradient pair */
-  --gradient-brand: linear-gradient(135deg, #d97757 0%, #e8a285 100%);
+  /* Support hues (Carbon) */
+  --red-40: #ff8389;
+  --red-50: #fa4d56;
+  --green-30: #6fdc8c;
+  --green-40: #42be65;
+  --yellow-30: #f1c21b;
+  --blue-50: #4589ff;
+  --blue-40: #78a9ff;
+  --purple-40: #be95ff;
+  --teal-30: #3ddbd9;
+  --teal-40: #08bdba;
+  --cyan-40: #33b1ff;
 
-  /* Semantic */
-  --success: #4ade80;
-  --danger:  #f87171;
-  --warning: #fbbf24;
-  --info:    #6ea8d8;
+  /* ---- Semantic: background & layers ---- */
+  --void: var(--black);                       /* cinematic hero / deep space */
+  --background: var(--gray-100);              /* app canvas */
+  --background-hover: rgba(141, 141, 141, 0.16);
+  --background-active: rgba(141, 141, 141, 0.4);
+  --background-selected: rgba(141, 141, 141, 0.24);
+  --background-inverse: var(--gray-10);
+  --background-brand: var(--horizon-50);
 
-  /* ============ Typography ============ */
-  --font-display: "JetBrains Mono", ui-monospace, "SF Mono", Consolas, monospace;
-  --font-body:    "JetBrains Mono", ui-monospace, "SF Mono", Consolas, monospace;
-  --font-mono:    "JetBrains Mono", ui-monospace, "SF Mono", Consolas, monospace;
-  --font-serif:   "DM Serif Display", Georgia, serif; /* used for editorial accents */
+  --layer-01: var(--gray-90);
+  --layer-02: var(--gray-80);
+  --layer-hover-01: var(--gray-90-hover);
+  --layer-hover-02: var(--gray-80-hover);
+  --layer-selected-01: var(--gray-80);
+  --layer-accent-01: var(--gray-80);
 
-  /* Type scale (px) — from decks-generated/tokens/type-scale.ts */
-  --fs-stat:    48px;
-  --fs-hero:    44px;
-  --fs-title:   32px;
-  --fs-section: 24px;
-  --fs-card:    18px;
-  --fs-body:    16px;
-  --fs-caption: 13px;
-  --fs-eyebrow: 11px;
+  --field-01: var(--gray-90);
+  --field-hover-01: var(--gray-90-hover);
 
-  --fw-light:   300;
-  --fw-regular: 400;
-  --fw-medium:  500;
-  --fw-semi:    600;
-  --fw-bold:    700;
-  --fw-black:   800;
+  --overlay: rgba(0, 0, 0, 0.65);
 
-  --lh-tight:    1.0;
-  --lh-snug:     1.05;
-  --lh-heading:  1.12;
-  --lh-card:     1.2;
-  --lh-body:     1.6;
-  --lh-caption:  1.4;
+  /* ---- Semantic: text ---- */
+  --text-primary: var(--gray-10);
+  --text-secondary: var(--gray-20);
+  --text-helper: var(--gray-30);
+  --text-placeholder: rgba(244, 244, 244, 0.4);
+  --text-disabled: rgba(244, 244, 244, 0.25);
+  --text-inverse: var(--gray-100);
+  --text-on-color: var(--black);              /* on horizon fills */  --text-error: var(--red-40);
+  --text-accent: var(--horizon-40);
 
-  --tracking-hero:    -0.5px;
-  --tracking-title:   -0.3px;
-  --tracking-eyebrow: 2.5px;
-  --tracking-label:   1.5px;
+  /* ---- Semantic: links & interactive ---- */
+  --link-primary: var(--horizon-40);
+  --link-primary-hover: var(--horizon-30);
+  --interactive: var(--horizon-40);
+  --interactive-hover: var(--horizon-40-hover);
+  --interactive-active: var(--horizon-50);
 
-  /* ============ Spacing — 8px grid ============ */
-  --sp-xs:   8px;
-  --sp-sm:  16px;
-  --sp-md:  24px;
-  --sp-lg:  32px;
-  --sp-xl:  48px;
-  --sp-2xl: 64px;
-  --sp-3xl: 80px;
+  /* ---- Semantic: icons ---- */
+  --icon-primary: var(--gray-10);
+  --icon-secondary: var(--gray-30);
+  --icon-accent: var(--horizon-40);
+  --icon-disabled: rgba(244, 244, 244, 0.25);
+  --icon-on-color: var(--black);
 
-  /* ============ Radius ============ */
-  --radius-xs: 2px;
-  --radius-sm: 3px;
-  --radius-md: 4px;
-  --radius-lg: 6px;   /* card default */
-  --radius-xl: 10px;
-  --radius-pill: 999px;
+  /* ---- Semantic: borders ---- */
+  --border-subtle-00: var(--gray-80);
+  --border-subtle-01: var(--gray-70);
+  --border-strong-01: var(--gray-60);
+  --border-interactive: var(--horizon-40);
+  --border-inverse: var(--gray-10);
+  --border-disabled: rgba(141, 141, 141, 0.5);
 
-  /* ============ Borders ============ */
-  --border-w-1: 1px;
-  --border-accent: 3px solid var(--accent); /* signal stripe */
+  /* ---- Semantic: status ---- */
+  --support-error: var(--red-50);
+  --support-success: var(--green-40);
+  --support-warning: var(--yellow-30);
+  --support-info: var(--blue-50);
 
-  /* ============ Shadows ============ */
-  --shadow-soft:  0 2px 8px rgba(0,0,0,0.15), 0 1px 3px rgba(0,0,0,0.1);
-  --shadow-glow:  0 2px 8px rgba(0,0,0,0.15), 0 0 20px var(--accent-glow);
-  --shadow-pop:   0 12px 32px rgba(0,0,0,0.35), 0 2px 8px rgba(0,0,0,0.2);
+  /* ---- Focus ---- */
+  --focus: var(--white);
+  --focus-inset: var(--gray-100);
 
-  /* ============ Motion ============ */
-  --ease-out:     cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-in-out:  cubic-bezier(0.65, 0, 0.35, 1);
-  --dur-fast: 120ms;
-  --dur-base: 200ms;
-  --dur-slow: 320ms;
+  /* ---- Layer stack semantics (L1→L3 system tiers) ---- */
+  --tier-l1: var(--gray-30);      /* primitives — bare metal */
+  --tier-l2: var(--teal-30);      /* platform — aurora teal */
+  --tier-l3: var(--green-40);     /* applied — signal green */
+
+  /* Highlight — the small dose of yellow. Data callouts and
+     emphasis marks only; never fills, never large areas. */
+  --text-highlight: var(--yellow-30);
+
+  /* ---- Syntax (Carbon g100 syntax set, key roles) ---- */
+  --syntax-comment: var(--green-40);
+  --syntax-keyword: var(--blue-50);
+  --syntax-string: var(--gray-10);
+  --syntax-function: var(--yellow-30);
+  --syntax-variable: var(--blue-40);
+  --syntax-type: var(--teal-30);
+  --syntax-attribute: var(--cyan-40);
+  --syntax-number: #6fdc8c;
+  --syntax-punctuation: var(--gray-20);
+  --syntax-invalid: var(--red-50);
 }
 
-/* ============ ACCENT THEMES ============
-   Single source of truth for the selectable brand accents. Set
-   [data-accent="…"] on <html> (the Tweaks panel does this) and every
-   accent-derived token updates from here — no palette duplicated in JS.
-   Accent blocks are scoped to :root (specificity 0,2,0) so an explicit
-   accent wins over the light theme's default cobalt ([data-mode="light"],
-   0,1,0) regardless of source order, while leaving surfaces/text intact.
-   Default (no attribute): ember, inherited from :root above. */
-:root[data-accent="ember"] {
-  --accent:       #d97757;
-  --accent-hover: #e48970;
-  --accent-press: #b8603f;
-  --accent-glow:  rgba(217, 119, 87, 0.22);
-  --accent-soft:  rgba(217, 119, 87, 0.10);
-  --accent-2:     #e8a285;
-  --gradient-brand: linear-gradient(135deg, #d97757 0%, #e8a285 100%);
-}
-:root[data-accent="indigo"] {
-  --accent:       #5e6ad2;
-  --accent-hover: #6e7be5;
-  --accent-press: #4d58b8;
-  --accent-glow:  rgba(94, 106, 210, 0.22);
-  --accent-soft:  rgba(94, 106, 210, 0.10);
-  --accent-2:     #8b7ce8;
-  --gradient-brand: linear-gradient(135deg, #5e6ad2 0%, #8b7ce8 100%);
-}
-:root[data-accent="cobalt"] {
-  --accent:       #2a6fdb;
-  --accent-hover: #3c82ee;
-  --accent-press: #1f58b8;
-  --accent-glow:  rgba(42, 111, 219, 0.22);
-  --accent-soft:  rgba(42, 111, 219, 0.10);
-  --accent-2:     #6ca0ee;
-  --gradient-brand: linear-gradient(135deg, #2a6fdb 0%, #6ca0ee 100%);
-}
-:root[data-accent="mint"] {
-  --accent:       #1f8a5b;
-  --accent-hover: #2ba471;
-  --accent-press: #16704a;
-  --accent-glow:  rgba(31, 138, 91, 0.22);
-  --accent-soft:  rgba(31, 138, 91, 0.10);
-  --accent-2:     #65c4a0;
-  --gradient-brand: linear-gradient(135deg, #1f8a5b 0%, #65c4a0 100%);
+/* ============================================================
+   Console — Typography tokens
+   IBM Plex family (Carbon). Mono leads: labels, data, nav.
+   Sans for body & headings. Serif reserved for quotations.
+   ============================================================ */
+
+:root {
+  --font-sans: 'IBM Plex Sans', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'IBM Plex Mono', 'Menlo', 'DejaVu Sans Mono', Courier, monospace;
+  --font-serif: 'IBM Plex Serif', 'Georgia', Times, serif;
+
+  --fw-light: 300; /* @kind font */
+  --fw-regular: 400; /* @kind font */
+  --fw-medium: 450; /* @kind font */
+  --fw-semibold: 600; /* @kind font */
+
+  /* Carbon type scale (px values as rem) */
+  --ts-12: 0.75rem;
+  --ts-14: 0.875rem;
+  --ts-16: 1rem;
+  --ts-18: 1.125rem;
+  --ts-20: 1.25rem;
+  --ts-24: 1.5rem;
+  --ts-28: 1.75rem;
+  --ts-32: 2rem;
+  --ts-36: 2.25rem;
+  --ts-42: 2.625rem;
+  --ts-54: 3.375rem;
+  --ts-68: 4.25rem;
+  --ts-92: 5.75rem;
+
+  /* ---- Composite styles (family / size / weight / line-height / tracking) ---- */
+  /* code-01: mono 12/1.33 +0.32px — inline code, token values */
+  --type-code-01: var(--fw-regular) 0.75rem/1.33333 var(--font-mono);
+  /* code-02: mono 14/1.43 +0.32px — code blocks, terminals */
+  --type-code-02: var(--fw-regular) 0.875rem/1.42857 var(--font-mono);
+  /* label-01: mono in Console (Carbon uses sans) 12/1.33 — eyebrows, field labels */
+  --type-label-01: var(--fw-regular) 0.75rem/1.33333 var(--font-mono);
+  /* body-01: sans 14/1.43 +0.16px — default body */
+  --type-body-01: var(--fw-regular) 0.875rem/1.42857 var(--font-sans);
+  /* body-02: sans 16/1.5 — long-form body */
+  --type-body-02: var(--fw-regular) 1rem/1.5 var(--font-sans);
+  /* heading-01: sans semibold 14/1.43 — dense UI headings */
+  --type-heading-01: var(--fw-semibold) 0.875rem/1.42857 var(--font-sans);
+  /* heading-02: sans semibold 16/1.5 */
+  --type-heading-02: var(--fw-semibold) 1rem/1.5 var(--font-sans);
+  /* heading-03: sans regular 20/1.4 */
+  --type-heading-03: var(--fw-regular) 1.25rem/1.4 var(--font-sans);
+  /* heading-04: sans regular 28/1.29 */
+  --type-heading-04: var(--fw-regular) 1.75rem/1.28572 var(--font-sans);
+  /* heading-05: sans regular 32/1.25 */
+  --type-heading-05: var(--fw-regular) 2rem/1.25 var(--font-sans);
+  /* heading-06: sans light 42/1.2 — page titles */
+  --type-heading-06: var(--fw-light) 2.625rem/1.199 var(--font-sans);
+  /* display-01: sans light 68/1.13 — hero display */
+  --type-display-01: var(--fw-light) 4.25rem/1.13 var(--font-sans);
+  /* display-02: sans light 92/1.11 — full-bleed hero */
+  --type-display-02: var(--fw-light) 5.75rem/1.11 var(--font-sans);
+  /* quotation: serif light italic 24/1.3 */
+  --type-quotation: italic var(--fw-light) 1.5rem/1.3 var(--font-serif);
+
+  --tracking-caption: 0.32px;
+  --tracking-body: 0.16px;
+  --tracking-label: 0.64px;   /* Console twist: wide-tracked mono eyebrows */
+  --tracking-display: -0.96px;
 }
 
-/* ============ LIGHT — Paper & Ink (editorial / notebook) ============
-   Cream paper, ink-black text, cobalt accent. Use for docs, READMEs, print,
-   and any surface where the reader is settling in to read for >30 seconds.
-   Opt in via [data-mode="light"], or automatically when MkDocs Material's
-   palette toggle selects its light scheme ([data-md-color-scheme="default"]). */
-[data-mode="light"],
-[data-md-color-scheme="default"] {
-  --bg:           #FAF8F5;
-  --bg-deep:      #F0EDE8;
-  --surface:      #FFFFFF;
-  --surface-2:    #F0EDE8;
-  --surface-deep: #ECE9E1;
-  --border:       #E2DFD8;
-  --border-soft:  #ECE9E1;
+/* ============================================================
+   Console — Spacing & layout tokens
+   Carbon spacing scale (8px mini-unit). Never invent values
+   between steps; density is achieved by stepping down.
+   ============================================================ */
 
-  --fg-1: #1A1A2E;
-  --fg-2: #5C5C6F;
-  --fg-3: #8E8E9F;
+:root {
+  --spacing-01: 0.125rem;  /*   2px */
+  --spacing-02: 0.25rem;   /*   4px */
+  --spacing-03: 0.5rem;    /*   8px */
+  --spacing-04: 0.75rem;   /*  12px */
+  --spacing-05: 1rem;      /*  16px */
+  --spacing-06: 1.5rem;    /*  24px */
+  --spacing-07: 2rem;      /*  32px */
+  --spacing-08: 2.5rem;    /*  40px */
+  --spacing-09: 3rem;      /*  48px */
+  --spacing-10: 4rem;      /*  64px */
+  --spacing-11: 5rem;      /*  80px */
+  --spacing-12: 6rem;      /*  96px */
+  --spacing-13: 10rem;     /* 160px */
 
-  --accent:       #1E40AF;
-  --accent-hover: #2547BF;
-  --accent-press: #16358F;
-  --accent-glow:  rgba(30,64,175,0.12);
-  --accent-soft:  rgba(30,64,175,0.06);
-  --accent-2:     #7C3AED;
-  --gradient-brand: linear-gradient(135deg, #1E40AF 0%, #7C3AED 100%);
+  /* Control heights (Carbon sizes) */
+  --size-xs: 1.5rem;   /* 24px */
+  --size-sm: 2rem;     /* 32px */
+  --size-md: 2.5rem;   /* 40px — default control */
+  --size-lg: 3rem;     /* 48px */
+  --size-xl: 4rem;     /* 64px */
 
-  --success: #047857;
-  --danger:  #DC2626;
-  --warning: #B45309;
-  --info:    #2563EB;
-
-  --shadow-soft: 0 1px 2px rgba(26,26,46,0.06), 0 1px 1px rgba(26,26,46,0.04);
-  --shadow-pop:  0 12px 32px rgba(26,26,46,0.10), 0 2px 6px rgba(26,26,46,0.06);
-  --shadow-glow: 0 1px 2px rgba(26,26,46,0.08), 0 0 0 3px var(--accent-glow);
+  /* Container widths */
+  --container-max: 99rem;      /* 1584px */
+  --container-content: 66rem;  /* 1056px */
+  --container-prose: 42rem;    /* 672px  */
 }
 
-/* ============ Semantic element styles ============ */
-html { background: var(--bg); color: var(--fg-1); }
-body {
-  font-family: var(--font-body);
-  font-size: var(--fs-body);
-  font-weight: var(--fw-regular);
-  line-height: var(--lh-body);
-  color: var(--fg-1);
-  background: var(--bg);
-  -webkit-font-smoothing: antialiased;
+/* ============================================================
+   Console — Shape & elevation tokens
+   Corners are square (radius 0) everywhere. Depth comes from
+   layer color and hairline borders — no glows, no decorative
+   shadows; the only shadow in the system is the overlay one.
+   ============================================================ */
+
+:root {
+  --radius-0: 0;               /* the default. Console is square. */
+  --radius-full: 999px;        /* status dots and tag pills only */
+
+  --border-width-1: 1px;
+  --border-width-2: 2px;
+  --border-width-3: 3px;       /* selected-tab / active-rail marker */
+
+  /* Elevation: flat by default; shadow only for overlays */
+  --shadow-overlay: 0 2px 6px rgba(0, 0, 0, 0.8);
+
+  /* Glow is retired — kept as tokens so existing references
+     resolve, but they render nothing. Do not reintroduce. */
+  --glow-horizon: none; /* @kind shadow */
+  --glow-horizon-strong: none; /* @kind shadow */
+
+  /* Horizon rule — 1px gradient line, the brand's signature edge */
+  --gradient-horizon: linear-gradient(90deg, rgba(61, 219, 217, 0) 0%, #3ddbd9 35%, #e5f6ff 50%, #33b1ff 65%, rgba(51, 177, 255, 0) 100%); /* @kind other */
+  /* Protection gradient for text over imagery */
+  --gradient-scrim: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.72) 100%); /* @kind other */
 }
 
-h1, .h1 {
-  font-family: var(--font-display);
-  font-size: var(--fs-hero);
-  font-weight: var(--fw-bold);
-  letter-spacing: var(--tracking-hero);
-  line-height: var(--lh-snug);
-  color: var(--fg-1);
-}
-h2, .h2 {
-  font-family: var(--font-display);
-  font-size: var(--fs-title);
-  font-weight: var(--fw-bold);
-  letter-spacing: var(--tracking-title);
-  line-height: var(--lh-snug);
-  color: var(--fg-1);
-}
-h3, .h3 {
-  font-family: var(--font-display);
-  font-size: var(--fs-section);
-  font-weight: var(--fw-bold);
-  line-height: var(--lh-heading);
-  color: var(--fg-1);
-}
-h4, .h4 {
-  font-family: var(--font-display);
-  font-size: var(--fs-card);
-  font-weight: var(--fw-semi);
-  line-height: var(--lh-card);
-  color: var(--fg-1);
-}
+/* ============================================================
+   Console — Motion tokens (Carbon motion package values)
+   Productive easing for UI feedback; expressive reserved for
+   hero / horizon moments. No bounces, no springs.
+   ============================================================ */
 
-p {
-  font-size: var(--fs-body);
-  line-height: var(--lh-body);
-  color: var(--fg-1);
-}
+:root {
+  --ease-productive: cubic-bezier(0.2, 0, 0.38, 0.9); /* @kind other */
+  --ease-productive-entrance: cubic-bezier(0, 0, 0.38, 0.9); /* @kind other */
+  --ease-productive-exit: cubic-bezier(0.2, 0, 1, 0.9); /* @kind other */
+  --ease-expressive: cubic-bezier(0.4, 0.14, 0.3, 1); /* @kind other */
 
-.eyebrow {
-  font-size: var(--fs-eyebrow);
-  font-weight: var(--fw-bold);
-  letter-spacing: var(--tracking-eyebrow);
-  text-transform: uppercase;
-  color: var(--accent);
+  --duration-fast-01: 70ms; /* @kind other */
+  --duration-fast-02: 110ms; /* @kind other */
+  --duration-moderate-01: 150ms; /* @kind other */
+  --duration-moderate-02: 240ms; /* @kind other */
+  --duration-slow-01: 400ms; /* @kind other */
+  --duration-slow-02: 700ms; /* @kind other */
 }
-
-.caption {
-  font-size: var(--fs-caption);
-  font-weight: var(--fw-medium);
-  letter-spacing: 0.5px;
-  line-height: var(--lh-caption);
-  color: var(--fg-2);
-}
-
-code, pre, .mono {
-  font-family: var(--font-mono);
-  font-size: 0.9em;
-  font-feature-settings: "ss01", "ss02";
-}
-
-a {
-  color: var(--accent);
-  text-decoration: none;
-  border-bottom: 1px solid transparent;
-  transition: color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
-}
-a:hover { color: var(--accent-hover); border-bottom-color: currentColor; }
