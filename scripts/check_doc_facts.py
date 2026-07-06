@@ -73,7 +73,11 @@ def derive_pattern_modules() -> set[str]:
 
 
 def mkdocs_nav_pattern_pages() -> set[str]:
-    """Pages listed under the 'Patterns:' nav section of mkdocs.yml."""
+    """Pages listed under the 'Patterns:' nav section of mkdocs.yml.
+
+    Assumes mkdocs.yml keeps its current 2-space top-level nav indentation;
+    a reformat of the nav block would need the two regexes below updated.
+    """
     lines = read("mkdocs.yml").split("\n")
     pages: set[str] = set()
     in_patterns = False
@@ -146,9 +150,24 @@ def check_index_count_claim(patterns: set[str]) -> None:
 
 
 def check_module_map_completeness() -> None:
+    """Every shipped module must be named in the architecture module map.
+
+    The map is a rendered tree, so a module's full relative path never appears
+    as one contiguous string. Instead require BOTH tokens independently: the
+    file's basename, and (for subpackage files) the ``<subpackage>/`` segment.
+    This closes the basename-collision hole where one ``__init__.py`` mention
+    satisfied all four packages, letting a brand-new subpackage slip through.
+    Residual (accepted): the two tokens are not checked for adjacency, so a
+    same-named file added to a second *already-documented* subpackage would
+    still pass; parsing the tree layout is not worth it for this check.
+    """
     architecture = read("docs/architecture.md")
     for path in sorted((REPO_ROOT / "executionkit").rglob("*.py")):
-        if path.name not in architecture:
+        in_subpackage = path.parent.name != "executionkit"
+        named = path.name in architecture and (
+            not in_subpackage or f"{path.parent.name}/" in architecture
+        )
+        if not named:
             rel = path.relative_to(REPO_ROOT).as_posix()
             failures.append(f"{rel} is not named in the architecture.md module map")
 
