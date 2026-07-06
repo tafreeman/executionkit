@@ -128,6 +128,14 @@ nav:
           - Caller-Supplied Cost Rates: adr/005-caller-supplied-cost-rates.md
           - Eval Failure Corpus: adr/006-eval-failure-corpus.md
           - Async-First Design: adr/007-async-first-sync-wrappers.md
+          - Workflow Checkpoint Resume: adr/008-workflow-checkpoint-resume.md
+          - Approval Gate Timeout Policy: adr/009-approval-gate-timeout-policy.md
+          - Optional OTel Span Emission: adr/010-optional-otel-span-emission.md
+          - Map-Reduce Pattern: adr/011-map-reduce-pattern.md
+          - Stdlib MCP Server: adr/012-stdlib-mcp-server.md
+          - Claude-in-CI Eval: adr/013-claude-in-ci-eval.md
+          - Message Batches: adr/014-message-batches.md
+          - React Loop Tool Sandbox: adr/015-react-loop-tool-sandbox.md
       - Changelog: changelog.md
       - Contributing: contributing.md
       - License: license.md
