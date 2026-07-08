@@ -8,6 +8,27 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-08
+
+### Added
+
+- Add multi-turn conversation primitives. `react_loop` now accepts `messages=` (a prior conversation to continue, mutually exclusive with `prompt`) and returns the full updated transcript as `metadata["messages"]`, so callers can thread state across turns
+- Add `Kit.turn(user_text, tools=...)` plus a `Kit.messages` transcript (and an optional `messages=` seed on `Kit`), giving a stateful conversational API on top of `react_loop`
+- Add message-construction helpers `system_message`, `tool_message`, and `assistant_tool_calls_message` to `executionkit.engine.messages`
+- Add `examples/conversational_assistant.py` demonstrating multi-turn tool use with context carryover
+- Add a multi-turn eval harness — `ConversationScript`, `Turn`, and `run_conversation_script(script, kit)` — that drives a scripted conversation through a single `Kit` (state carries across turns) and returns an `EvalReport`, one result per turn
+- Add optional rate limiting to `Kit` via a `rate_limiter: TokenBucket | None` parameter; a token is acquired before every pattern dispatch
+- Add an optional `summarizer=` hook to `react_loop` that compresses history dropped by `max_history_messages` trimming into a system note for the active window (the stored transcript is unchanged); a `summarized` count is reported in metadata
+- `react_loop` checkpoint state now includes the running `messages` transcript, enabling conversation-level resume
+- Add a "Building a conversational assistant" recipe (`docs/recipes/assistant.md`) covering stateful turns, `structured()` intent/slot NLU, the streaming limitation, and `ConversationScript` evals
+- Add the `map_reduce()` pattern — parallel fan-out over a collection of inputs, each processed independently, then reduced to a single answer (ADR-011)
+- Add a stdlib-only MCP server — `python -m executionkit.mcp` speaks newline-delimited JSON-RPC 2.0 over stdio and exposes `consensus` and a demo-toolset-restricted `react_loop` as MCP tools (ADR-012)
+- Add Anthropic Message Batches fan-out — `consensus_batch()` and `map_batch()` submit samples as a single batch job over a stdlib `urllib` client and score with the same `tally_votes` as the live `consensus()` pattern (ADR-014)
+
+### Changed
+
+- `react_loop()` no longer silently swallows unknown keyword arguments (the `**_` sink was removed); an unsupported kwarg now raises `TypeError`. `prompt` is now optional (defaults to `None`) and `tools` defaults to `()` **(behavior change)**
+
 ## [0.2.0] - 2026-06-08
 
 ### Added

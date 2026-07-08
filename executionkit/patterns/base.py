@@ -162,7 +162,7 @@ async def checked_complete(
     the full concurrency contract.
 
     A CI test (``test_no_await_between_check_and_reserve`` in
-    ``tests/test_patterns.py``) uses AST inspection to assert that no
+    ``tests/patterns/test_patterns_common.py``) uses AST inspection to assert that no
     ``await`` is inserted between the two operations.  If that test fails
     after a refactor, the budget safety guarantee must be re-evaluated before
     merging.

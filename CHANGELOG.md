@@ -6,6 +6,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-08
+
 ### Added
 
 - Add multi-turn conversation primitives. `react_loop` now accepts `messages=` (a prior conversation to continue, mutually exclusive with `prompt`) and returns the full updated transcript as `metadata["messages"]`, so callers can thread state across turns

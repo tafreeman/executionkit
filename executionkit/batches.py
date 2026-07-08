@@ -377,6 +377,13 @@ async def consensus_batch(
     same result shape — but the samples travel as a single Message Batches
     submission instead of ``num_samples`` concurrent live calls.
 
+    Anthropic-Batches-specific: unlike the provider-agnostic headline patterns
+    (:func:`executionkit.consensus`, :func:`executionkit.map_reduce`, and
+    friends — all of which accept any ``LLMProvider``-conforming object), this
+    function only talks to Anthropic's Message Batches API and requires an
+    :class:`AnthropicBatchClient` and Anthropic API key — it is not usable
+    with an arbitrary OpenAI-compatible endpoint.
+
     Returns:
         A :class:`PatternResult` whose ``value`` is the winning response and
         ``score`` the agreement ratio.
@@ -453,6 +460,11 @@ async def map_batch(
     order the provider finished them. Callers reduce however they like —
     including with :func:`executionkit.engine.voting.tally_votes` for a
     consensus-style reduce over non-identical prompts.
+
+    Anthropic-Batches-specific: like :func:`consensus_batch`, this function
+    only talks to Anthropic's Message Batches API — unlike the
+    provider-agnostic headline patterns (:func:`executionkit.map_reduce` and
+    friends), it is not usable with other OpenAI-compatible endpoints.
 
     Returns:
         A :class:`PatternResult` whose ``value`` is a tuple of responses,

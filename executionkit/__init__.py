@@ -76,7 +76,7 @@ from executionkit.workflow import Step, Workflow, WorkflowCheckpoint, WorkflowRe
 if TYPE_CHECKING:
     from collections.abc import Coroutine, Sequence
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 __all__ = [
     "DEFAULT_RETRY",
