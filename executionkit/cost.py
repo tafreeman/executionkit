@@ -19,8 +19,9 @@ other coroutine can be scheduled between the two operations.
 
 If this code is ever refactored to insert an ``await`` between
 ``_check_budget`` and ``reserve_call()``, the budget guarantee breaks.  A
-CI test in ``tests/test_patterns.py`` (``test_no_await_between_check_and_reserve``)
-uses ``inspect.getsource`` to assert this invariant is preserved.
+CI test in ``tests/patterns/test_patterns_common.py``
+(``test_no_await_between_check_and_reserve``) uses ``inspect.getsource`` to
+assert this invariant is preserved.
 """
 
 from __future__ import annotations

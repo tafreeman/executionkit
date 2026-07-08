@@ -8,7 +8,7 @@ Consensus voting · Iterative refinement · ReAct tool loops · Structured JSON 
 [![Python 3.11-3.13](https://img.shields.io/badge/python-3.11--3.13-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/executionkit)](https://pypi.org/project/executionkit/)
-[![Releases](https://img.shields.io/badge/releases-v0.2.0-orange)](https://github.com/tafreeman/executionkit/releases)
+[![Releases](https://img.shields.io/badge/releases-v0.3.0-orange)](https://github.com/tafreeman/executionkit/releases)
 [![CI](https://github.com/tafreeman/executionkit/actions/workflows/ci.yml/badge.svg)](https://github.com/tafreeman/executionkit/actions/workflows/ci.yml)
 [![Linting: ruff](https://img.shields.io/badge/linting-ruff-261230.svg)](https://github.com/astral-sh/ruff)
 [![Type checked: mypy](https://img.shields.io/badge/type%20checked-mypy-blue.svg)](http://mypy-lang.org/)
@@ -65,7 +65,7 @@ flowchart TB
 > hierarchy live directly in `executionkit/` today. ADR-023 reserves a future
 > extraction path if agentic-runtime-platform ever needs a separate contracts
 > package, but there is no standalone `executionkit-contracts` distribution in
-> v0.2.0.
+> v0.3.0.
 
 > **Development note:** Built with AI-assisted development under human review; architecture, tests,
 > release gates, and public documentation remain maintainer-owned and verified through the repo's
@@ -94,7 +94,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-**What you see when you run it:**
+**What you see when you run it** (illustrative shape — token counts depend on the model, prompt, and provider tokenizer; `llm_calls` counts every dispatched wire attempt including retries, so it equals `num_samples` only when no attempt was retried):
 
 ```console
 $ pip install executionkit
@@ -102,14 +102,14 @@ $ export OPENAI_API_KEY=<your-key>
 $ python examples/quickstart_openai.py
 Answer: Paris
 Agreement: 100%
-Cost: TokenUsage(input_tokens=57, output_tokens=6, llm_calls=3)
+Cost: TokenUsage(input_tokens=<varies>, output_tokens=<varies>, llm_calls=3)
 ```
 
 See the [Quick Start guide](https://tafreeman.github.io/executionkit/getting-started/quickstart/) for a complete walkthrough.
 
-## What shipped in v0.1.0
+## What shipped since v0.2.0
 
-**Five security fixes** in the initial release: prompt-injection sandboxing in the default evaluator via XML delimiters and 32 KB input truncation; API key masking in `Provider.__repr__`; credential redaction in HTTP error messages; information hiding in tool error returns; and supply-chain hardening with Bandit SAST + pip-audit in CI. **Six net-new features** including the `structured()` pattern, optional `httpx` pooling backend, `max_history_messages` capping, JSON Schema tool-arg validation, async context manager lifecycle for `Provider`, and MkDocs Material docs with ADRs. Full notes: [`CHANGELOG.md`](CHANGELOG.md) · [docs site](https://tafreeman.github.io/executionkit/changelog/).
+**Multi-turn conversations.** `react_loop` now accepts a `messages=` transcript to continue a prior conversation (mutually exclusive with `prompt`) and returns the updated transcript in `metadata["messages"]`; `Kit.turn()` plus a `Kit.messages` transcript layer a stateful conversational API on top of it, with a `ConversationScript` / `Turn` / `run_conversation_script()` harness for scripted multi-turn evals. **The [map-reduce](https://tafreeman.github.io/executionkit/patterns/map-reduce/) pattern** ([ADR-011](docs/adr/011-map-reduce-pattern.md)) fans a prompt out across a collection of inputs in parallel, then reduces to a single answer. **A stdlib-only MCP server** (`python -m executionkit.mcp`, [ADR-012](docs/adr/012-stdlib-mcp-server.md)) exposes `consensus` and a sandboxed `react_loop` as [Model Context Protocol](https://modelcontextprotocol.io) tools over stdio. **Anthropic Message Batches fan-out** — `consensus_batch()` and `map_batch()` ([ADR-014](docs/adr/014-message-batches.md)) submit large sample sets as a single Anthropic Batches job instead of live concurrent calls, sharing the same voting logic as `consensus()`. Also new: an optional `rate_limiter=` on `Kit` backed by `TokenBucket`, and a `summarizer=` hook that compresses history dropped by `react_loop`'s `max_history_messages` trimming into a system note. Full notes: [`CHANGELOG.md`](CHANGELOG.md) · [docs site](https://tafreeman.github.io/executionkit/changelog/).
 
 ## Patterns
 
@@ -156,7 +156,7 @@ For fan-outs where nobody is waiting on a socket, `consensus_batch()` and `map_b
 
 ## Deliberately out of scope / roadmap
 
-See [`CONTRIBUTING.md` — Anti-Scope](CONTRIBUTING.md#anti-scope) for what ExecutionKit rejects as a pattern library, not a framework. On top of that, as of v0.2.0:
+See [`CONTRIBUTING.md` — Anti-Scope](CONTRIBUTING.md#anti-scope) for what ExecutionKit rejects as a pattern library, not a framework. On top of that, as of v0.3.0:
 
 - **RAG / embeddings / vector search** — deliberately out of scope. Retrieval belongs in the calling application or a dedicated vector store, not the reasoning-pattern layer.
 

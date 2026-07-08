@@ -46,7 +46,7 @@ hide:
 
 ## Quick start
 
-No framework, no adapter matrix — one `Provider`, five reasoning patterns.
+No framework, no adapter matrix — one `Provider`, six reasoning patterns.
 
 ```python
 import asyncio
@@ -79,7 +79,7 @@ Swap in Ollama, vLLM, Groq, Together, GitHub Models, or Azure via an OpenAI-comp
 
 <p class="section-kicker">patterns</p>
 
-## Five composable reasoning patterns
+## Six composable reasoning patterns
 
 <div class="feature-grid" markdown>
 
@@ -179,7 +179,7 @@ Swap in Ollama, vLLM, Groq, Together, GitHub Models, or Azure via an OpenAI-comp
   <div class="stat-label">Runtime dependencies</div>
 </div>
 <div class="stat-item">
-  <div class="stat-value">5</div>
+  <div class="stat-value">6</div>
   <div class="stat-label">Reasoning patterns</div>
 </div>
 <div class="stat-item">

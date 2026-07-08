@@ -14,7 +14,12 @@ Checks (all derived, nothing hand-maintained except SLUGS):
   3. the patterns-index "N composable pattern utilities" claim equals the
      derived pattern count;
   4. every module in ``executionkit/`` is named in the architecture module
-     map (basename granularity — a missing new module fails the check).
+     map (basename granularity — a missing new module fails the check);
+  5. docs/index.md (the landing page) does not undercount the pattern count
+     either — the hero line, the "N composable reasoning patterns" heading,
+     and the "Reasoning patterns" stat-strip tile must all equal the derived
+     pattern count (2026-07-08 audit: this page said "five" while the
+     package shipped six).
 
 Stdlib only (ADR-004 discipline applies to tooling too). Run from the repo
 root: ``python scripts/check_doc_facts.py``. Portfolio convention:
@@ -149,6 +154,63 @@ def check_index_count_claim(patterns: set[str]) -> None:
         )
 
 
+def check_landing_page_count_claims(patterns: set[str]) -> None:
+    """docs/index.md must not undercount patterns either.
+
+    Same failure class as :func:`check_index_count_claim`, one page over: the
+    2026-07-08 audit found the landing page's hero line, section heading, and
+    stat-strip tile all still said "five" after map_reduce shipped as the
+    sixth pattern. All three claims are checked independently since they are
+    three separate hand-written strings, not one shared template.
+    """
+    index = read("docs/index.md")
+
+    hero = re.search(r"`Provider`, (\w+) reasoning patterns\.", index)
+    if hero is None:
+        failures.append(
+            "docs/index.md: the '`Provider`, {word} reasoning patterns.' "
+            "hero claim could not be found"
+        )
+    else:
+        claimed = NUMBER_WORDS.get(hero.group(1).lower())
+        if claimed != len(patterns):
+            failures.append(
+                f"docs/index.md hero line says '{hero.group(1)}' reasoning "
+                f"patterns; the package ships {len(patterns)}"
+            )
+
+    heading = re.search(
+        r"^## (\w+) composable reasoning patterns$", index, re.MULTILINE
+    )
+    if heading is None:
+        failures.append(
+            "docs/index.md: the '## {Word} composable reasoning patterns' "
+            "heading could not be found"
+        )
+    else:
+        claimed = NUMBER_WORDS.get(heading.group(1).lower())
+        if claimed != len(patterns):
+            failures.append(
+                f"docs/index.md heading says '{heading.group(1)}' composable "
+                f"reasoning patterns; the package ships {len(patterns)}"
+            )
+
+    stat = re.search(
+        r'<div class="stat-value">(\d+)</div>\s*'
+        r'<div class="stat-label">Reasoning patterns</div>',
+        index,
+    )
+    if stat is None:
+        failures.append(
+            "docs/index.md: the 'Reasoning patterns' stat-strip tile could not be found"
+        )
+    elif int(stat.group(1)) != len(patterns):
+        failures.append(
+            f"docs/index.md stat strip says {stat.group(1)} reasoning "
+            f"patterns; the package ships {len(patterns)}"
+        )
+
+
 def check_module_map_completeness() -> None:
     """Every shipped module must be named in the architecture module map.
 
@@ -178,6 +240,7 @@ def main() -> int:
     check_patterns_documented(patterns, nav_pages)
     check_nav_completeness(nav_pages)
     check_index_count_claim(patterns)
+    check_landing_page_count_claims(patterns)
     check_module_map_completeness()
 
     if failures:
@@ -188,7 +251,8 @@ def main() -> int:
 
     print(
         f"Doc-fact check passed: {len(patterns)} patterns documented across "
-        "README, mkdocs nav, patterns index, and architecture module map."
+        "README, mkdocs nav, patterns index, landing page, and architecture "
+        "module map."
     )
     return 0
 
