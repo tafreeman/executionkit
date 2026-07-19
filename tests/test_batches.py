@@ -253,6 +253,21 @@ class TestConsensusBatch:
                 client, "claude-x", "q", num_samples=2, poll_interval=0.0
             )
 
+    async def test_duplicate_custom_id_raises(self) -> None:
+        # A conformant Batches file cannot repeat a custom_id, but a contract
+        # violation must fail loudly instead of silently last-writer-wins.
+        transport = FakeTransport(
+            [
+                _succeeded_line("consensus-0", "Paris"),
+                _succeeded_line("consensus-0", "London"),
+            ]
+        )
+        client = _client(transport)
+        with pytest.raises(ProviderError, match=r"duplicate.*consensus-0"):
+            await consensus_batch(
+                client, "claude-x", "q", num_samples=1, poll_interval=0.0
+            )
+
 
 class TestMapBatch:
     async def test_results_return_in_prompt_order_despite_shuffled_file(self) -> None:
