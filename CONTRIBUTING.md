@@ -85,8 +85,10 @@ Never mutate an existing object; return a new one.
 **Type hints required.** Every function signature and class attribute must be
 annotated. `mypy --strict` is enforced. Avoid `Any` without justification.
 
-**Functions under 50 lines.** Decompose larger functions unless readability
-clearly suffers.
+**Keep helpers small — under ~50 lines as a guideline, not a gate.** Decompose
+larger functions unless readability clearly suffers. The long public pattern
+entry points (`react_loop`, `refine_loop`, `map_reduce`, `checked_complete`) are
+deliberate exceptions, and no CI rule enforces the limit.
 
 **No magic numbers.** Use `RetryConfig` and `ConvergenceDetector` for tunable
 parameters; extract other constants.

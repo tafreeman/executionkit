@@ -324,10 +324,15 @@ async def _run_batch(
         raise ProviderError(f"batch {batch_id} ended without a results_url")
 
     raw_entries = await client.fetch_results(results_url)
-    entries = {
-        parsed.custom_id: parsed
-        for parsed in (_parse_result_entry(raw) for raw in raw_entries)
-    }
+    entries: dict[str, _BatchEntry] = {}
+    for raw in raw_entries:
+        parsed = _parse_result_entry(raw)
+        if parsed.custom_id in entries:
+            raise ProviderError(
+                f"batch {batch_id} results contain a duplicate "
+                f"custom_id: {parsed.custom_id!r}"
+            )
+        entries[parsed.custom_id] = parsed
 
     failed = sorted(
         f"{entry.custom_id} ({entry.failure_type})"
