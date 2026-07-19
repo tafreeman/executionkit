@@ -1,7 +1,6 @@
 # Contributing to ExecutionKit
 
-Thanks for contributing. ExecutionKit is a minimal library — keep changes
-focused and test-first.
+ExecutionKit is a minimal library — keep changes focused and test-first.
 
 ## Dev Setup
 
@@ -163,7 +162,7 @@ ExecutionKit is a pattern library, not a framework. Reject changes that add:
 
 If in doubt, open an issue before writing code.
 
-## Need Help?
+## Support
 
 Open a GitHub issue. Tag it `question` for support, `bug` for defects,
 `enhancement` for feature requests.

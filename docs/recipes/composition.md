@@ -6,7 +6,7 @@ tags:
 
 # Wrapping consensus inside iterative refinement
 
-You want the **stability** of consensus voting *and* the **quality bar** of iterative refinement. Run consensus to get a robust draft, then refine that draft until it crosses your score gate.
+You want the **stability** of consensus voting *and* the **quality bar** of iterative refinement. Run consensus to get a draft, then refine that draft until it crosses your score gate.
 
 ## The pattern
 
