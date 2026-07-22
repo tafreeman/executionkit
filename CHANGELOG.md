@@ -6,6 +6,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `Workflow.run()` now raises `ValueError` when an `initial_context` key collides with a step name, instead of silently returning the caller's seed as that step's output without ever running it. Step completion is now tracked in a set independent from `outputs` membership, which previously doubled as both "seeded by initial_context" and "already executed" **(behavior change)**
+- Add streaming test coverage for the httpx SSE transport (`Provider._stream_httpx`) via `httpx.MockTransport` — a successful end-to-end stream plus 429/5xx and transport-error paths — closing a CI blind spot on the provider's default active transport (httpx is always installed as a `dev` extra, so this was previously untested, "green" code)
+- Correct the `map_reduce()` docstring: `reduce_calls` is always `1` (the reduce call always runs, even for empty `inputs`; the prior "0 when empty" clause contradicted the implementation), and `total_calls` now documents the retry caveat — `map_count + 1` only when no attempt was retried, matching the `llm_calls` accounting already documented in the README
+
 ## [0.3.0] - 2026-07-08
 
 ### Added

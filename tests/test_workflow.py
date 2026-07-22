@@ -519,3 +519,124 @@ async def test_parallel_steps_ordering_matches_step_definition() -> None:
 
     assert result.outputs["slow"] == "slow"
     assert result.outputs["fast"] == "fast"
+
+
+# ---------------------------------------------------------------------------
+# Finding EK#1 — initial_context key colliding with a step name must not
+# silently skip the step. `outputs` membership used to double as both
+# "seeded by initial_context" and "already executed"; a step whose name
+# matched an initial_context key never ran, and the caller's seed was
+# returned as its "output" with no error or warning.
+# ---------------------------------------------------------------------------
+
+
+async def test_initial_context_collision_with_step_name_raises_value_error() -> None:
+    """A fresh run must raise ValueError, never silently return the seed.
+
+    This is the exact runtime repro from the audit finding: a single-step
+    workflow named "summary" seeded with initial_context={"summary": ...}
+    must not return the seed as the step's output without running it.
+    """
+    executed: list[str] = []
+
+    async def summarize(ctx: dict[str, Any]) -> str:
+        executed.append("ran")
+        return "real summary"
+
+    workflow = Workflow([Step(name="summary", run=summarize)])
+
+    try:
+        await workflow.run(initial_context={"summary": "placeholder"})
+    except ValueError as exc:
+        assert "summary" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError was not raised")
+
+    # The step must never have run, and no partial state should leak out —
+    # the collision is rejected up front, before any step is dispatched.
+    assert executed == []
+
+
+async def test_initial_context_collision_error_names_the_colliding_key() -> None:
+    """The ValueError message must name the exact colliding key(s)."""
+    workflow = Workflow([Step(name="report", run=lambda ctx: "x")])
+
+    try:
+        await workflow.run(initial_context={"report": "seed", "other": "kept"})
+    except ValueError as exc:
+        message = str(exc)
+        assert "report" in message
+        assert "other" not in message  # only the colliding key is named
+    else:
+        raise AssertionError("Expected ValueError was not raised")
+
+
+async def test_initial_context_collision_lists_all_colliding_keys() -> None:
+    """Multiple colliding keys are all named in the single raised error."""
+    workflow = Workflow(
+        [
+            Step(name="alpha", run=lambda ctx: "alpha-real"),
+            Step(name="beta", run=lambda ctx: "beta-real"),
+        ]
+    )
+
+    try:
+        await workflow.run(initial_context={"alpha": "seed-a", "beta": "seed-b"})
+    except ValueError as exc:
+        message = str(exc)
+        assert "alpha" in message
+        assert "beta" in message
+    else:
+        raise AssertionError("Expected ValueError was not raised")
+
+
+async def test_initial_context_non_colliding_keys_still_seed_dependents() -> None:
+    """A non-colliding initial_context key must still be readable by steps
+    that depend on it — the fix must not break legitimate seeding."""
+
+    async def greet(ctx: dict[str, Any]) -> str:
+        return f"hello, {ctx['user_name']}"
+
+    workflow = Workflow([Step(name="greeting", run=greet, depends_on=())])
+
+    result = await workflow.run(initial_context={"user_name": "Ada"})
+
+    assert result.outputs["greeting"] == "hello, Ada"
+
+
+async def test_initial_context_none_does_not_raise() -> None:
+    """No initial_context at all must never trigger the collision check."""
+    executed: list[str] = []
+
+    async def step_fn(ctx: dict[str, Any]) -> str:
+        executed.append("ran")
+        return "value"
+
+    workflow = Workflow([Step(name="only", run=step_fn)])
+    result = await workflow.run()
+
+    assert executed == ["ran"]
+    assert result.outputs["only"] == "value"
+
+
+async def test_resume_from_checkpoint_unaffected_by_collision_check() -> None:
+    """resume_from's own outputs may legitimately share step names — that is
+    the intended "already executed" signal and must not raise."""
+
+    async def step_c(ctx: dict[str, Any]) -> str:
+        return "c-ran"
+
+    workflow = Workflow(
+        [
+            Step("a", lambda ctx: "a"),
+            Step("b", lambda ctx: "b", depends_on=("a",)),
+            Step("c", step_c, depends_on=("b",)),
+        ]
+    )
+
+    checkpoint = _checkpoint(step_index=2, outputs={"a": "prior_a", "b": "prior_b"})
+
+    # Must not raise — resume_from is not initial_context.
+    result = await workflow.run(resume_from=checkpoint)
+
+    assert result.outputs["c"] == "c-ran"

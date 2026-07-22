@@ -531,7 +531,7 @@ class Provider:
                 span, self.model, final.input_tokens, final.output_tokens
             )
 
-    async def _stream_httpx(  # pragma: no cover - needs a live SSE server
+    async def _stream_httpx(
         self,
         url: str,
         body: bytes,
@@ -978,7 +978,7 @@ def _classify_http_error_return(
     raise AssertionError("unreachable")  # pragma: no cover
 
 
-def _raise_httpx_stream_error(resp: Any) -> NoReturn:  # pragma: no cover
+def _raise_httpx_stream_error(resp: Any) -> NoReturn:
     """Classify and raise the error for a failed httpx streaming response."""
     assert _httpx is not None  # noqa: S101
     try:

@@ -189,6 +189,14 @@ class Workflow:
         ----------
         initial_context:
             Key/value pairs injected into the step context before execution.
+            A key that collides with one of this workflow's step names raises
+            :exc:`ValueError` — ``outputs`` membership used to double as both
+            "seeded by initial_context" and "already executed", so a step
+            whose name matched an ``initial_context`` key was silently
+            skipped and the caller's seed was returned as its "output"
+            without the step ever running. Completion is now tracked
+            separately (see ``resume_from`` below), so this collision is
+            rejected up front instead of masking a skipped step.
         trace:
             Optional async or sync callback receiving
             :class:`~executionkit.observability.TraceEvent` objects.
@@ -200,22 +208,48 @@ class Workflow:
             checkpoint; this library imposes no storage requirement.
         resume_from:
             A previously saved :class:`WorkflowCheckpoint`.  Steps whose
-            names already appear in ``resume_from.outputs`` are skipped;
-            accumulated outputs and token budget are restored verbatim.
-            When ``None`` (default), the workflow starts from the beginning.
+            names already appear in ``resume_from.outputs`` are treated as
+            already executed and are skipped; accumulated outputs and token
+            budget are restored verbatim. When ``None`` (default), the
+            workflow starts from the beginning.
+
+        Raises
+        ------
+        ValueError
+            If a key in ``initial_context`` collides with the name of one of
+            this workflow's steps.
         """
+        if initial_context is not None:
+            step_names = {step.name for step in self.steps}
+            colliding = sorted(set(initial_context) & step_names)
+            if colliding:
+                raise ValueError(
+                    "initial_context key(s) collide with workflow step name(s): "
+                    f"{colliding}. A colliding key would be silently returned as "
+                    "that step's output without the step ever running — rename "
+                    "the initial_context key(s) or the step(s)."
+                )
+
         # ------------------------------------------------------------------
         # Restore state from checkpoint (if any)
         # ------------------------------------------------------------------
         if resume_from is not None:
             outputs: dict[str, Any] = dict(resume_from.outputs)
+            # A checkpoint's outputs genuinely mean "already executed" — this
+            # is the one case where dict membership is a valid completion
+            # signal, since resume_from only ever holds prior step results.
+            completed: set[str] = set(resume_from.outputs)
             total_cost = resume_from.cost
         else:
             outputs = dict(initial_context or {})
+            # Fresh run: nothing has executed yet, regardless of what
+            # initial_context seeded into `outputs`. Completion is tracked
+            # independently of `outputs` membership so a seed can never be
+            # mistaken for a completed step (the bug this fix closes).
+            completed = set()
             total_cost = TokenUsage()
 
-        # Steps whose name already exists in outputs are already done.
-        pending = {step.name: step for step in self.steps if step.name not in outputs}
+        pending = {step.name: step for step in self.steps if step.name not in completed}
         completed_count = len(self.steps) - len(pending)
 
         while pending:
