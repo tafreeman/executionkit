@@ -1,7 +1,8 @@
 """Tests for streaming support.
 
-Covers the SSE parse helpers, the ``Provider`` urllib streaming transport
-(httpx transport needs a live server and is ``# pragma: no cover``), the
+Covers the SSE parse helpers, the ``Provider`` urllib and httpx streaming
+transports (the httpx transport is exercised end-to-end against an
+``httpx.MockTransport`` — no live server required, see Finding EK#2), the
 ``MockProvider`` stream, the ``checked_stream`` primitive, the ``Kit`` streaming
 methods, and the ``stream=True`` guards on aggregating patterns.
 """
@@ -168,6 +169,250 @@ async def test_provider_stream_urllib_classifies_http_error() -> None:
         pytest.raises(RateLimitError),
     ):
         await _drain(provider.stream([user_message("hi")]))
+    await provider.aclose()
+
+
+# ---------------------------------------------------------------------------
+# Provider httpx streaming transport (SSE) — Finding EK#2
+#
+# httpx is the DEFAULT active transport whenever it is importable (including
+# in this repo's own CI, since it is a `dev` extra installed alongside
+# pytest/mypy/ruff), so `_stream_httpx` is live code, not a live-server-only
+# path. These tests exercise it end-to-end via `httpx.MockTransport` — no
+# network or live server required.
+#
+# RESOLVED (was flagged as two OPEN QUESTIONs; a verified research pass
+# against httpx's own test suite / httpx-sse fixtures resolved both):
+#
+# 1. The 429/5xx tests below correctly exercise a *status-level* error
+#    (detected when the streaming response's headers arrive, before any SSE
+#    line is read) — a server cannot swap its status code after it starts
+#    sending a 200 body, so there is no code path where good SSE chunks are
+#    yielded and *then* an error status arrives.
+# 2. Connections DO drop mid-body, though — that is a transport-level
+#    ``httpx.ReadError`` raised while *iterating an already-200 body*, not a
+#    status-code change. `test_provider_stream_httpx_read_error_raises_...`
+#    below pins that case: a custom ``httpx.AsyncByteStream`` (the
+#    httpx-sse/httpx test-suite fixture pattern — see
+#    ``test_cancellation_during_stream`` in httpx's own tests) yields one good
+#    chunk then raises ``httpx.ReadError`` from inside ``__aiter__``. Verified
+#    against the installed httpx source that ``ReadError`` subclasses
+#    ``TransportError``, so `_stream_httpx`'s existing
+#    ``except _httpx.TransportError`` clause catches it and re-raises
+#    ``ProviderError`` — no silent-truncation bug was found, so the test pins
+#    passing (not xfail'd) behavior.
+#
+# `test_provider_stream_httpx_reassembles_event_split_across_chunk` below
+# resolves the other flagged limitation (the materialized-body tests could not
+# exercise TCP-level chunk-boundary splitting of a single ``data:`` line): it
+# builds a real chunked stream via a custom ``httpx.AsyncByteStream`` (verified
+# against installed httpx source: ``_decoders.py::LineDecoder`` buffers a
+# split line across ``ByteChunker``/``TextChunker`` pass-through calls and
+# reassembles it once the terminator arrives), so `_stream_httpx`'s line
+# buffering across real chunk boundaries is now exercised, not assumed.
+# ---------------------------------------------------------------------------
+
+
+def _httpx_stream_provider(handler: Any) -> Provider:
+    """A Provider forced onto the httpx SSE streaming transport, answered by
+    an ``httpx.MockTransport`` running *handler* for every request.
+    """
+    import httpx
+
+    provider = Provider(base_url="http://localhost:1234/v1", model="m")
+    object.__setattr__(provider, "_use_httpx", True)
+    object.__setattr__(
+        provider,
+        "_client",
+        httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+    return provider
+
+
+async def test_provider_stream_httpx_yields_deltas_and_records_usage() -> None:
+    """Successful end-to-end SSE stream over the httpx transport."""
+    try:
+        import httpx
+    except ImportError:
+        pytest.skip("httpx not installed")
+
+    sse_body = (
+        b'data: {"choices":[{"delta":{"content":"He"}}]}\n'
+        b'data: {"choices":[{"delta":{"content":"llo"}}]}\n'
+        b'data: {"choices":[],"usage":{"prompt_tokens":3,"completion_tokens":2}}\n'
+        b"data: [DONE]\n"
+    )
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=sse_body)
+
+    provider = _httpx_stream_provider(_handler)
+    sink: list[LLMResponse] = []
+    chunks = await _drain(provider.stream([user_message("hi")], usage_sink=sink))
+
+    assert chunks == ["He", "llo"]
+    assert sink[-1].input_tokens == 3
+    assert sink[-1].output_tokens == 2
+    await provider.aclose()
+
+
+async def test_provider_stream_httpx_429_raises_rate_limit_error() -> None:
+    """A 429 status on the SSE response classifies as RateLimitError."""
+    try:
+        import httpx
+    except ImportError:
+        pytest.skip("httpx not installed")
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            429,
+            headers={"retry-after": "3"},
+            json={"error": {"message": "slow down"}},
+        )
+
+    provider = _httpx_stream_provider(_handler)
+    with pytest.raises(RateLimitError) as exc_info:
+        await _drain(provider.stream([user_message("hi")]))
+    assert exc_info.value.retry_after == 3.0
+    await provider.aclose()
+
+
+async def test_provider_stream_httpx_500_raises_provider_error() -> None:
+    """A 5xx status on the SSE response classifies as ProviderError."""
+    try:
+        import httpx
+    except ImportError:
+        pytest.skip("httpx not installed")
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, json={"error": {"message": "boom"}})
+
+    provider = _httpx_stream_provider(_handler)
+    with pytest.raises(ProviderError, match="boom"):
+        await _drain(provider.stream([user_message("hi")]))
+    await provider.aclose()
+
+
+async def test_provider_stream_httpx_transport_error_raises_provider_error() -> None:
+    """A transport-level failure opening the SSE stream is redacted and
+    re-raised as ProviderError (not left as a raw httpx exception)."""
+    try:
+        import httpx
+    except ImportError:
+        pytest.skip("httpx not installed")
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused")
+
+    provider = _httpx_stream_provider(_handler)
+    with pytest.raises(ProviderError, match="Transport failure"):
+        await _drain(provider.stream([user_message("hi")]))
+    await provider.aclose()
+
+
+async def test_provider_stream_httpx_reassembles_event_split_across_chunk() -> None:
+    """A single SSE ``data:`` line delivered across two network-level byte
+    chunks (the classic SSE client bug) must still parse into exactly one
+    complete delta.
+
+    Follow-up to the chunk-boundary OPEN QUESTION above: verified against the
+    installed httpx 0.28.1 source (``_decoders.py::LineDecoder``,
+    ``_client.py::BoundAsyncStream``) — a custom ``httpx.AsyncByteStream``
+    (the httpx-sse fixture pattern) yields raw chunks unmerged all the way
+    through ``aiter_raw`` -> ``aiter_bytes`` (``ByteChunker`` is a pass-through
+    at the default ``chunk_size=None``) -> ``aiter_text`` -> ``aiter_lines``;
+    ``LineDecoder.decode()`` buffers an incomplete line across calls and
+    reassembles it once the terminating ``\\n`` arrives in a later chunk. This
+    test pins that ``_stream_httpx`` correctly relies on that reassembly.
+    """
+    try:
+        import httpx
+    except ImportError:
+        pytest.skip("httpx not installed")
+
+    class _ChunkedSSEBody(httpx.AsyncByteStream):
+        """Yields raw bytes as separate, unmerged network-style chunks."""
+
+        def __init__(self, chunks: list[bytes]) -> None:
+            self._chunks = chunks
+
+        async def __aiter__(self) -> AsyncIterator[bytes]:
+            for chunk in self._chunks:
+                yield chunk
+
+    # The "data: ..." line is split mid-JSON across two chunks — exactly the
+    # shape a TCP read can produce on a real connection.
+    split_chunks = [
+        b'data: {"choices": [{"delta"',
+        b': {"content": "hello"}}]}\n',
+        b'data: {"choices": [], "usage": '
+        b'{"prompt_tokens": 1, "completion_tokens": 1}}\n',
+        b"data: [DONE]\n",
+    ]
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        # Fresh Response/body per call — an AsyncByteStream generator is
+        # one-shot and would raise StreamConsumed if the transport retried.
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            stream=_ChunkedSSEBody(split_chunks),
+        )
+
+    provider = _httpx_stream_provider(_handler)
+    sink: list[LLMResponse] = []
+    chunks = await _drain(provider.stream([user_message("hi")], usage_sink=sink))
+
+    # The split line must reassemble into exactly one complete delta — not
+    # two malformed fragments and not a JSON parse error.
+    assert chunks == ["hello"]
+    assert sink[-1].input_tokens == 1
+    assert sink[-1].output_tokens == 1
+    await provider.aclose()
+
+
+async def test_provider_stream_httpx_read_error_raises_provider_error() -> None:
+    """A connection drop mid-body — after some good SSE lines were already
+    delivered — must surface as ProviderError, not hang or silently truncate.
+
+    Mirrors httpx's own ``test_cancellation_during_stream`` pattern: the
+    ``AsyncByteStream`` yields one good chunk, then raises ``httpx.ReadError``
+    from inside ``__aiter__`` to simulate a reset connection. Verified against
+    the installed httpx source: ``ReadError`` subclasses ``NetworkError`` ->
+    ``TransportError`` (``_exceptions.py``), so it is caught by
+    ``_stream_httpx``'s existing ``except _httpx.TransportError`` clause —
+    this pins that EK's intended contract is "surface the failure", not
+    truncate silently; no truncation bug was found, so no xfail is needed.
+    """
+    try:
+        import httpx
+    except ImportError:
+        pytest.skip("httpx not installed")
+
+    class _DroppedConnectionBody(httpx.AsyncByteStream):
+        """Yields one good SSE line, then raises as if the connection reset."""
+
+        async def __aiter__(self) -> AsyncIterator[bytes]:
+            yield b'data: {"choices":[{"delta":{"content":"He"}}]}\n'
+            raise httpx.ReadError("connection reset")
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        # Fresh Response/body per call — the generator body is one-shot.
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            stream=_DroppedConnectionBody(),
+        )
+
+    provider = _httpx_stream_provider(_handler)
+    collected: list[str] = []
+    with pytest.raises(ProviderError, match="Transport failure"):
+        async for chunk in provider.stream([user_message("hi")]):
+            collected.append(chunk)
+
+    # The good delta delivered before the drop must not be hidden — the
+    # failure is surfaced, not swallowed into a silently-truncated stream.
+    assert collected == ["He"]
     await provider.aclose()
 
 

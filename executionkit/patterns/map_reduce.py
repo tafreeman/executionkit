@@ -132,10 +132,14 @@ async def map_reduce(
 
     Metadata:
         map_count (int): Number of items mapped (length of *inputs*).
-        reduce_calls (int): Always 1 when *inputs* is non-empty; 0 when
-            *inputs* is empty and the reduce prompt contained no outputs
-            to combine (still runs one reduce call — ``reduce_calls=1``).
-        total_calls (int): Total LLM calls made (``map_count + 1``).
+        reduce_calls (int): Always 1 — the reduce step makes exactly one LLM
+            call, even when *inputs* is empty (``{mapped_outputs}`` is then
+            substituted with an empty string, and the reduce call still runs).
+        total_calls (int): Total LLM calls made — ``map_count + 1`` when no
+            attempt was retried. Call accounting counts every dispatched wire
+            attempt, including failed retries (see the ``retry`` parameter),
+            so ``total_calls`` can exceed ``map_count + 1`` when a map or
+            reduce call needed a retry.
     """
     if stream:
         raise ValueError(

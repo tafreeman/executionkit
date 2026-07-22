@@ -280,6 +280,47 @@ class TestMapReducePartialFailure:
             )
 
 
+class TestMapReduceRetryAccounting:
+    """Finding EK#3: total_calls counts every dispatched wire attempt,
+    including failed retries, so it can exceed map_count + 1."""
+
+    async def test_total_calls_exceeds_map_count_plus_one_when_retried(self) -> None:
+        """A retried map call adds an extra dispatched wire attempt."""
+
+        class _FailFirstCallProvider:
+            """Fails (retryably) on the very first call; always succeeds after."""
+
+            supports_tools = True
+
+            def __init__(self) -> None:
+                self._call_count = 0
+
+            async def complete(
+                self,
+                messages: Sequence[dict[str, Any]],
+                *,
+                temperature: float | None = None,
+                max_tokens: int | None = None,
+                tools: Sequence[dict[str, Any]] | None = None,
+                **kwargs: Any,
+            ) -> LLMResponse:
+                self._call_count += 1
+                if self._call_count == 1:
+                    raise ProviderError("simulated transient failure")
+                return LLMResponse(content="ok")
+
+        provider = _FailFirstCallProvider()
+        result = await map_reduce(
+            provider,  # type: ignore[arg-type]
+            inputs=["only"],
+            map_prompt_template=_MAP_TEMPLATE,
+            reduce_prompt_template=_REDUCE_TEMPLATE,
+            retry=RetryConfig(max_retries=2, base_delay=0.0),
+        )
+
+        assert result.metadata["total_calls"] > result.metadata["map_count"] + 1
+
+
 class TestMapReduceSync:
     def test_map_reduce_sync_returns_same_shape_as_async(self) -> None:
         """map_reduce_sync (called from non-async context) returns a

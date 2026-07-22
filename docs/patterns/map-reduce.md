@@ -113,7 +113,7 @@ result = await map_reduce(
 |-----|------|---------|
 | `map_count` | `int` | Number of items mapped (length of `inputs`). |
 | `reduce_calls` | `int` | Always `1` (one reduce completion). |
-| `total_calls` | `int` | `map_count + 1`. |
+| `total_calls` | `int` | `map_count + 1` when no attempt was retried; higher if a map or reduce call was retried (retries count as extra wire attempts). |
 
 ## Cost characteristics
 
