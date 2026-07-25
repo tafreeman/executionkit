@@ -1192,9 +1192,10 @@ async def test_500_retries_under_default_retry() -> None:
             retry=fast_retry,
         )
 
-    # ProviderError is retryable — must attempt max_retries times
-    assert call_count == fast_retry.max_retries, (
-        f"Expected {fast_retry.max_retries} attempts, got {call_count}"
+    # ProviderError is retryable — 1 initial call + max_retries retries
+    expected_calls = 1 + fast_retry.max_retries
+    assert call_count == expected_calls, (
+        f"Expected {expected_calls} attempts, got {call_count}"
     )
 
 
@@ -1357,7 +1358,8 @@ async def test_urllib_read_timeout_maps_to_retryable_provider_error(
             RetryConfig(max_retries=2, base_delay=0.0),
         )
 
-    assert tracker.call_count == 2
+    # 1 initial call + 2 retries
+    assert tracker.call_count == 3
 
 
 async def test_httpx_transport_failure_redacts_secret(

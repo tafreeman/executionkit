@@ -23,7 +23,9 @@ class RetryConfig:
     """Immutable retry configuration with exponential backoff.
 
     Attributes:
-        max_retries: Maximum number of retry attempts. 0 means no retries.
+        max_retries: Maximum number of retry attempts *after* the initial call,
+            so a call makes at most ``1 + max_retries`` attempts in total.
+            0 means no retries — exactly one attempt.
         base_delay: Base delay in seconds before first retry.
         max_delay: Maximum delay cap in seconds.
         exponential_base: Multiplier for exponential backoff.
@@ -86,6 +88,9 @@ async def with_retry(
 ) -> T:
     """Execute an async function with retry logic.
 
+    Makes up to ``1 + config.max_retries`` attempts: one initial call plus
+    ``max_retries`` retries. ``max_retries=0`` therefore means a single attempt.
+
     Args:
         fn: Async callable to execute.
         config: Retry configuration.
@@ -102,13 +107,16 @@ async def with_retry(
         asyncio.CancelledError: Always propagated immediately.
         Exception: Re-raised when retries are exhausted or exception is not retryable.
     """
+    # Fast path: no retries configured, so skip the loop and its bookkeeping.
     if config.max_retries == 0:
         await _run_before_attempt(_before_attempt, 1)
         if config.rate_limit_strategy is not None:
             await config.rate_limit_strategy.acquire()
         return await fn(*args, **kwargs)
 
-    for attempt in range(1, config.max_retries + 1):
+    # The initial call is not a retry, so the budget is 1 + max_retries.
+    total_attempts = 1 + config.max_retries
+    for attempt in range(1, total_attempts + 1):
         try:
             await _run_before_attempt(_before_attempt, attempt)
             # Pace the request through the bucket (a no-op when full); after a
@@ -119,7 +127,7 @@ async def with_retry(
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            if not config.should_retry(exc) or attempt == config.max_retries:
+            if not config.should_retry(exc) or attempt == total_attempts:
                 raise
             # Drain immediately on a 429 so the next acquire() honours the
             # cooldown; the jitter/backoff sleep below still runs as before.

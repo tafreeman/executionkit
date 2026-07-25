@@ -397,9 +397,10 @@ loop invocation.
 is the module-level singleton with sensible defaults (3 retries, 1 s base, 60 s
 cap, factor 2).
 
-`with_retry(fn, config, *args, **kwargs)` wraps any async callable. Uses full
-jitter (`random.uniform(0, cap)`) to prevent thundering-herd effects when many
-coroutines retry simultaneously. `CancelledError` is always re-raised
+`with_retry(fn, config, *args, **kwargs)` wraps any async callable and makes at
+most `1 + max_retries` attempts — the initial call plus `max_retries` retries.
+Uses full jitter (`random.uniform(0, cap)`) to prevent thundering-herd effects
+when many coroutines retry simultaneously. `CancelledError` is always re-raised
 immediately.
 
 ### `engine/parallel.py` — gather_strict and gather_resilient

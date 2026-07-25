@@ -16,6 +16,8 @@ Per-call kwargs on `consensus`, `refine_loop`, `react_loop`, and `structured` al
 
 The default `DEFAULT_RETRY` is suitable for most workloads. Pass a custom `RetryConfig` to any pattern via `retry=`. See [Core → `RetryConfig`](core.md#executionkit.engine.retry.RetryConfig) for the full signature.
 
+`max_retries` counts retries **after** the initial call, so a call is dispatched at most `1 + max_retries` times. `max_retries=0` disables retries entirely (one attempt).
+
 ## ConvergenceDetector
 
 Used internally by `refine_loop`. `delta_threshold`, `patience`, and `score_threshold` are surfaced as `refine_loop` parameters with the same names. See [Core → `ConvergenceDetector`](core.md#executionkit.engine.convergence.ConvergenceDetector).

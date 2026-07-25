@@ -158,7 +158,8 @@ async def test_checked_complete_counts_failed_wire_attempts() -> None:
             RetryConfig(max_retries=3, base_delay=0.0),
         )
 
-    assert tracker.call_count == 3
+    # 1 initial call + 3 retries, each reserved by _before_attempt.
+    assert tracker.call_count == 4
 
 
 async def test_checked_complete_stops_retry_when_call_budget_exhausted() -> None:
