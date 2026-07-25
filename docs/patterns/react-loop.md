@@ -180,6 +180,7 @@ The gate receives an `ApprovalRequest` whose `subject` is the tool name and whos
 | Exception | Cause |
 |-----------|-------|
 | `TypeError` | Provider does not satisfy `ToolCallingProvider` (missing `supports_tools=True`). |
+| `ValueError` | Two or more `tools` share a name. Raised before the first provider call; the message names the duplicate(s). |
 | `MaxIterationsError` | `max_rounds` exhausted without a final answer. Includes `cost` and `metadata`. |
 | `BudgetExhaustedError` | `max_cost` exceeded mid-loop. |
 

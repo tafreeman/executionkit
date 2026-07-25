@@ -1063,6 +1063,111 @@ async def test_react_loop_zero_max_observation_chars_raises() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Validation: duplicate tool names are rejected before any provider call
+# ---------------------------------------------------------------------------
+
+
+class TestReactLoopDuplicateToolNames:
+    """Tool calls are resolved by name, so colliding names are rejected up front.
+
+    Without the guard a duplicate name is last-write-wins: both schemas reach
+    the model while only the final registration can ever execute.
+    """
+
+    def _make_named_tool(self, name: str, executed: list[str], marker: str) -> Tool:
+        async def _execute(query: str) -> str:
+            executed.append(marker)
+            return marker
+
+        return Tool(
+            name=name,
+            description="Search the web",
+            parameters={
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+                "required": ["query"],
+            },
+            execute=_execute,
+        )
+
+    async def test_duplicate_tool_names_raise_before_provider_call(self) -> None:
+        executed: list[str] = []
+        provider = MockProvider(responses=[_make_final_response("ok")])
+
+        with pytest.raises(ValueError, match="tool names must be unique"):
+            await react_loop(
+                provider,
+                "question",
+                tools=[
+                    self._make_named_tool("search", executed, "first"),
+                    self._make_named_tool("search", executed, "second"),
+                ],
+            )
+
+        assert provider.calls == [], "provider must not be called on a name collision"
+        assert executed == [], "no tool may execute on a name collision"
+
+    async def test_error_names_the_colliding_tool(self) -> None:
+        executed: list[str] = []
+        provider = MockProvider(responses=[_make_final_response("ok")])
+
+        with pytest.raises(ValueError) as exc_info:
+            await react_loop(
+                provider,
+                "question",
+                tools=[
+                    self._make_named_tool("alpha", executed, "a"),
+                    self._make_named_tool("search", executed, "first"),
+                    self._make_named_tool("beta", executed, "b"),
+                    self._make_named_tool("search", executed, "second"),
+                ],
+            )
+
+        message = str(exc_info.value)
+        assert "search" in message, "the error must name the duplicated tool"
+        assert "alpha" not in message, "non-colliding tools must not be blamed"
+        assert "beta" not in message, "non-colliding tools must not be blamed"
+
+    async def test_every_colliding_name_is_reported_once(self) -> None:
+        executed: list[str] = []
+        provider = MockProvider(responses=[_make_final_response("ok")])
+
+        with pytest.raises(ValueError) as exc_info:
+            await react_loop(
+                provider,
+                "question",
+                tools=[
+                    self._make_named_tool("search", executed, "s1"),
+                    self._make_named_tool("lookup", executed, "l1"),
+                    self._make_named_tool("search", executed, "s2"),
+                    self._make_named_tool("lookup", executed, "l2"),
+                    self._make_named_tool("search", executed, "s3"),
+                ],
+            )
+
+        message = str(exc_info.value)
+        assert message.count("'search'") == 1
+        assert message.count("'lookup'") == 1
+
+    async def test_distinct_tool_names_still_accepted(self) -> None:
+        """Valid input is unaffected: distinct names run the loop as before."""
+        executed: list[str] = []
+        provider = MockProvider(responses=[_make_final_response("done")])
+
+        result = await react_loop(
+            provider,
+            "question",
+            tools=[
+                self._make_named_tool("search", executed, "a"),
+                self._make_named_tool("lookup", executed, "b"),
+            ],
+        )
+
+        assert result.value == "done"
+        assert len(provider.calls) == 1
+
+
+# ---------------------------------------------------------------------------
 # Multi-turn conversation: messages= seeding + returned transcript
 # ---------------------------------------------------------------------------
 

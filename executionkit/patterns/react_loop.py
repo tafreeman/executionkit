@@ -462,6 +462,35 @@ def _validate_react_loop_args(
         )
 
 
+def _build_tool_lookup(tools: Sequence[Tool]) -> dict[str, Tool]:
+    """Return a name -> :class:`Tool` registry, rejecting duplicate names.
+
+    Tool calls are resolved by name alone, so two tools sharing a name would
+    send *both* schemas to the model while only the last one registered could
+    ever execute.  The collision is ambiguous rather than recoverable, so it is
+    rejected before any provider call instead of silently shadowing a tool.
+
+    Args:
+        tools: Tool definitions supplied by the caller.
+
+    Returns:
+        A registry mapping each tool name to its :class:`Tool`.
+
+    Raises:
+        ValueError: If two or more tools share a name.
+    """
+    lookup: dict[str, Tool] = {}
+    duplicates: list[str] = []
+    for tool in tools:
+        if tool.name in lookup and tool.name not in duplicates:
+            duplicates.append(tool.name)
+        lookup[tool.name] = tool
+    if duplicates:
+        names = ", ".join(repr(name) for name in duplicates)
+        raise ValueError(f"react_loop() tool names must be unique, duplicated: {names}")
+    return lookup
+
+
 def _seed_messages(
     prompt: str | None, messages: Sequence[dict[str, Any]] | None
 ) -> list[dict[str, Any]]:
@@ -672,6 +701,9 @@ async def react_loop(
         prompt: Initial user prompt. Sugar for ``messages=[user_message(prompt)]``;
             mutually exclusive with *messages*.
         tools: Sequence of :class:`Tool` definitions available to the LLM.
+            Names must be unique — tool calls are resolved by name, so a
+            collision is rejected with ``ValueError`` before any provider call
+            rather than shadowing the earlier tool.
         messages: A prior conversation (OpenAI-format message dicts) to continue
             instead of starting from *prompt*. The list is copied, never mutated.
         max_rounds: Maximum think-act-observe cycles.
@@ -770,7 +802,7 @@ async def react_loop(
         "termination_reason": None,
     }
     tool_schemas = [tool.to_schema() for tool in tools]
-    tool_lookup: dict[str, Tool] = {tool.name: tool for tool in tools}
+    tool_lookup = _build_tool_lookup(tools)
     history = _seed_messages(prompt, messages)
     # Memoizes summaries by dropped-window boundary so a stable window is
     # summarized at most once even when trimming recurs across rounds.

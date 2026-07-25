@@ -84,3 +84,20 @@ Alternatives considered:
   tools are the developer's code. The boundary defended here is the
   model→harness edge, and (per the ADR-024 review) the only interpreted
   model text in the package already runs on a pure-AST interpreter.
+
+## Amendment 2026-07-25: unique tool names are a precondition
+
+The contract above enumerated no name-collision check, and the registry was
+built as a last-write-wins dict. Two tools registered under one name therefore
+sent *both* schemas to the model while only the last registration could ever
+execute — the shadowed tool was silently unreachable, and which handler ran
+depended on argument order rather than anything the caller stated.
+
+Decision: `react_loop` now raises `ValueError` naming the duplicated tool(s)
+before the first provider call. Rejecting is right where deduplicating is not:
+the caller's intent is genuinely ambiguous, and the failure is a registration
+bug the developer can fix, not model-controlled input the loop must tolerate.
+Unlike the model→harness protections above, this one guards the
+*developer→harness* edge, so it fails loudly instead of becoming an
+observation. No behaviour change for callers whose tool names were already
+unique.
