@@ -49,6 +49,16 @@ class TestRetryConfig:
     def test_default_retry_is_instance(self) -> None:
         assert isinstance(DEFAULT_RETRY, RetryConfig)
 
+    @pytest.mark.parametrize("max_retries", [-1, -2])
+    def test_negative_max_retries_rejected(self, max_retries: int) -> None:
+        """A negative budget made zero attempts, then raised RuntimeError."""
+        with pytest.raises(ValueError, match="max_retries must be >= 0"):
+            RetryConfig(max_retries=max_retries)
+
+    def test_zero_max_retries_accepted(self) -> None:
+        """0 is a valid budget — one attempt, no retries — not an error."""
+        assert RetryConfig(max_retries=0).max_retries == 0
+
 
 class TestRetryConfigShouldRetry:
     def test_should_retry_rate_limit_error(self) -> None:

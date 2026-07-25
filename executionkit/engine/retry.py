@@ -44,6 +44,18 @@ class RetryConfig:
     retryable: tuple[type[Exception], ...] = (RateLimitError, ProviderError)
     rate_limit_strategy: TokenBucket | None = None
 
+    def __post_init__(self) -> None:
+        """Reject a negative retry budget at construction.
+
+        A negative value yields an empty attempt range, so ``with_retry`` never
+        calls ``fn`` at all and falls through to its ``unreachable`` guard —
+        a RuntimeError about the library's internals in answer to a bad
+        argument. ``structured()`` already rejects the same input with a
+        ValueError; this makes the two agree.
+        """
+        if self.max_retries < 0:
+            raise ValueError(f"max_retries must be >= 0, got {self.max_retries}")
+
     def should_retry(self, exc: Exception) -> bool:
         """Check whether the given exception is retryable."""
         return isinstance(exc, self.retryable)
