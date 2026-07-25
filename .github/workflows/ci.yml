@@ -54,6 +54,15 @@ jobs:
       - name: Doc-fact check
         run: python scripts/check_doc_facts.py
 
+      # CI installs strictly from requirements.lock, so a package declared in
+      # the dev extra but missing from the lock is never installed and any
+      # test guarding on it skips silently while the job stays green. That is
+      # how the Tier-B jsonschema validation tests went unrun between the lock
+      # falling behind the dev extra and the audit that caught it.
+      # See scripts/check_lock_parity.py.
+      - name: Lock-parity check (dev extra vs requirements.lock)
+        run: python scripts/check_lock_parity.py
+
       - name: Tests with coverage
         run: pytest tests/ --cov=executionkit --cov-report=term-missing --cov-report=xml --cov-fail-under=80 -q
 
@@ -89,6 +98,54 @@ jobs:
 
       - name: Dependency audit (pip-audit)
         run: pip install pip-audit && pip-audit --requirement requirements.lock
+
+  observability:
+    name: "Observability (OTel spans, [otel] extra)"
+    # The `test` matrix deliberately installs only the locked dev extra, which
+    # has no OpenTelemetry in it — that is what proves the library's zero-dep
+    # no-op path works. The consequence is that the span-attribute assertions
+    # in tests/test_observability.py have nowhere to run, so they skipped
+    # everywhere until this job existed. This runs the same file against a real
+    # OTel install, giving both configurations a home.
+    #
+    # Same trigger and `if:` guard as `test`/`security`, so it is required by
+    # default on every push to main and every pull request — not label-gated.
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.action != 'labeled'
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      # Three installs, deliberately:
+      #   1. the hashed lock, for pytest/pytest-asyncio (asyncio_mode = auto);
+      #   2. the `[otel]` extra exactly as a user gets it, which resolves to
+      #      opentelemetry-api only — that is all the library imports;
+      #   3. opentelemetry-sdk, which the *tests* need to install an
+      #      InMemorySpanExporter and read spans back. It is a test-only
+      #      dependency: adding it to the `[otel]` extra would push an SDK onto
+      #      library consumers, which is the opposite of the API-only
+      #      convention OTel prescribes for libraries.
+      # Steps 2 and 3 are unhashed, matching how the `security` job above
+      # installs bandit and pip-audit.
+      - name: Install dependencies (lock + [otel] extra + test-only SDK)
+        run: |
+          pip install --require-hashes -r requirements.lock
+          pip install -e ".[otel]"
+          pip install "opentelemetry-sdk>=1.20"
+
+      # Without the SDK the span tests skipif-skip and this job would go green
+      # having verified nothing — the exact failure mode it exists to fix.
+      - name: Guard against a silent skip (SDK must be importable)
+        run: python -c "import opentelemetry.sdk"
+
+      # --no-cov: this is a single-file run and cannot meet the suite-wide
+      # coverage gate that the `test` job enforces.
+      - name: OTel span tests
+        run: pytest tests/test_observability.py --no-cov -p no:cacheprovider -rs -q
 
   live-eval-pr:
     name: "Live eval (pytest -m live, label-gated)"
