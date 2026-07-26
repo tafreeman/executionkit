@@ -6,6 +6,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- `RetryConfig.max_retries` now means "retries **after** the initial call", so `with_retry()` makes up to `1 + max_retries` attempts instead of capping total attempts at `max_retries` **(behavior change)**. This makes the field agree with `structured()`'s own `max_retries`, which has always run `1 + max_retries` attempts. Practically: an existing `RetryConfig(max_retries=3)` now dispatches up to 4 calls rather than 3 — one more call, one more unit of cost, and one more backoff sleep in the worst case for a request that keeps failing. To keep the old behavior exactly, decrement the value (`max_retries=N` → `max_retries=N-1`); `max_retries=0` is unchanged and still means a single attempt with no retries. A `max_cost` `llm_calls` ceiling still caps total dispatched attempts, so budget-capped callers never see an extra wire call — but where that ceiling equals the old attempt count, the call now ends in `BudgetExhaustedError` (a `PatternError`) instead of the provider's own `ProviderError`, so a caller catching only `ProviderError` should widen it
+- `RetryConfig` now raises `ValueError` when `max_retries` is negative, matching `structured()`. Previously a negative value made zero attempts and raised `RuntimeError("unreachable")` from inside `with_retry`
+
 ### Fixed
 
 - `Workflow.run()` now raises `ValueError` when an `initial_context` key collides with a step name, instead of silently returning the caller's seed as that step's output without ever running it. Step completion is now tracked in a set independent from `outputs` membership, which previously doubled as both "seeded by initial_context" and "already executed" **(behavior change)**

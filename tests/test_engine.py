@@ -49,6 +49,16 @@ class TestRetryConfig:
     def test_default_retry_is_instance(self) -> None:
         assert isinstance(DEFAULT_RETRY, RetryConfig)
 
+    @pytest.mark.parametrize("max_retries", [-1, -2])
+    def test_negative_max_retries_rejected(self, max_retries: int) -> None:
+        """A negative budget made zero attempts, then raised RuntimeError."""
+        with pytest.raises(ValueError, match="max_retries must be >= 0"):
+            RetryConfig(max_retries=max_retries)
+
+    def test_zero_max_retries_accepted(self) -> None:
+        """0 is a valid budget — one attempt, no retries — not an error."""
+        assert RetryConfig(max_retries=0).max_retries == 0
+
 
 class TestRetryConfigShouldRetry:
     def test_should_retry_rate_limit_error(self) -> None:
@@ -226,7 +236,14 @@ class TestWithRetry:
         result = await with_retry(fn, cfg, 3, y=4)
         assert result == 7
 
-    async def test_call_count_equals_max_retries_on_exhaustion(self) -> None:
+    @pytest.mark.parametrize(
+        ("max_retries", "expected_calls"),
+        [(0, 1), (1, 2), (3, 4)],
+    )
+    async def test_call_count_is_one_plus_max_retries_on_exhaustion(
+        self, max_retries: int, expected_calls: int
+    ) -> None:
+        """max_retries counts retries *after* the initial call, not total calls."""
         call_count = 0
 
         async def fn() -> str:
@@ -234,10 +251,26 @@ class TestWithRetry:
             call_count += 1
             raise ProviderError("fail")
 
-        cfg = RetryConfig(max_retries=3, base_delay=0.0)
+        cfg = RetryConfig(max_retries=max_retries, base_delay=0.0)
         with pytest.raises(ProviderError):
             await with_retry(fn, cfg)
 
+        assert call_count == expected_calls
+
+    async def test_succeeds_on_final_retry(self) -> None:
+        """max_retries=2 must reach a third attempt: 1 initial call + 2 retries."""
+        call_count = 0
+
+        async def fn() -> str:
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise ProviderError("transient")
+            return "success"
+
+        cfg = RetryConfig(max_retries=2, base_delay=0.0)
+        result = await with_retry(fn, cfg)
+        assert result == "success"
         assert call_count == 3
 
     async def test_rate_limit_retry_after_respected(
