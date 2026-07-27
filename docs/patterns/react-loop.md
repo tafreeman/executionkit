@@ -112,7 +112,7 @@ asyncio.run(main())
 | `max_rounds` | `8` | Maximum think-act-observe cycles. Raises `MaxIterationsError` if hit. |
 | `max_observation_chars` | `12000` | Truncation limit for each tool result before appending to history. |
 | `tool_timeout` | `None` | Per-call timeout override. Falls back to `Tool.timeout` (default `30.0s`). |
-| `temperature` | `0.3` | Lower = more deterministic tool selection. |
+| `temperature` | `0.3` | Lower = more predictable tool selection. |
 | `max_tokens` | `4096` | Per-completion token cap. |
 | `max_cost` | `None` | `TokenUsage` budget across all rounds. |
 | `retry` | `DEFAULT_RETRY` | Per-call retry config. |

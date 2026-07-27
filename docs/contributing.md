@@ -48,7 +48,7 @@ pre-commit run --all-files
 ## Running the Test Suite
 
 ```bash
-# Unit tests and deterministic smoke tests — no real API calls
+# Unit tests and repeatable smoke tests — no real API calls
 python -m pytest
 
 # With coverage report — must stay above 80%
@@ -60,7 +60,7 @@ must include tests — follow TDD: write the test first (RED), implement to pass
 (GREEN), then refactor (IMPROVE).
 
 Use `MockProvider` from `executionkit._mock` in tests. The public test suite is
-deterministic and does not call live LLM APIs; add a separately documented
+repeatable and does not call live LLM APIs; add a separately documented
 manual smoke script before introducing provider-backed tests.
 
 ## Code Quality
@@ -174,7 +174,7 @@ Open a GitHub issue. Tag it `question` for support, `bug` for defects,
 This repository is built solo with AI-assisted tooling. Because there is no second human reviewer, correctness is gated by **automated evidence**, not peer sign-off:
 
 - **CI gates (every push / PR):** ruff, ruff-format, `mypy --strict`, `pytest --cov-fail-under=80`, Bandit, and pip-audit (2-OS × 3-Python matrix). Merges block on a red pipeline.
-- **Behavioral verification:** the deterministic golden suite and the model-failure corpus (`tests/test_eval_goldens.py`, `tests/test_eval_failure_corpus.py`) run in normal CI and assert output correctness, not just coverage.
+- **Behavioral verification:** the repeatable golden suite and the model-failure corpus (`tests/test_eval_goldens.py`, `tests/test_eval_failure_corpus.py`) run in normal CI and assert output correctness, not just coverage.
 - **Provenance:** AI-assisted changes are verified against these gates before merge; the CI and evaluation output is the verification artifact of record.
 
 Contributions are welcome via PR; CI must pass and changes should add or update tests.

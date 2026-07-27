@@ -15,7 +15,7 @@ tags:
 | The answer is a short factual or classification label. | The answer is long-form prose — voting on long strings rarely matches. |
 | You can tolerate `N×` cost and want an agreement signal across independent samples. | Latency matters more than reliability. |
 | You can run calls in parallel (the provider supports concurrency). | The model is rate-limited tightly enough that `N` parallel calls trigger 429s. |
-| Tie-handling is acceptable (you check `tie_count`). | You require a single deterministic answer per prompt. |
+| Tie-handling is acceptable (you check `tie_count`). | You require a single, consistent answer per prompt. |
 
 ## Call flow
 

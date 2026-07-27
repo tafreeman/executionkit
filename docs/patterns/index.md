@@ -1,6 +1,6 @@
 # Patterns Overview
 
-ExecutionKit ships **six composable pattern utilities**. Each is a single async function that takes a provider and a prompt and returns a `PatternResult` carrying the answer, a score, accumulated cost, and per-pattern metadata. Lightweight orchestration helpers such as `Router`, `Workflow`, `Plan`, `ApprovalGate`, and evals live alongside these patterns in the public API.
+ExecutionKit ships **six pattern utilities** you can combine. Each is a single async function that takes a provider and a prompt and returns a `PatternResult` carrying the answer, a score, accumulated cost, and per-pattern metadata. Lightweight orchestration helpers such as `Router`, `Workflow`, `Plan`, `ApprovalGate`, and evals live alongside these patterns in the public API.
 
 | Pattern | Use when… | Cost shape |
 |---------|-----------|------------|

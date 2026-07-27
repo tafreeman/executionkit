@@ -53,7 +53,7 @@ The docs extra includes MkDocs Material, mkdocstrings, and Mermaid support used 
 ## Run the test suite
 
 ```bash
-pytest                                                   # deterministic tests, no API keys
+pytest                                                   # repeatable tests, no API keys
 pytest --cov=executionkit --cov-fail-under=80            # full suite with coverage
 ```
 

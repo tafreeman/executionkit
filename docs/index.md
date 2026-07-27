@@ -79,7 +79,7 @@ Swap in Ollama, vLLM, Groq, Together, GitHub Models, or Azure via an OpenAI-comp
 
 <p class="section-kicker">patterns</p>
 
-## Six composable reasoning patterns
+## Six reasoning patterns you can combine
 
 <div class="feature-grid" markdown>
 
@@ -162,7 +162,7 @@ Swap in Ollama, vLLM, Groq, Together, GitHub Models, or Azure via an OpenAI-comp
 
 <div class="feature-card" markdown>
 <h3 class="fc-title">Eval-aware</h3>
-<p class="fc-body">A deterministic golden suite and a curated model-failure corpus assert output <em>correctness</em> — not just coverage — in every CI run, with an opt-in live-provider regression tier.</p>
+<p class="fc-body">A repeatable golden suite and a curated model-failure corpus assert output <em>correctness</em> — not just coverage — in every CI run, with an opt-in live-provider regression tier.</p>
 </div>
 
 </div>
@@ -216,7 +216,7 @@ Swap in Ollama, vLLM, Groq, Together, GitHub Models, or Azure via an OpenAI-comp
 
 <div class="feature-card" markdown>
 <h3 class="fc-title">Correctness gated in CI</h3>
-<p class="fc-body">An 80% coverage gate, ruff and <code>mypy --strict</code> on the full package, and a Bandit SAST job — plus a deterministic golden eval suite that checks output correctness, not just line coverage.</p>
+<p class="fc-body">An 80% coverage gate, ruff and <code>mypy --strict</code> on the full package, and a Bandit SAST job — plus a repeatable golden eval suite that checks output correctness, not just line coverage.</p>
 [Contributing](contributing.md){ .fc-link }
 </div>
 

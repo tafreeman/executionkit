@@ -3,7 +3,7 @@
 **Date:** 2026-07-02
 **Status:** Accepted
 **Deciders:** ExecutionKit core team
-**Technical Story:** ExecutionKit already has two eval tiers: a deterministic golden/failure-corpus suite (ADR-006) that runs unconditionally in CI and asserts ExecutionKit's own code handles known failure modes correctly, and an opt-in live-provider tier (`live_provider_from_env`, `tests/test_eval_live_cases.py`, `.github/workflows/live-eval.yml`) that calls a real OpenAI-compatible endpoint. Neither tier answers a different question: does the corpus's own *expected outcome* for each failure case actually read as correct behaviour to a capable outside model, not just to ExecutionKit's own assertions? This decision adds that third tier using the Claude Code CLI in headless mode, distinct from and never merge-blocking alongside the other two.
+**Technical Story:** ExecutionKit already has two eval tiers: a repeatable golden/failure-corpus suite (ADR-006) that runs unconditionally in CI and asserts ExecutionKit's own code handles known failure modes correctly, and an opt-in live-provider tier (`live_provider_from_env`, `tests/test_eval_live_cases.py`, `.github/workflows/live-eval.yml`) that calls a real OpenAI-compatible endpoint. Neither tier answers a different question: does the corpus's own *expected outcome* for each failure case actually read as correct behaviour to a capable outside model, not just to ExecutionKit's own assertions? This decision adds that third tier using the Claude Code CLI in headless mode, distinct from and never merge-blocking alongside the other two.
 
 ---
 
@@ -11,7 +11,7 @@
 
 `tests/eval_failure_cases.py` (ADR-006) is a hand-curated, 13-case corpus
 (`FC-01`-`FC-13`) proving ExecutionKit handles specific malformed-output,
-injection, and bad-tool-argument scenarios gracefully. The deterministic
+injection, and bad-tool-argument scenarios gracefully. The repeatable
 suite (`tests/test_eval_failure_corpus.py`) proves the code does what the
 corpus's `check()` functions say it should — but the `check()` functions
 themselves are written by the same people who wrote the code they check.
@@ -20,7 +20,7 @@ There was no independent, model-based signal that the corpus's documented
 opposed to merely the behaviour that was implemented.
 
 The team needed a way to get that independent signal without threatening the
-things the first two tiers already protect: deterministic CI must stay
+things the first two tiers already protect: CI must stay repeatable,
 offline and 100%-reproducible (ADR-006), and no eval tier that depends on a
 real model call may be allowed to block a merge (the existing `live-eval-pr`
 gating pattern in `ci.yml`). Three questions had to be answered: which
@@ -36,7 +36,7 @@ gated so it stays advisory.
 * The existing live-eval gating pattern (label-gated PR trigger + unconditional
   weekly schedule + hard requirement that the job never becomes a required
   status check) is proven in this repo and should be reused, not reinvented.
-* A model call is non-deterministic and can be slow, rate-limited, or briefly
+* A model call isn't repeatable and can be slow, rate-limited, or briefly
   unavailable; none of that may ever fail a PR's required checks.
 * The judge's output must be trusted only after structural validation — an
   unparsable or malformed CLI response must count as a failed case, not a
@@ -107,7 +107,7 @@ is scored as failed rather than crashing the run.
 
 * Good: an independent, model-based check on the *correctness* of the
   corpus's documented expectations exists, without threatening the
-  determinism or offline guarantee of the ADR-006 golden suite.
+  repeatability or offline guarantee of the ADR-006 golden suite.
 * Good: zero new runtime or dev dependency — `scripts/claude_ci_eval.py`
   uses only `argparse`, `json`, `os`, `shutil`, `subprocess`, `sys`,
   `dataclasses`, and `pathlib`.

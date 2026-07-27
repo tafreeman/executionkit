@@ -11,7 +11,7 @@
 
 LLM toolkits commonly bundle HTTP clients, retry libraries, schema validators, and serialisation frameworks as required runtime dependencies. Each bundled dependency expands the install footprint, introduces transitive conflicts, and requires the library maintainer to track security advisories and version pins for packages the user may already have at a different version.
 
-ExecutionKit's value proposition is composable reasoning patterns and budget-aware execution — not HTTP transport, schema validation, or observability plumbing. The team needed to decide how many runtime dependencies were acceptable at v0.1 and where the boundary should sit.
+ExecutionKit's value proposition is reasoning patterns you can combine and budget-aware execution — not HTTP transport, schema validation, or observability plumbing. The team needed to decide how many runtime dependencies were acceptable at v0.1 and where the boundary should sit.
 
 ## Decision Drivers
 
@@ -46,7 +46,7 @@ ExecutionKit's value proposition is composable reasoning patterns and budget-awa
 
 ### Option A: Zero runtime deps; `httpx` optional
 
-* **Good:** No install-time conflicts; composable with any Python environment.
+* **Good:** No install-time conflicts; works with any Python environment.
 * **Good:** Minimal security audit surface.
 * **Good:** Consistent with the library's identity as a pattern library, not a client framework.
 * **Bad:** stdlib transport has no connection pooling; high-concurrency patterns benefit from `httpx`.

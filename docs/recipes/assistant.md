@@ -213,7 +213,7 @@ Kit call.
 Multi-turn behavior is exactly the kind of thing that regresses silently. Drive
 a fresh `Kit` through a scripted conversation and assert on each turn with the
 built-in eval harness — `EvalCase`, `run_eval_suite`, and `EvalReport`. Use
-`MockProvider` so the eval is deterministic and never touches the network.
+`MockProvider` so the eval is repeatable and never touches the network.
 
 ```python
 import asyncio
@@ -274,8 +274,8 @@ driven `Kit` so `check` can inspect `kit.messages`, `kit.usage`, or any turn's
 result. `check` returns `None`/`True` to pass, or a reason string to fail.
 `run_eval_suite` aggregates into an `EvalReport`: `report.passed` is `True` only
 when every case passes, `report.accuracy` is the pass fraction, and
-`report.summary()` gives a one-line readout. For live, non-deterministic suites
-pass `min_accuracy=` and gate on `report.accuracy_passed` instead.
+`report.summary()` gives a one-line readout. For live suites, where results vary
+run to run, pass `min_accuracy=` and gate on `report.accuracy_passed` instead.
 
 ## Related
 

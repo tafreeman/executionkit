@@ -73,7 +73,7 @@ asyncio.run(main())
 
 ## Custom evaluator
 
-For production, supply your own evaluator. The default uses an LLM-as-judge prompt with XML-delimiter sandboxing — fine for development, but you should write a deterministic or domain-specific scorer when input may contain adversarial content.
+For production, supply your own evaluator. The default uses an LLM-as-judge prompt with XML-delimiter sandboxing — fine for development, but you should write a predictable or domain-specific scorer when input may contain adversarial content.
 
 ```python
 async def length_evaluator(text: str, _: object) -> float:

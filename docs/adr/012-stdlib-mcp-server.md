@@ -32,7 +32,7 @@ a library, which is unacceptable to expose over a wire protocol.
   testing convention.
 * LLM output is untrusted (see the security documentation); an MCP endpoint
   must not become a remote-code-registration vector.
-* A first-class module signals deliberate protocol support; an `examples/`
+* A dedicated module signals deliberate protocol support; an `examples/`
   script would signal a demo.
 
 ## Considered Options

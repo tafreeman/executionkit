@@ -2,8 +2,7 @@
 
 # ExecutionKit
 
-**Composable LLM reasoning patterns.**
-Consensus voting · Iterative refinement · ReAct tool loops · Structured JSON · Zero SDK lock-in.
+**A Python library of LLM calling patterns — voting, retry-and-refine, tool loops, structured output — with no dependencies outside the standard library.**
 
 [![Python 3.11-3.13](https://img.shields.io/badge/python-3.11--3.13-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -128,7 +127,7 @@ See the [Quick Start guide](https://tafreeman.github.io/executionkit/getting-sta
 
 ExecutionKit also exposes small stdlib-only primitives for the glue code around pattern calls, including a set of single-run agent-orchestration primitives (`Router`, `Workflow`/`Step`, `Plan`/`PlanStep`, `ApprovalGate`) — composition within one execution, not multi-agent handoff, which stays [out of scope](CONTRIBUTING.md#anti-scope):
 
-- **Evals.** `EvalCase` and `run_eval_suite()` run deterministic golden checks in CI; `live_provider_from_env()` enables opt-in live checks via `EXECUTIONKIT_LIVE_EVAL=1`, `EXECUTIONKIT_BASE_URL`, and `EXECUTIONKIT_MODEL`. A further tier, `scripts/claude_ci_eval.py`, asks the headless Claude Code CLI to judge the failure corpus's own documented expectations — gated, opt-in (PR label / manual dispatch / weekly schedule), requires `ANTHROPIC_API_KEY`, and is advisory only: it is never a required check and a failed or skipped run cannot block a merge ([ADR-013](docs/adr/013-claude-in-ci-eval.md)).
+- **Evals.** `EvalCase` and `run_eval_suite()` run repeatable golden checks in CI — the same input always gives the same result; `live_provider_from_env()` enables opt-in live checks via `EXECUTIONKIT_LIVE_EVAL=1`, `EXECUTIONKIT_BASE_URL`, and `EXECUTIONKIT_MODEL`. A further tier, `scripts/claude_ci_eval.py`, asks the headless Claude Code CLI to judge the failure corpus's own documented expectations — gated, opt-in (PR label / manual dispatch / weekly schedule), requires `ANTHROPIC_API_KEY`, and is advisory only: it is never a required check and a failed or skipped run cannot block a merge ([ADR-013](docs/adr/013-claude-in-ci-eval.md)).
 - **Observability.** `TraceEvent` callbacks can receive structured events for LLM calls, retries, tool calls, workflow steps, plan steps, approvals, cost, and latency; when `opentelemetry-api` is installed, `llm_span()` wraps each LLM call in a real OTel span whose attributes use a custom `llm.*` namespace (`llm.model`, `llm.input_tokens`, `llm.output_tokens`, plus a `cost_usd` attribute that has no semconv equivalent) informed by — rather than mapping onto — the OpenTelemetry GenAI semantic conventions, without requiring the dependency at all.
 - **Routing.** `Router` and `RouteRule` select a provider before a pattern call without changing the pattern implementation.
 - **Workflow and planning.** `Workflow`/`Step` execute simple dependency-ordered fan-out DAGs; `Plan`/`PlanStep` execute ordered plan-then-act flows.
@@ -138,11 +137,11 @@ ExecutionKit also exposes small stdlib-only primitives for the glue code around 
 
 - **Provider-agnostic.** OpenAI, Ollama, vLLM, GitHub Models, Together, Groq, llama.cpp, and Azure via an OpenAI-compatible gateway.
 - **Zero SDK lock-in.** Structural `LLMProvider` protocol — any conforming object works without inheritance.
-- **Composable.** Patterns are async functions. Wrap them, chain them with `pipe()`, or drop them inside a larger orchestrator like [agentic-runtime-platform](https://github.com/tafreeman/agentic-runtime-platform).
+- **Combine freely.** Patterns are async functions. Wrap them, chain them with `pipe()`, or drop them inside a larger orchestrator like [agentic-runtime-platform](https://github.com/tafreeman/agentic-runtime-platform).
 - **Budget-aware.** TOCTOU-safe `max_cost` enforcement across parallel calls; `llm_calls` counts every dispatched wire attempt, including failed retries.
 - **Resilient by construction.** `RetryConfig`'s retryable allowlist plus a `TokenBucket` rate-limit strategy (`engine/retry.py`, `engine/rate_bucket.py`) provide typed retry/backoff and rate-limit coordination: retryable failures back off with full jitter, a 429's `retry_after` immediately drains the bucket and arms a cooldown, and non-retryable errors fail fast instead of being retried into a cascading failure.
 - **Secure-by-default.** API key masking, broad credential redaction in library-owned error paths, a dependency-free top-level JSON-Schema subset plus optional full `jsonschema` validation (fail-closed when the subset is insufficient), a prompt-injection-hardened default evaluator, and optional approval gates.
-- **Eval-aware.** A deterministic golden suite and model-failure corpus assert pattern behavior and known failure handling in normal CI, with `EvalReport.accuracy`/`summary()` metrics. Real-model regression, `LIVE_CORPUS`, judge-calibration, and Claude corpus-review tiers are explicitly advisory and env-gated; they are evidence of endpoint compatibility and eval plumbing, not a required model-efficacy gate.
+- **Eval-aware.** A repeatable golden suite and model-failure corpus assert pattern behavior and known failure handling in normal CI, with `EvalReport.accuracy`/`summary()` metrics. Real-model regression, `LIVE_CORPUS`, judge-calibration, and Claude corpus-review tiers are explicitly advisory and env-gated; they are evidence of endpoint compatibility and eval plumbing, not a required model-efficacy gate.
 
 ## MCP server
 

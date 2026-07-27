@@ -37,12 +37,12 @@ The module docstring for `cost.py` explicitly states: "ExecutionKit ships **no p
 
 * `estimate_cost()` never goes stale; the library does not need a release when a provider changes its pricing.
 * Any model on any OpenAI-compatible endpoint works correctly — the caller supplies rates appropriate for their specific tier and region.
-* The function is trivially testable: the expected output is deterministic given the inputs.
+* The function is trivially testable: given the same inputs, the output is always the same.
 * No hidden assumptions about which models are "known" to the library.
 
 ### Negative Consequences
 
-* Callers must look up rates themselves and pass them in on every call. This is a minor ergonomic cost.
+* Callers must look up rates themselves and pass them in on every call. This is a minor cost in convenience.
 * There is no guard against obviously wrong rates (e.g. negative values). The docstring notes that rates are "assumed non-negative and finite; no validation is performed."
 
 ## Pros and Cons of the Options
