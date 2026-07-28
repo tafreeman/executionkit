@@ -63,7 +63,7 @@ is counted in new `rejected_tool_calls` metadata.
 Alternatives considered:
 
 - Reject the whole round — harsher than needed; executing the first N in
-  request order is deterministic and lets partial progress stand.
+  request order is predictable and lets partial progress stand.
 - A concurrency semaphore without a count cap — bounds parallelism but not
   total work per round; the count cap bounds both.
 - OS-level isolation (subprocess/container per tool) — out of scope for a

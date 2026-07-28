@@ -2,7 +2,7 @@
 
 ## Design Principles
 
-ExecutionKit is a minimal library for composable LLM reasoning. Five principles
+ExecutionKit is a minimal library for LLM reasoning built from pieces you can combine. Five principles
 shape every design decision:
 
 1. **Zero runtime dependencies.** `dependencies = []` in `pyproject.toml`. The
@@ -25,7 +25,7 @@ shape every design decision:
    `react_loop_sync`, `structured_sync`, `pipe_sync`) live in `__init__.py` and call
    `asyncio.run()`, raising a helpful error when called inside a running loop.
 
-5. **Composable, not opinionated.** Patterns are standalone async functions that
+5. **Pieces you can combine, not opinionated.** Patterns are standalone async functions that
    accept any `LLMProvider`-conforming object. `pipe()` chains them without
    coupling. The `Kit` facade is optional sugar — nothing requires it.
 
@@ -51,7 +51,7 @@ executionkit/
 ├── batches.py           — consensus_batch() / map_batch() over Anthropic Message
 │                          Batches via stdlib urllib; shares tally_votes with the
 │                          live consensus pattern (ADR-014)
-├── evals.py             — deterministic golden evals and env-gated live eval helper
+├── evals.py             — repeatable golden evals and env-gated live eval helper
 ├── observability.py     — TraceEvent, TraceCallback, and async trace emission
 ├── routing.py           — Router and RouteRule provider selection primitives
 ├── workflow.py          — dependency-ordered async Step/Workflow execution
@@ -359,7 +359,7 @@ and call-slot TOCTOU safety in one call.
 Return a `PatternResult` with a `MappingProxyType` metadata dict. Document all
 public metadata keys in the function docstring under a `Metadata:` section.
 
-To make the pattern composable with `pipe()`, ensure it accepts `max_cost` as a
+To make the pattern work with `pipe()`, ensure it accepts `max_cost` as a
 keyword argument (forwarded by `pipe` for budget propagation) or declare
 `**kwargs` to absorb it silently.
 

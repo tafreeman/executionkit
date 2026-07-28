@@ -17,7 +17,7 @@ The team needed to decide how to capture and assert on these failure modes in CI
 
 * CI must run entirely offline — no live LLM calls, no random input generation that could introduce flakiness.
 * Each failure case must be reproducible, named, and attributable to a specific failure domain (e.g. `json_extraction`, `react_loop`, `provider_usage`).
-* The corpus must be deterministic: the same inputs produce the same outputs on every run.
+* The corpus must be repeatable: the same inputs produce the same outputs on every run.
 * New failure modes discovered in production or during development should be promotable to the corpus with a concrete, named case.
 * The suite must cover multiple layers: engine utilities (`extract_json`), pattern-level behaviour (`structured`, `refine_loop`, `react_loop`), and provider-level validation (`LLMResponse` token bounds).
 
@@ -31,7 +31,7 @@ The team needed to decide how to capture and assert on these failure modes in CI
 
 **Chosen option:** Option A (hand-curated named corpus), as implemented in `tests/eval_failure_cases.py`. The file defines 13 named cases (`FC-01` through `FC-13`) across five domains, each as a pair of `async def run()` and `def check(output)` functions wrapped in an `EvalCase` dataclass. Cases are assembled into a `FAILURE_CORPUS` list consumed by `tests/test_eval_failure_corpus.py` via `run_eval_suite()`.
 
-Each case has a `metadata` dict with a `"domain"` key (`json_extraction`, `structured`, `refine_loop`, `react_loop`, `provider_usage`) for filtering and reporting. The `MockProvider` is used throughout to supply deterministic responses without any network calls.
+Each case has a `metadata` dict with a `"domain"` key (`json_extraction`, `structured`, `refine_loop`, `react_loop`, `provider_usage`) for filtering and reporting. The `MockProvider` is used throughout to supply repeatable responses without any network calls.
 
 Coverage of the corpus:
 
@@ -48,7 +48,7 @@ Coverage of the corpus:
 * Every case is named, reproducible, and fully offline — no flakiness.
 * Failure modes are explicitly documented in code; a reader can see exactly which edge case each case covers.
 * New cases discovered in production can be added with a specific name and `domain` tag, making the corpus grow incrementally.
-* `run_eval_suite()` reports `passed`, `failed_count`, and `accuracy` — the CI gate requires 100% pass on the deterministic corpus.
+* `run_eval_suite()` reports `passed`, `failed_count`, and `accuracy` — the CI gate requires 100% pass on the repeatable corpus.
 
 ### Negative Consequences
 
@@ -59,7 +59,7 @@ Coverage of the corpus:
 
 ### Option A: Hand-curated named corpus
 
-* **Good:** Deterministic, fully offline, no flakiness.
+* **Good:** Repeatable, fully offline, no flakiness.
 * **Good:** Each case is named and documents a specific real failure mode.
 * **Good:** Incrementally growable: add a case when a new failure mode is found.
 * **Bad:** Does not discover unknown failure modes automatically.
@@ -69,7 +69,7 @@ Coverage of the corpus:
 * **Good:** Can discover unexpected edge cases automatically.
 * **Bad:** Adds `hypothesis` as a dev dependency.
 * **Bad:** Random input generation may not reliably reproduce the specific JSON shapes that real LLMs produce (e.g. trailing-comma objects are a known model behaviour, not a random input).
-* **Bad:** Non-deterministic shrinking can make failures harder to reproduce.
+* **Bad:** Randomized shrinking can make failures harder to reproduce.
 
 ### Option C: Snapshot-based replay
 

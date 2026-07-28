@@ -11,7 +11,7 @@
 
 LLM libraries commonly provide a separate adapter for each major provider (OpenAI, Anthropic, Gemini, Cohere, etc.), each handling the provider's unique request format, authentication scheme, and response shape. This approach maximises out-of-the-box compatibility but creates a permanent maintenance commitment: every new provider model, API version, or format change requires a library update.
 
-ExecutionKit needed to decide how broad its provider support should be at v0.1. The library's value proposition is composable reasoning patterns with budget awareness — not provider portability. A large adapter matrix would shift the identity of the project toward "universal gateway", which is explicitly out of scope.
+ExecutionKit needed to decide how broad its provider support should be at v0.1. The library's value proposition is reasoning patterns you can combine, with budget awareness — not provider portability. A large adapter matrix would shift the identity of the project toward "universal gateway", which is explicitly out of scope.
 
 ## Decision Drivers
 

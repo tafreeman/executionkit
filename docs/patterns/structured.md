@@ -90,7 +90,7 @@ asyncio.run(main())
 |-----------|---------|-------------|
 | `validator` | `None` | `(value) -> None / True / "" → accept; False / "..." → repair`. `None` accepts any parsed JSON. |
 | `max_retries` | `3` | Number of repair attempts after the initial parse. `0` = parse-once-no-repair. |
-| `temperature` | `0.0` | Lower = more deterministic JSON. |
+| `temperature` | `0.0` | Lower = more predictable JSON. |
 | `max_tokens` | `4096` | Per-completion token cap. Must be `>= 1`. |
 | `max_cost` | `None` | Optional `TokenUsage` budget across the initial call + all repairs. |
 | `retry` | `DEFAULT_RETRY` | Per-call retry config for transient transport errors (separate from repair retries). |

@@ -3,7 +3,7 @@
 **Date:** 2026-05-11
 **Status:** Accepted
 **Deciders:** ExecutionKit core team
-**Technical Story:** When initialising the repository structure, the team chose between placing `executionkit/` directly at the repo root (flat layout) or nesting it under a `src/` directory (src layout), a choice that affects developer ergonomics and install behaviour.
+**Technical Story:** When initialising the repository structure, the team chose between placing `executionkit/` directly at the repo root (flat layout) or nesting it under a `src/` directory (src layout), a choice that affects ease of use for developers and install behaviour.
 
 ---
 
@@ -20,7 +20,7 @@ The right choice depends on the project's complexity, the depth of its dependenc
 * New contributors should be able to run `pip install -e . && pytest` immediately after cloning with no extra steps.
 * The library has zero required runtime dependencies, which eliminates the main risk scenario the src layout is designed to prevent.
 * Consistency with widely-used Python OSS libraries reduces friction for experienced contributors.
-* Simplicity is a first-class value; layout complexity must justify itself.
+* Simplicity matters; layout complexity must justify itself.
 
 ## Considered Options
 

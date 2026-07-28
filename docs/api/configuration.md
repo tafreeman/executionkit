@@ -79,7 +79,7 @@ result = await consensus(provider, "...", num_samples=5, max_cost=budget)
 | `max_rounds` | `8` | Raises `MaxIterationsError` when hit. |
 | `max_observation_chars` | `12_000` | Per tool result. |
 | `tool_timeout` | `None` | Falls back to `Tool.timeout` (`30.0 s`). |
-| `temperature` | `0.3` | Lower = more deterministic tool selection. |
+| `temperature` | `0.3` | Lower = more predictable tool selection. |
 | `max_tokens` | `4096` | Per completion. |
 | `max_cost` | `None` | Across all rounds. |
 | `retry` | `DEFAULT_RETRY` | Per-call. |
@@ -93,7 +93,7 @@ result = await consensus(provider, "...", num_samples=5, max_cost=budget)
 |-----------|---------|-------|
 | `validator` | `None` | Optional callable that accepts parsed JSON or returns an error string / `False`. |
 | `max_retries` | `3` | Repair attempts after the first parse. Must be `>= 0`. |
-| `temperature` | `0.0` | Lower = more deterministic JSON. |
+| `temperature` | `0.0` | Lower = more predictable JSON. |
 | `max_tokens` | `4096` | Per completion. Must be `>= 1`. |
 | `max_cost` | `None` | Across the initial call and repairs. |
 | `retry` | `DEFAULT_RETRY` | Per-call transport retry config. |
@@ -160,12 +160,12 @@ The eval helper `live_provider_from_env()` reads these opt-in variables:
 
 Beyond code coverage, ExecutionKit ships an **output-correctness** eval suite that runs offline in CI:
 
-- **Golden suite** (`tests/eval_datasets.py` → `golden_cases()`): deterministic per-pattern goldens (structured extraction, consensus voting, refine best-not-last, ReAct tool calls) that assert exact values *and* metadata through a `MockProvider`.
+- **Golden suite** (`tests/eval_datasets.py` → `golden_cases()`): repeatable per-pattern goldens (structured extraction, consensus voting, refine best-not-last, ReAct tool calls) that assert exact values *and* metadata through a `MockProvider`.
 - **Failure corpus** (`tests/eval_failure_cases.py`): curated malformed-output, prompt-injection, and bad-tool-argument cases proving each is handled gracefully (repair, blocked execution, `ProviderError`) rather than crashing.
 - **Accuracy metrics**: `EvalReport.accuracy` and `EvalReport.summary()` report pass-rate, not just pass/fail — e.g. `7/9 passed (77.8% accuracy)`.
 - **Opt-in live tiers** (`tests/test_judge_calibration.py`, `tests/test_live_regression.py`): judge-calibration and per-pattern regression against a real OpenAI-compatible endpoint, skipped unless `EXECUTIONKIT_LIVE_EVAL=1` (see the table above).
 
-The deterministic tiers run as a dedicated **Eval suite** CI step on every push; the live tiers stay env-gated so normal CI never needs a network or a key. A separate **Live Eval** workflow (`.github/workflows/live-eval.yml`, manual `workflow_dispatch` + weekly) runs the live tiers against a local Ollama model and uploads the results as a `live-eval-results.xml` artifact — real-endpoint evidence without blocking any PR.
+The repeatable tiers run as a dedicated **Eval suite** CI step on every push; the live tiers stay env-gated so normal CI never needs a network or a key. A separate **Live Eval** workflow (`.github/workflows/live-eval.yml`, manual `workflow_dispatch` + weekly) runs the live tiers against a local Ollama model and uploads the results as a `live-eval-results.xml` artifact — real-endpoint evidence without blocking any PR.
 
 ## Coverage and quality gates
 

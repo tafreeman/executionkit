@@ -11,12 +11,12 @@ Checks (all derived, nothing hand-maintained except SLUGS):
   1. every pattern module has a docs page, an mkdocs nav entry, a README
      patterns-table row, and a patterns-index table row;
   2. every docs/patterns/*.md page is reachable from the mkdocs nav;
-  3. the patterns-index "N composable pattern utilities" claim equals the
+  3. the patterns-index "N pattern utilities" claim equals the
      derived pattern count;
   4. every module in ``executionkit/`` is named in the architecture module
      map (basename granularity — a missing new module fails the check);
   5. docs/index.md (the landing page) does not undercount the pattern count
-     either — the hero line, the "N composable reasoning patterns" heading,
+     either — the hero line, the "N reasoning patterns you can combine" heading,
      and the "Reasoning patterns" stat-strip tile must all equal the derived
      pattern count (2026-07-08 audit: this page said "five" while the
      package shipped six).
@@ -139,17 +139,16 @@ def check_nav_completeness(nav_pages: set[str]) -> None:
 
 def check_index_count_claim(patterns: set[str]) -> None:
     index = read("docs/patterns/index.md")
-    claim = re.search(r"\*\*(\w+) composable pattern utilities\*\*", index)
+    claim = re.search(r"\*\*(\w+) pattern utilities\*\*", index)
     if claim is None:
         failures.append(
-            "docs/patterns/index.md: the 'N composable pattern utilities' "
-            "claim could not be found"
+            "docs/patterns/index.md: the 'N pattern utilities' claim could not be found"
         )
         return
     claimed = NUMBER_WORDS.get(claim.group(1).lower())
     if claimed != len(patterns):
         failures.append(
-            f"docs/patterns/index.md says '{claim.group(1)}' composable pattern "
+            f"docs/patterns/index.md says '{claim.group(1)}' pattern "
             f"utilities; the package ships {len(patterns)}"
         )
 
@@ -180,19 +179,19 @@ def check_landing_page_count_claims(patterns: set[str]) -> None:
             )
 
     heading = re.search(
-        r"^## (\w+) composable reasoning patterns$", index, re.MULTILINE
+        r"^## (\w+) reasoning patterns you can combine$", index, re.MULTILINE
     )
     if heading is None:
         failures.append(
-            "docs/index.md: the '## {Word} composable reasoning patterns' "
-            "heading could not be found"
+            "docs/index.md: the '## {Word} reasoning patterns you can "
+            "combine' heading could not be found"
         )
     else:
         claimed = NUMBER_WORDS.get(heading.group(1).lower())
         if claimed != len(patterns):
             failures.append(
-                f"docs/index.md heading says '{heading.group(1)}' composable "
-                f"reasoning patterns; the package ships {len(patterns)}"
+                f"docs/index.md heading says '{heading.group(1)}' reasoning "
+                f"patterns; the package ships {len(patterns)}"
             )
 
     stat = re.search(
