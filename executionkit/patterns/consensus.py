@@ -36,9 +36,7 @@ async def consensus(
     max_tokens: int = DEFAULT_MAX_TOKENS,
     max_concurrency: int = _DEFAULT_CONSENSUS_CONCURRENCY,
     retry: RetryConfig | None = None,
-    # NOTE (F-03 verified): max_cost is implemented and forwarded to every
-    # checked_complete() call below, enabling budget-aware pipe() chains.
-    # See executionkit/compose.py _filter_kwargs() for propagation logic.
+    # Shared across concurrent samples and forwarded by pipe().
     max_cost: TokenUsage | None = None,
     trace: TraceCallback | None = None,
 ) -> PatternResult[str]:

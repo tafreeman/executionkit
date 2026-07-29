@@ -6,7 +6,10 @@ tags:
 
 # ReAct Tool Loop
 
-`react_loop()` runs the standard **think → act → observe** loop with tool calling. Each round, the LLM may either return a final answer or request one or more tool calls. Tool calls are approved if an `ApprovalGate` is supplied, validated with the built-in JSON-Schema subset, executed with timeout, appended to the conversation, and the loop continues until the model answers or `max_rounds` is hit.
+`react_loop()` lets a model request registered tools inside a bounded loop.
+Each round returns either a final answer or one or more tool calls. The loop
+validates and optionally approves the calls, runs them with timeouts, adds
+their results to the conversation, and asks the model again.
 
 ## When to use / when not to use
 
@@ -33,12 +36,12 @@ sequenceDiagram
             react-->>App: PatternResult(value=content, ...)
         else has tool_calls
             react->>react: append assistant msg with tool_calls
-            loop each tool_call
-                react->>react: validate args against JSON Schema
+            react->>react: validate and approve requested calls
+            par accepted tool calls
                 react->>Tool: execute(**args) with timeout
                 Tool-->>react: result string (truncated to max_observation_chars)
-                react->>react: append role="tool" message
             end
+            react->>react: append role="tool" messages
         end
     end
     react-->>App: raise MaxIterationsError
@@ -48,77 +51,67 @@ sequenceDiagram
 
 ```python
 import asyncio
-import ast
-import operator
 import os
 from executionkit import Provider, Tool, react_loop
 
-# Safe AST-based math evaluator — never use eval() on LLM output.
-_OPS = {
-    ast.Add: operator.add, ast.Sub: operator.sub,
-    ast.Mult: operator.mul, ast.Div: operator.truediv,
-    ast.Pow: operator.pow, ast.USub: operator.neg,
-}
 
-def _safe_eval(node: ast.AST) -> float:
-    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
-        return node.value
-    if isinstance(node, ast.BinOp):
-        return _OPS[type(node.op)](_safe_eval(node.left), _safe_eval(node.right))
-    if isinstance(node, ast.UnaryOp):
-        return _OPS[type(node.op)](_safe_eval(node.operand))
-    raise ValueError(f"Unsupported expression node: {type(node).__name__}")
+async def get_status(service: str) -> str:
+    statuses = {
+        "billing": "operational",
+        "orders": "maintenance",
+    }
+    return statuses.get(service, "unknown service")
 
-async def calculator(expression: str) -> str:
-    tree = ast.parse(expression, mode="eval")
-    return str(_safe_eval(tree.body))
-
-calc = Tool(
-    name="calculator",
-    description="Evaluate an arithmetic expression. Supports + - * / ** and unary -.",
+status_tool = Tool(
+    name="get_status",
+    description="Return the current status of a named service.",
     parameters={
         "type": "object",
-        "properties": {"expression": {"type": "string"}},
-        "required": ["expression"],
+        "properties": {"service": {"type": "string"}},
+        "required": ["service"],
         "additionalProperties": False,
     },
-    execute=calculator,
+    execute=get_status,
     timeout=2.0,
 )
 
 async def main() -> None:
     async with Provider(
-        base_url="https://api.openai.com/v1",
-        api_key=os.environ["OPENAI_API_KEY"],
-        model="gpt-4o-mini",
+        base_url=os.environ["LLM_BASE_URL"],
+        api_key=os.environ.get("LLM_API_KEY", ""),
+        model=os.environ["LLM_MODEL"],
     ) as provider:
         result = await react_loop(
             provider,
-            "What is (17 * 83) + (12 ** 3)? Use the calculator.",
-            tools=[calc],
+            "Check the billing service and report its status.",
+            tools=[status_tool],
             max_rounds=4,
         )
-        print(result.value)                              # 3139
-        print(result.metadata["rounds"])                 # 2
-        print(result.metadata["tool_calls_made"])        # 2
+        print(result.value)
+        print(result.metadata["rounds"])
+        print(result.metadata["tool_calls_made"])
 
 asyncio.run(main())
 ```
 
-## Configuration knobs
+## Parameters
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `max_rounds` | `8` | Maximum think-act-observe cycles. Raises `MaxIterationsError` if hit. |
 | `max_observation_chars` | `12000` | Truncation limit for each tool result before appending to history. |
 | `tool_timeout` | `None` | Per-call timeout override. Falls back to `Tool.timeout` (default `30.0s`). |
-| `temperature` | `0.3` | Lower = more predictable tool selection. |
+| `max_tool_calls_per_round` | `32` | Maximum requested calls executed in one round. Surplus calls receive rejection observations. |
+| `temperature` | `0.3` | Sampling temperature sent to the provider. |
 | `max_tokens` | `4096` | Per-completion token cap. |
 | `max_cost` | `None` | `TokenUsage` budget across all rounds. |
 | `retry` | `DEFAULT_RETRY` | Per-call retry config. |
 | `max_history_messages` | `None` | Cap message history length per round. Always preserves the original prompt. |
 | `trace` | `None` | Optional callback for `llm_call_*` and `tool_call_*` events. |
 | `approval_gate` | `None` | Optional `ApprovalGate` checked before each tool body is executed. Denied calls become tool observations so the model can recover. |
+| `redact_trace_args` | `True` | Replace tool argument values in start events with `"[redacted]"`. |
+| `on_checkpoint` | `None` | Sync or async callback after each tool-using round. |
+| `summarizer` | `None` | Optional async summary callback for history removed from the active window. |
 
 ## Tool definition
 
@@ -132,10 +125,19 @@ class Tool:
     timeout: float = 30.0
 ```
 
-Arguments are validated against `parameters` (JSON Schema) before `execute` is called. Validation covers `required`, `additionalProperties: false`, and primitive type checks (`string`, `integer`, `number`, `boolean`, `array`, `object`) — using stdlib only, no `jsonschema` dependency.
+Arguments are validated before `execute` is called. The base install checks
+top-level required fields, `additionalProperties: false`, and primitive types.
+If a schema uses constraints outside that subset, such as nested properties,
+array items, `enum`, ranges, or patterns, the call is rejected unless the
+`jsonschema` extra is installed:
 
-!!! warning "Validation is shape-only — content safety is the tool's job"
-    This is a deliberate JSON-Schema **subset**. It does **not** recurse into nested object/array contents, and it ignores `format`, `enum`, `pattern`, and numeric/length range constraints (`minimum`, `maxLength`, …). It confirms the argument *shape*, not that values are safe or in range — your `execute` must still validate and sanitize the arguments it receives (e.g. path/SQL/shell inputs) before acting on them.
+```bash
+python -m pip install "executionkit[jsonschema]"
+```
+
+Even full JSON Schema validation checks data shape, not application
+authorization. A tool must still validate paths, identifiers, permissions,
+SQL inputs, shell inputs, and other domain rules before acting.
 
 `execute` must be **async** and return a **string**. Convert non-string results yourself.
 
@@ -164,15 +166,22 @@ The gate receives an `ApprovalRequest` whose `subject` is the tool name and whos
 |-----|------|---------|
 | `rounds` | `int` | Think-act-observe cycles completed. |
 | `tool_calls_made` | `int` | Total individual tool invocations across all rounds. |
+| `rejected_tool_calls` | `int` | Requested calls not executed because the round exceeded `max_tool_calls_per_round`. |
 | `truncated_responses` | `int` | LLM responses cut off due to `finish_reason=length`. |
 | `truncated_observations` | `int` | Tool results truncated due to `max_observation_chars`. |
 | `messages_trimmed` | `int` | Rounds where history was trimmed by `max_history_messages`. |
+| `summarized` | `int` | Rounds where a caller-supplied summary was inserted into the active window. |
+| `messages` | `tuple[dict, ...]` | Full stored transcript after the run. |
+| `termination_reason` | `TerminationReason` | `NATURAL` on a returned answer; `MAX_ITERATIONS` on the raised limit error. |
 
 ## Cost characteristics
 
 - **`O(rounds)` LLM calls.** Bounded by `max_rounds`. Each round = one completion regardless of how many tools are called.
-- **Sequential.** Each round depends on prior tool outputs — no parallelism across rounds. (Tools *within* a round run sequentially in the current implementation.)
-- **Context grows with every round** unless `max_history_messages` is set. For loops > ~20 rounds or with verbose tools, set `max_history_messages` to bound the prompt size.
+- **Rounds are sequential.** Tool calls inside one round run concurrently, up
+  to `max_tool_calls_per_round`.
+- **Context grows with every round** unless `max_history_messages` is set. A
+  caller-supplied `summarizer` can add a summary of removed messages to the
+  active request window.
 - **Tool failures don't crash the loop.** Unknown tools, schema violations, timeouts, and exceptions return an error string as the observation; the LLM gets a chance to recover.
 
 ## Errors
@@ -180,14 +189,16 @@ The gate receives an `ApprovalRequest` whose `subject` is the tool name and whos
 | Exception | Cause |
 |-----------|-------|
 | `TypeError` | Provider does not satisfy `ToolCallingProvider` (missing `supports_tools=True`). |
-| `ValueError` | Two or more `tools` share a name. Raised before the first provider call; the message names the duplicate(s). |
+| `ValueError` | Invalid limits, both/neither of `prompt` and `messages`, or duplicate tool names. |
 | `MaxIterationsError` | `max_rounds` exhausted without a final answer. Includes `cost` and `metadata`. |
 | `BudgetExhaustedError` | `max_cost` exceeded mid-loop. |
 
 ## Security notes
 
-- **Never `eval()` LLM output.** The example above uses a safe AST walker. Treat all tool inputs as adversarial.
-- **Tool errors return only the exception class name** to the LLM (e.g. `"Tool 'X' failed: TimeoutError"`), not the full message — this prevents leaking internal details to the model.
+- **Never pass model-generated text to `eval()`, `exec()`, or a shell.** Treat
+  every tool argument as untrusted input.
+- **Tool errors return only the exception class name** to the LLM (for example,
+  `"Tool 'X' failed: TimeoutError"`), not the full message or traceback.
 - **JSON-Schema validation runs before** `execute` is called. Tools with `additionalProperties: false` reject unknown keys; missing `required` fields are caught.
 - **Tool timeout defaults to 30 s** but is overridable per-call via `tool_timeout=`. Set short timeouts for network tools.
 

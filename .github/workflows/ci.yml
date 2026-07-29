@@ -47,10 +47,8 @@ jobs:
       - name: Type check (mypy)
         run: mypy --strict executionkit/
 
-      # Docs must not undercount the shipped package (README patterns table,
-      # mkdocs nav, patterns index, architecture module map). Stdlib-only;
-      # see scripts/check_doc_facts.py and the portfolio convention
-      # (docs/conventions/doc-fact-check.md at the workspace root).
+      # Keep public exports, tracked pages, pattern surfaces, navigation, and
+      # the architecture module map aligned with the source tree.
       - name: Doc-fact check
         run: python scripts/check_doc_facts.py
 

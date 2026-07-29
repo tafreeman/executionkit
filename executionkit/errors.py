@@ -1,12 +1,8 @@
 """ExecutionKit exception hierarchy.
 
-All nine error classes live here so they can be imported without pulling in
-the full HTTP client machinery from ``provider.py``.
-
-Ref: Anthropic SDK uses the same ``_exceptions.py`` split — the parent
-company's own design convention (github.com/anthropics/anthropic-sdk-python).
-PEP 387 backwards-compat: ``from executionkit.provider import XError`` still
-works because ``provider.py`` re-exports from this module.
+The error classes live in this module so callers can import them without
+loading the HTTP client. ``executionkit.provider`` re-exports them for
+backward compatibility.
 """
 
 from __future__ import annotations

@@ -1,102 +1,34 @@
-# ADR-009: Three-Option Timeout Policy for ApprovalGate
+# ADR-009: Make approval timeout behavior explicit
 
-**Date:** 2026-06-18
-**Status:** Accepted
-**Deciders:** ExecutionKit core team
-**Technical Story:** Human-in-the-loop approval callbacks can block an async workflow indefinitely. The team needed a configurable timeout that works correctly for both async and blocking-sync callbacks.
+- Status: Accepted
+- Date: 2026-06-18
 
----
+## Context
 
-## Context and Problem Statement
+An approval callback can block indefinitely. Different applications need to
+stop, deny, or continue when a deadline expires.
 
-`ApprovalGate` wraps a callback that asks a human (or an automated system) to
-approve an operation before it proceeds. In production, the callback might call
-`input()`, write to a messaging queue, or send an HTTP request. Any of these
-can block indefinitely if the human never responds or the external service is
-unreachable.
+## Decision
 
-Two distinct concerns arise. First, what should happen when the deadline
-elapses — the caller's intent varies: some treat a timeout as a failure, others
-want to proceed automatically (in headless pipelines), and others want to
-default to safety by denying. Second, a synchronous callback like `input()`
-completes before `asyncio.wait_for` is ever reached, silently defeating the
-timeout if the callback is invoked inline on the event loop.
+`ApprovalGate` accepts an optional timeout and one of three policies:
 
-## Decision Drivers
+- `"raise"` raises `ApprovalTimeoutError` and is the default;
+- `"deny"` returns a denied decision; and
+- `"approve"` returns an approved decision and emits a warning at
+  construction.
 
-* Async workflows must not block indefinitely waiting for a human response.
-* The timeout behaviour must be caller-configurable — no single policy suits
-  all use cases.
-* Synchronous callbacks (including blocking I/O) must respect the timeout;
-  calling them inline on the event loop defeats `asyncio.wait_for`.
-* The implementation must introduce no new runtime dependencies.
+Async callbacks run directly. Synchronous callbacks run in a worker thread so
+they do not block the event loop and can be bounded with `asyncio.wait_for()`.
 
-## Considered Options
+## Consequences
 
-* Option A: Single `"raise"` policy — always raise `ApprovalTimeoutError` on timeout
-* Option B: Three-option policy: `"raise"`, `"approve"`, `"deny"`
-* Option C: No timeout support — callers wrap the gate themselves
+- The safe default does not authorize work after an absent response.
+- Applications can choose an availability policy explicitly.
+- A timed-out synchronous thread may continue running even though its result is
+  ignored.
+- `"approve"` is fail-open and must be treated as a security decision.
 
-## Decision Outcome
+## Rejected alternatives
 
-**Chosen option:** Option B (three-option policy via the `on_timeout` parameter).
-
-`ApprovalGate.__init__` accepts `timeout_seconds: float | None` and
-`on_timeout: Literal["approve", "deny", "raise"]` (default `"raise"`). When a
-timeout fires, `_handle_timeout` maps the policy to an `ApprovalDecision` or
-raises `ApprovalTimeoutError`.
-
-To ensure synchronous callbacks respect the timeout, `_invoke` dispatches sync
-callbacks to `asyncio.to_thread`. A synchronous callback invoked inline
-completes before `asyncio.wait_for` has a chance to cancel it — running it in
-a worker thread means the event loop stays free and `wait_for` can fire
-normally.
-
-```python
-gate = ApprovalGate(
-    callback=human_approval_callback,
-    timeout_seconds=30.0,
-    on_timeout="deny",  # safe default for automated pipelines
-)
-```
-
-### Positive Consequences
-
-* Callers choose the policy that fits their context: fail-safe (`"raise"`),
-  auto-proceed (`"approve"`), or fail-closed (`"deny"`).
-* `asyncio.to_thread` ensures blocking I/O callbacks (e.g., `input()`) do not
-  starve the event loop and do respect the timeout deadline.
-* The default (`"raise"`) preserves the original fail-fast behaviour so
-  existing code that does not set a timeout is unaffected.
-
-### Negative Consequences
-
-* `asyncio.to_thread` requires Python 3.9+. This is acceptable — ExecutionKit
-  already targets Python 3.11+.
-* Running sync callbacks in a thread means they cannot access async resources
-  directly. Callers with async approval workflows should provide an async
-  callback instead.
-
-## Pros and Cons of the Options
-
-### Option A: Raise-only policy
-
-* **Good:** Simple to implement and reason about.
-* **Bad:** Headless pipelines with unattended approval gates must catch
-  `ApprovalTimeoutError` and implement their own fallback — boilerplate the
-  library should absorb.
-
-### Option B: Three-option policy
-
-* **Good:** Covers all three sensible timeout outcomes without requiring
-  callers to catch and re-handle exceptions.
-* **Good:** `asyncio.to_thread` correctly decouples sync callback completion
-  from `wait_for` deadline tracking.
-* **Bad:** Slightly more API surface than a raise-only approach.
-
-### Option C: No timeout support
-
-* **Good:** No additional API surface.
-* **Bad:** Every caller that needs timeout behaviour must wrap `ApprovalGate`
-  in their own `asyncio.wait_for` — and they will all independently encounter
-  the sync-callback pitfall.
+A single hard-coded timeout result cannot fit both read-only and high-impact
+operations. No timeout support would permit indefinite blocking.

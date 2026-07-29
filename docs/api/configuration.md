@@ -1,180 +1,248 @@
-# Configuration Reference
+# Configuration reference
 
-Every knob and its default. Grouped by component.
+This page lists the public defaults that affect calls, retries, budgets, tools,
+sessions, and live evaluation. Pattern-specific behavior is explained on each
+[pattern page](../patterns/index.md).
 
-## Provider defaults
+## Provider
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `default_temperature` | `0.7` | Sampling temperature when not overridden per call. |
-| `default_max_tokens` | `4096` | Per-completion token cap when not overridden. |
-| `timeout` | `120.0 s` | HTTP request timeout. |
+```text
+Provider(
+    base_url: str,
+    model: str,
+    api_key: str = "",
+    default_temperature: float = 0.7,
+    default_max_tokens: int = 4096,
+    timeout: float = 120.0,
+)
+```
 
-Per-call kwargs on `consensus`, `refine_loop`, `react_loop`, and `structured` always win over `Provider` defaults.
+`base_url` must use `http` or `https`. The client appends
+`/chat/completions`. Redirects are not followed.
+
+The provider defaults apply when `Provider.complete()` or `Provider.stream()`
+receives `None` for that argument. Public patterns pass their own temperature
+and token defaults, so configure those on the pattern call.
 
 ## RetryConfig
 
-The default `DEFAULT_RETRY` is suitable for most workloads. Pass a custom `RetryConfig` to any pattern via `retry=`. See [Core → `RetryConfig`](core.md#executionkit.engine.retry.RetryConfig) for the full signature.
-
-`max_retries` counts retries **after** the initial call, so a call is dispatched at most `1 + max_retries` times. `max_retries=0` disables retries entirely (one attempt).
-
-## ConvergenceDetector
-
-Used internally by `refine_loop`. `delta_threshold`, `patience`, and `score_threshold` are surfaced as `refine_loop` parameters with the same names. See [Core → `ConvergenceDetector`](core.md#executionkit.engine.convergence.ConvergenceDetector).
-
-## TokenUsage budgets
-
-Pass a `TokenUsage` to `max_cost=` (single pattern) or `max_budget=` (`pipe`). Field convention:
-
-| Value | Meaning |
-|-------|---------|
-| `0` | "No limit" — the field is unbounded. |
-| `> 0` | Tokens / calls remaining. |
-| `-1` | Field was bounded and is now exhausted. (Used internally by `pipe` to forward exhausted budgets without aliasing them as "unlimited".) |
-
-```python
-from executionkit import TokenUsage, consensus
-
-# Cap at 5K input tokens, 2K output tokens, 10 LLM calls
-budget = TokenUsage(input_tokens=5_000, output_tokens=2_000, llm_calls=10)
-
-result = await consensus(provider, "...", num_samples=5, max_cost=budget)
+```text
+RetryConfig(
+    max_retries: int = 3,
+    base_delay: float = 1.0,
+    max_delay: float = 60.0,
+    exponential_base: float = 2.0,
+    retryable: tuple[type[Exception], ...] = (
+        RateLimitError,
+        ProviderError,
+    ),
+    rate_limit_strategy: TokenBucket | None = None,
+)
 ```
 
-## Pattern parameter cheat sheet
+`max_retries` counts retries after the initial attempt. The default permits at
+most four attempts. Backoff uses full jitter between zero and the capped
+exponential delay.
 
-### `consensus`
+`rate_limit_strategy` acquires one token before every provider attempt. After a
+`RateLimitError`, it applies the error's `retry_after` value before the next
+attempt.
 
-| Parameter | Default | Notes |
-|-----------|---------|-------|
-| `num_samples` | `5` | Must be `>= 1`. |
-| `strategy` | `"majority"` | Or `"unanimous"`. |
-| `temperature` | `0.9` | Higher = more diverse. |
-| `max_tokens` | `4096` | Per completion. |
-| `max_concurrency` | `5` | Semaphore for parallel calls. |
-| `retry` | `DEFAULT_RETRY` | Per-call. |
-| `max_cost` | `None` | Shared across all samples. |
-| `trace` | `None` | Optional `TraceCallback`. |
+## TokenBucket
 
-### `refine_loop`
-
-| Parameter | Default | Notes |
-|-----------|---------|-------|
-| `evaluator` | `None` | `async (text, provider) -> float in [0,1]`. |
-| `max_eval_chars` | `32_768` | Default-evaluator truncation. |
-| `target_score` | `0.9` | Convergence target. |
-| `max_iterations` | `5` | Excludes initial generation. |
-| `patience` | `3` | Stale-delta iterations before stopping. |
-| `delta_threshold` | `0.01` | Minimum meaningful improvement. |
-| `temperature` | `0.7` | Generation temp; evaluator uses `0.1`. |
-| `max_tokens` | `4096` | Per completion. |
-| `max_cost` | `None` | Across all calls. |
-| `retry` | `DEFAULT_RETRY` | Per-call. |
-| `trace` | `None` | Optional `TraceCallback`. |
-
-### `react_loop`
-
-| Parameter | Default | Notes |
-|-----------|---------|-------|
-| `max_rounds` | `8` | Raises `MaxIterationsError` when hit. |
-| `max_observation_chars` | `12_000` | Per tool result. |
-| `tool_timeout` | `None` | Falls back to `Tool.timeout` (`30.0 s`). |
-| `temperature` | `0.3` | Lower = more predictable tool selection. |
-| `max_tokens` | `4096` | Per completion. |
-| `max_cost` | `None` | Across all rounds. |
-| `retry` | `DEFAULT_RETRY` | Per-call. |
-| `max_history_messages` | `None` | When set, trims history; always preserves the original prompt. |
-| `trace` | `None` | Optional `TraceCallback`. |
-| `approval_gate` | `None` | Optional `ApprovalGate` checked before each tool body is executed. |
-
-### `structured`
-
-| Parameter | Default | Notes |
-|-----------|---------|-------|
-| `validator` | `None` | Optional callable that accepts parsed JSON or returns an error string / `False`. |
-| `max_retries` | `3` | Repair attempts after the first parse. Must be `>= 0`. |
-| `temperature` | `0.0` | Lower = more predictable JSON. |
-| `max_tokens` | `4096` | Per completion. Must be `>= 1`. |
-| `max_cost` | `None` | Across the initial call and repairs. |
-| `retry` | `DEFAULT_RETRY` | Per-call transport retry config. |
-| `trace` | `None` | Optional `TraceCallback`. |
-
-### `Workflow`
-
-| Parameter | Default | Notes |
-|-----------|---------|-------|
-| `steps` | — | Sequence of named `Step` objects with optional dependencies. |
-| `initial_context` | `None` | Mapping copied into the workflow output context before steps run. |
-| `trace` | `None` | Optional `TraceCallback` for `workflow_step_*` events. |
-| `approval_gate` | `None` | Optional `ApprovalGate` checked before each step. |
-
-### `Plan`
-
-| Parameter | Default | Notes |
-|-----------|---------|-------|
-| `steps` | — | Ordered sequence of named `PlanStep` objects. |
-| `initial_context` | `None` | Mapping copied into the plan output context before steps run. |
-| `trace` | `None` | Optional `TraceCallback` for `plan_step_*` events. |
-| `approval_gate` | `None` | Optional `ApprovalGate` checked before each step. |
-
-### `pipe`
-
-| Parameter | Default | Notes |
-|-----------|---------|-------|
-| `*steps` | — | Async pattern callables. |
-| `max_budget` | `None` | Forwarded to each step as `max_cost=`. |
-| `**shared_kwargs` | — | Filtered to each step's signature. |
-
-## Tool defaults
-
-```python
-@dataclass(frozen=True, slots=True)
-class Tool:
-    name: str
-    description: str
-    parameters: Mapping[str, Any]                # JSON Schema
-    execute: Callable[..., Awaitable[str]]
-    timeout: float = 30.0
+```text
+TokenBucket(rate: float, capacity: float)
 ```
 
-`Tool.timeout` applies per-call. Override per pattern call with `react_loop(..., tool_timeout=N)`.
+- `rate` is the number of tokens added per second and must be greater than zero.
+- `capacity` is the maximum burst size and must be at least one.
+- Each `acquire()` consumes one token.
+- The object is intended for one asyncio event loop and is not thread-safe.
 
-## Environment variables
+A bucket on `RetryConfig` controls individual provider attempts. A bucket on
+`Kit(rate_limiter=...)` controls top-level Kit method calls. They are separate
+limits.
 
-Most ExecutionKit configuration is explicit per `Provider` instance. Read `os.environ` in your application code for normal provider setup.
+## Call and token budgets
 
-The default `Provider` does respect:
+Patterns accept `max_cost=TokenUsage(...)`. `pipe()` calls its shared budget
+`max_budget`.
 
-- `HTTP_PROXY`, `HTTPS_PROXY` — when using the `httpx` backend, these are picked up via `httpx.AsyncClient` defaults.
+```python
+from executionkit import TokenUsage
 
-The eval helper `live_provider_from_env()` reads these opt-in variables:
+budget = TokenUsage(
+    input_tokens=20_000,
+    output_tokens=5_000,
+    llm_calls=12,
+)
+```
 
-| Variable | Meaning |
-|----------|---------|
-| `EXECUTIONKIT_LIVE_EVAL` | Must be `1` to enable live eval provider construction. |
-| `EXECUTIONKIT_BASE_URL` | Required base URL for the OpenAI-compatible endpoint. |
-| `EXECUTIONKIT_MODEL` | Required model name. |
-| `EXECUTIONKIT_API_KEY` | Optional API key. |
+A zero field means unlimited. LLM call slots are reserved before dispatch, so
+the call count includes retry attempts and is enforced across concurrent tasks
+in one asyncio event loop. Token totals are checked before dispatch; a
+successful response can cross a token limit because its usage is known only
+after it returns. A later call is then blocked.
 
-## Eval suite
+`CostTracker` and the budget implementation are not safe for concurrent use
+from multiple threads.
 
-Beyond code coverage, ExecutionKit ships an **output-correctness** eval suite that runs offline in CI:
+## Pattern defaults
 
-- **Golden suite** (`tests/eval_datasets.py` → `golden_cases()`): repeatable per-pattern goldens (structured extraction, consensus voting, refine best-not-last, ReAct tool calls) that assert exact values *and* metadata through a `MockProvider`.
-- **Failure corpus** (`tests/eval_failure_cases.py`): curated malformed-output, prompt-injection, and bad-tool-argument cases proving each is handled gracefully (repair, blocked execution, `ProviderError`) rather than crashing.
-- **Accuracy metrics**: `EvalReport.accuracy` and `EvalReport.summary()` report pass-rate, not just pass/fail — e.g. `7/9 passed (77.8% accuracy)`.
-- **Opt-in live tiers** (`tests/test_judge_calibration.py`, `tests/test_live_regression.py`): judge-calibration and per-pattern regression against a real OpenAI-compatible endpoint, skipped unless `EXECUTIONKIT_LIVE_EVAL=1` (see the table above).
+### consensus
 
-The repeatable tiers run as a dedicated **Eval suite** CI step on every push; the live tiers stay env-gated so normal CI never needs a network or a key. A separate **Live Eval** workflow (`.github/workflows/live-eval.yml`, manual `workflow_dispatch` + weekly) runs the live tiers against a local Ollama model and uploads the results as a `live-eval-results.xml` artifact — real-endpoint evidence without blocking any PR.
+| Parameter | Default | Meaning |
+|---|---:|---|
+| `num_samples` | `5` | Concurrent candidate calls. |
+| `strategy` | `"majority"` | `"majority"` or `"unanimous"`. |
+| `temperature` | `0.9` | Sampling temperature. |
+| `max_tokens` | `4096` | Maximum output tokens per call. |
+| `max_concurrency` | `5` | Maximum candidates in flight. |
+| `retry` | `None` | Uses `DEFAULT_RETRY`. |
+| `max_cost` | `None` | No pattern budget. |
+| `trace` | `None` | No trace callback. |
 
-## Coverage and quality gates
+### refine_loop
 
-Project-level CI gates (in `pyproject.toml`):
+| Parameter | Default | Meaning |
+|---|---:|---|
+| `evaluator` | `None` | Uses the built-in model evaluator. |
+| `max_eval_chars` | `32768` | Maximum candidate characters sent to the evaluator. |
+| `target_score` | `0.9` | Stop at or above this score. |
+| `max_iterations` | `5` | Maximum refinement rounds after the initial generation. |
+| `patience` | `3` | Stop after this many small improvements. |
+| `delta_threshold` | `0.01` | Improvement considered meaningful. |
+| `temperature` | `0.7` | Generation temperature. |
+| `max_tokens` | `4096` | Maximum output tokens per call. |
+| `max_cost` | `None` | No pattern budget. |
+| `retry` | `None` | Uses `DEFAULT_RETRY`. |
+| `trace` | `None` | No trace callback. |
+| `on_checkpoint` | `None` | No iteration callback. |
 
-| Gate | Threshold |
-|------|-----------|
-| `pytest --cov-fail-under` | **80%** |
-| `mypy --strict` | Zero errors. |
-| `ruff check` rules | `E F W I N UP S B A C4 SIM TCH RUF`. |
-| `bandit` | No HIGH severity findings. |
-| Eval suite (goldens + failure corpus) | All cases pass. |
+### react_loop
+
+| Parameter | Default | Meaning |
+|---|---:|---|
+| `tools` | `()` | No tools. |
+| `messages` | `None` | Start from `prompt`; mutually exclusive with `prompt`. |
+| `max_rounds` | `8` | Maximum model and tool rounds. |
+| `max_observation_chars` | `12000` | Per-tool-result text limit. |
+| `tool_timeout` | `None` | Use each tool's own timeout. |
+| `max_tool_calls_per_round` | `32` | Maximum calls accepted from one model response. |
+| `temperature` | `0.3` | Model temperature. |
+| `max_tokens` | `4096` | Maximum output tokens per call. |
+| `max_cost` | `None` | No pattern budget. |
+| `retry` | `None` | Uses `DEFAULT_RETRY`. |
+| `max_history_messages` | `None` | Do not trim message history. |
+| `trace` | `None` | No trace callback. |
+| `approval_gate` | `None` | Execute valid tool calls without an approval callback. |
+| `redact_trace_args` | `True` | Omit tool arguments from trace events. |
+| `on_checkpoint` | `None` | No round callback. |
+| `summarizer` | `None` | Drop old messages instead of summarizing them when trimming. |
+
+Tool calls in the same round run concurrently. `tool_timeout` overrides every
+tool's configured timeout when it is not `None`.
+
+### structured
+
+| Parameter | Default | Meaning |
+|---|---:|---|
+| `validator` | `None` | Parse JSON without an application validator. |
+| `max_retries` | `3` | Maximum repair calls after the first response. |
+| `temperature` | `0.0` | Model temperature. |
+| `max_tokens` | `4096` | Maximum output tokens per call. |
+| `max_cost` | `None` | No pattern budget. |
+| `retry` | `None` | Uses `DEFAULT_RETRY` for each provider call. |
+| `trace` | `None` | No trace callback. |
+| `stream` | `False` | `True` is rejected because repair needs complete responses. |
+
+`structured.max_retries` is a repair count. It is separate from
+`RetryConfig.max_retries`, which handles transport or provider failures.
+
+### map_reduce
+
+| Parameter | Default | Meaning |
+|---|---:|---|
+| `map_prompt_template` | required | Must contain `{item}`. |
+| `reduce_prompt_template` | required | Must contain `{mapped_outputs}`. |
+| `max_concurrency` | `10` | Maximum map calls in flight. |
+| `temperature` | `0.3` | Temperature for map and reduce calls. |
+| `max_tokens` | `4096` | Maximum output tokens per call. |
+| `max_cost` | `None` | Shared pattern budget. |
+| `retry` | `None` | Uses `DEFAULT_RETRY`. |
+| `trace` | `None` | No trace callback. |
+| `stream` | `False` | `True` is rejected because the reduce step needs complete map results. |
+
+The map phase is all-or-nothing. The reduce call starts only after every map
+call succeeds.
+
+### pipe
+
+```text
+pipe(provider, prompt, *steps, max_budget=None, **shared_kwargs)
+```
+
+`pipe()` filters shared keyword arguments against each step's signature.
+`max_budget` is passed to each step as its remaining `max_cost`. A zero-step
+pipe returns the original prompt with zero usage.
+
+## Session defaults
+
+```text
+Kit(
+    provider,
+    *,
+    track_cost: bool = True,
+    messages = None,
+    rate_limiter: TokenBucket | None = None,
+)
+```
+
+`messages` is copied at construction. Only `turn()` reads and updates that
+conversation history. Other Kit methods are single-shot calls.
+
+The two streaming Kit methods each stream one model generation:
+
+- `stream_consensus()` does not sample or vote;
+- `stream_react_loop()` does not execute tools.
+
+Usage on a streaming result is complete only after its text stream has been
+fully consumed.
+
+## Workflow and approval defaults
+
+`Workflow` has no process-wide settings. It runs all currently ready steps as
+one concurrent batch. `Workflow.run()` can receive an `initial_context`, a
+checkpoint callback, or a checkpoint to resume.
+
+`ApprovalGate` has no timeout unless `timeout_seconds` is set. Its default
+timeout policy is `"raise"`. The other policies are `"deny"` and `"approve"`;
+use `"approve"` only when fail-open behavior is an explicit application
+requirement.
+
+## Live evaluation environment
+
+`live_provider_from_env()` returns `None` unless live evaluation is explicitly
+enabled.
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `EXECUTIONKIT_LIVE_EVAL=1` | Yes, to enable | Opt in to live calls. |
+| `EXECUTIONKIT_BASE_URL` | When enabled | OpenAI-compatible base URL. |
+| `EXECUTIONKIT_MODEL` | When enabled | Provider model identifier. |
+| `EXECUTIONKIT_API_KEY` | No | Defaults to an empty string. |
+
+These variables configure only `live_provider_from_env()`. Normal
+`Provider` construction does not read them.
+
+## Installation extras
+
+| Extra | Adds |
+|---|---|
+| `httpx` | Async HTTP transport; the base package falls back to `urllib`. |
+| `jsonschema` | Full JSON Schema validation for tool arguments. |
+| `otel` | OpenTelemetry API support for optional spans. |
+| `dev` | Test, lint, type-check, coverage, and security-development tools. |
+| `docs` | MkDocs and documentation plugins. |
+
+See [Installation](../getting-started/installation.md) for commands.

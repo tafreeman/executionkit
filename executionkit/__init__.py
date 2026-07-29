@@ -1,4 +1,4 @@
-"""ExecutionKit — Composable LLM reasoning patterns."""
+"""LLM call patterns, tool loops, and small execution helpers."""
 
 from __future__ import annotations
 

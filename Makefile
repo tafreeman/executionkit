@@ -1,10 +1,10 @@
 PYTHON ?= python
 PIP ?= $(PYTHON) -m pip
 
-.PHONY: dev-setup lint format format-check type-check test coverage build clean docs-serve docs-build docs-deploy
+.PHONY: dev-setup lint format format-check type-check test coverage build clean docs-check docs-serve docs-build docs-deploy
 
 dev-setup:
-	$(PIP) install -e ".[dev]"
+	$(PIP) install -e ".[dev,docs]" pip-audit
 
 lint:
 	ruff check .
@@ -33,8 +33,12 @@ clean:
 docs-serve:
 	mkdocs serve
 
+docs-check:
+	$(PYTHON) scripts/check_doc_facts.py
+	$(PYTHON) -m mkdocs build --strict
+
 docs-build:
-	mkdocs build
+	$(PYTHON) -m mkdocs build --strict
 
 docs-deploy:
 	mkdocs gh-deploy --force

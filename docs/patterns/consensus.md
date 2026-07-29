@@ -15,7 +15,7 @@ tags:
 | The answer is a short factual or classification label. | The answer is long-form prose — voting on long strings rarely matches. |
 | You can tolerate `N×` cost and want an agreement signal across independent samples. | Latency matters more than reliability. |
 | You can run calls in parallel (the provider supports concurrency). | The model is rate-limited tightly enough that `N` parallel calls trigger 429s. |
-| Tie-handling is acceptable (you check `tie_count`). | You require a single, consistent answer per prompt. |
+| Tie-handling is acceptable and you check `tie_count`. | A tie must never be resolved by first occurrence. |
 
 ## Call flow
 
@@ -50,9 +50,9 @@ from executionkit import Provider, consensus
 
 async def main() -> None:
     async with Provider(
-        base_url="https://api.openai.com/v1",
-        api_key=os.environ["OPENAI_API_KEY"],
-        model="gpt-4o-mini",
+        base_url=os.environ["LLM_BASE_URL"],
+        api_key=os.environ.get("LLM_API_KEY", ""),
+        model=os.environ["LLM_MODEL"],
     ) as provider:
         result = await consensus(
             provider,
@@ -72,17 +72,18 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-## Configuration knobs
+## Parameters
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `num_samples` | `5` | Parallel completions to run. Must be `>= 1`. |
 | `strategy` | `"majority"` | `"majority"` or `"unanimous"`. Accepts `VotingStrategy` enum or string. |
-| `temperature` | `0.9` | Higher = more diverse samples (better for voting). |
+| `temperature` | `0.9` | Sampling temperature sent to the provider. Its effect depends on the endpoint. |
 | `max_tokens` | `4096` | Per-completion token cap. |
 | `max_concurrency` | `5` | Semaphore limit for parallel calls. |
 | `retry` | `DEFAULT_RETRY` | Per-call retry config for transient errors. |
 | `max_cost` | `None` | `TokenUsage` budget shared across all samples. |
+| `trace` | `None` | Optional callback for `llm_call_*` events. |
 
 ## Metadata keys
 
@@ -90,14 +91,18 @@ asyncio.run(main())
 |-----|------|---------|
 | `agreement_ratio` | `float` | Fraction of samples matching the winner (`top_count / num_samples`). |
 | `unique_responses` | `int` | Number of distinct response strings observed (after whitespace normalization). |
-| `tie_count` | `int` | Number of responses tied for the top vote count. `1` = clean win. |
+| `tie_count` | `int` | Number of responses tied for the top vote count. For majority voting, `1` is a clean win and values above `1` are ties. Unanimous success reports `0`. |
 
 ## Cost characteristics
 
 - **`O(num_samples)` LLM calls.** All calls are issued concurrently up to `max_concurrency`.
-- **Parallelizable.** Total wall-clock latency ≈ slowest sample, not the sum.
-- **Budget enforcement is TOCTOU-safe.** `checked_complete` reserves the call slot *before* awaiting, so concurrent samples cannot race past `max_cost.llm_calls`; failed retries count as dispatched attempts.
-- **No retry amplification by default.** Each sample uses the shared `RetryConfig`; transient failures retry the failing sample only.
+- **Concurrent.** Calls run concurrently up to `max_concurrency`; provider
+  queuing and rate limits still affect elapsed time.
+- **Call-budget enforcement is safe within one asyncio event loop.**
+  `checked_complete` reserves the call slot before awaiting, so concurrent
+  samples cannot claim the same slot. Retries count as new attempts.
+- **Token budgets are pre-dispatch checks.** A completed response can take the
+  recorded total past a token limit; the next call is then blocked.
 
 ## Errors
 
@@ -111,7 +116,8 @@ asyncio.run(main())
 ## Tips
 
 - **Whitespace is normalized for voting** (`re.sub(r"\s+", " ", text.strip())`). Two responses differing only in trailing newlines count as identical. The original (un-normalized) winning string is returned.
-- **Use higher `temperature`** (`0.7–1.0`) than you would for a single call — diverse samples are what voting fixes.
+- Choose `temperature` for the endpoint and task. More variation can expose
+  disagreement, but it can also reduce the chance of a clear winner.
 - **Constrain the answer space** in the prompt ("answer with exactly one of: …"). Free-form responses rarely vote cleanly.
 - **Gate on `agreement_ratio`** before trusting the answer:
 

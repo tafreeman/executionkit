@@ -1,8 +1,10 @@
-# Core API
+# Pattern API
 
-This page is auto-generated from docstrings via [mkdocstrings](https://mkdocstrings.github.io). Source-of-truth lives in the Python files.
+This page renders signatures and docstrings from the current source. The
+task-focused pages under [Patterns](../patterns/index.md) explain when to use
+each function.
 
-## Patterns
+## Async patterns
 
 ### `consensus`
 
@@ -24,25 +26,33 @@ This page is auto-generated from docstrings via [mkdocstrings](https://mkdocstri
 
 ::: executionkit.compose.pipe
 
-::: executionkit.compose.PatternStep
+### `map_reduce`
 
-## Sync wrappers
+::: executionkit.patterns.map_reduce.map_reduce
 
-```python
-from executionkit import (
-    consensus_sync,
-    refine_loop_sync,
-    react_loop_sync,
-    structured_sync,
-    pipe_sync,
-)
-```
+## Synchronous wrappers
 
-Each sync wrapper takes the same arguments as its async counterpart and runs it via `asyncio.run`. They raise `RuntimeError` when called inside a running event loop — use `await` directly there.
+The wrappers accept the same pattern-specific keyword arguments as their async
+counterparts. They use `asyncio.run()` and therefore cannot run inside an
+active event loop.
 
-## Value types
+::: executionkit.consensus_sync
+
+::: executionkit.refine_loop_sync
+
+::: executionkit.react_loop_sync
+
+::: executionkit.structured_sync
+
+::: executionkit.pipe_sync
+
+::: executionkit.map_reduce_sync
+
+## Results and values
 
 ::: executionkit.types.PatternResult
+
+::: executionkit.types.StreamingPatternResult
 
 ::: executionkit.types.TokenUsage
 
@@ -50,96 +60,48 @@ Each sync wrapper takes the same arguments as its async counterpart and runs it 
 
 ::: executionkit.types.VotingStrategy
 
-::: executionkit.types.Evaluator
+::: executionkit.types.TerminationReason
 
-## Evals
+`Evaluator` is an async callable:
 
-::: executionkit.evals.EvalCase
+```text
+Callable[[str, LLMProvider], Awaitable[float]]
+```
 
-::: executionkit.evals.EvalResult
+It must return a finite score in the inclusive range `[0.0, 1.0]`.
 
-::: executionkit.evals.EvalReport
+`CheckpointCallback` receives an iteration index and a plain state dictionary.
+It may be synchronous or async:
 
-::: executionkit.evals.run_eval_suite
+```text
+Callable[[int, dict[str, Any]], Awaitable[None] | None]
+```
 
-::: executionkit.evals.live_provider_from_env
+`PatternStep` is the callable protocol accepted by `pipe()`:
 
-## Observability
+```text
+async def step(
+    provider: LLMProvider,
+    prompt: str,
+    **kwargs: Any,
+) -> PatternResult[Any]:
+    ...
+```
 
-::: executionkit.observability.TraceEvent
+## Advanced helpers
 
-::: executionkit.observability.TraceCallback
+Most applications should call a pattern or `Kit`. Custom pattern authors can
+use the same completion, budget, retry, and trace path as built-in patterns:
 
-::: executionkit.observability.emit_trace
+::: executionkit.patterns.base.checked_complete
 
-## Routing
+::: executionkit.patterns.base.checked_stream
 
-::: executionkit.routing.RouteRule
-
-::: executionkit.routing.Router
-
-## Workflow and planning
-
-::: executionkit.workflow.Step
-
-::: executionkit.workflow.Workflow
-
-::: executionkit.workflow.WorkflowResult
-
-::: executionkit.planning.PlanStep
-
-::: executionkit.planning.Plan
-
-::: executionkit.planning.PlanResult
-
-## Approval
-
-::: executionkit.approval.ApprovalRequest
-
-::: executionkit.approval.ApprovalDecision
-
-::: executionkit.approval.ApprovalGate
-
-::: executionkit.approval.ApprovalDeniedError
-
-## Session
-
-::: executionkit.kit.Kit
-
-## Cost tracking
-
-::: executionkit.cost.CostTracker
-
-## Engine helpers
-
-::: executionkit.engine.convergence.ConvergenceDetector
-
-::: executionkit.engine.retry.RetryConfig
+::: executionkit.patterns.base.validate_score
 
 ::: executionkit.engine.json_extraction.extract_json
 
-## Errors
-
-All exceptions inherit from `ExecutionKitError` and carry `.cost` (`TokenUsage` accumulated up to the failure) and `.metadata` (dict).
-
-| Exception | Cause |
-|-----------|-------|
-| `ExecutionKitError` | Base for all errors. |
-| `LLMError` | Base for provider communication errors. |
-| `RateLimitError` | HTTP 429 — retryable. Carries `retry_after`. |
-| `PermanentError` | HTTP 401/403/404 — not retryable. |
-| `ProviderError` | Unexpected HTTP failure — retryable. |
-| `PatternError` | Base for pattern logic errors. |
-| `BudgetExhaustedError` | Token or call budget exceeded. |
-| `ConsensusFailedError` | Unanimous strategy could not agree. |
-| `MaxIterationsError` | `react_loop` exhausted `max_rounds` without a final answer. |
-
-::: executionkit.provider.ExecutionKitError
-
-::: executionkit.provider.RateLimitError
-
-::: executionkit.provider.BudgetExhaustedError
-
-::: executionkit.provider.ConsensusFailedError
-
-::: executionkit.provider.MaxIterationsError
+`checked_complete()` and `checked_stream()` require a caller-owned
+`CostTracker`. Preserve the source ordering of the budget check and call
+reservation: their no-`await` interval prevents concurrent asyncio tasks from
+passing the same call-budget slot.

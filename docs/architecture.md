@@ -1,433 +1,221 @@
-# ExecutionKit Architecture
+# Architecture
 
-## Design Principles
+ExecutionKit is an in-process Python library. It provides bounded LLM call
+patterns, provider transport, usage accounting, and small coordination
+helpers. The calling application owns persistence, scheduling, identity,
+authorization, and user interfaces.
 
-ExecutionKit is a minimal library for LLM reasoning built from pieces you can combine. Five principles
-shape every design decision:
+## Package boundaries
 
-1. **Zero runtime dependencies.** `dependencies = []` in `pyproject.toml`. The
-   optional `httpx` extra is additive — the stdlib `urllib` backend is always
-   present. Consumers can import ExecutionKit anywhere without dependency
-   conflicts.
-
-2. **Flat package layout.** All importable names live under `executionkit/`
-   directly (no `src/` wrapper). Sub-packages (`patterns/`, `engine/`) exist
-   only for organisational grouping, not namespace isolation.
-
-3. **Frozen value types.** Every object that crosses a function boundary is
-   `@dataclass(frozen=True, slots=True)`. Patterns never return mutable state;
-   callers receive a `PatternResult` that cannot be altered after the fact. This
-   prevents hidden side-effects and makes results safe to cache, share, and
-   compare.
-
-4. **Async-first, sync wrappers provided.** All pattern functions are `async`.
-   Synchronous convenience wrappers (`consensus_sync`, `refine_loop_sync`,
-   `react_loop_sync`, `structured_sync`, `pipe_sync`) live in `__init__.py` and call
-   `asyncio.run()`, raising a helpful error when called inside a running loop.
-
-5. **Pieces you can combine, not opinionated.** Patterns are standalone async functions that
-   accept any `LLMProvider`-conforming object. `pipe()` chains them without
-   coupling. The `Kit` facade is optional sugar — nothing requires it.
-
----
-
-## Module Map
-
-```
-executionkit/
-├── __init__.py          — public API surface; sync wrappers
-├── _constants.py        — shared default constants (max tokens, concurrency)
-├── types.py             — frozen value types: PatternResult, TokenUsage, Tool, VotingStrategy, Evaluator
-├── errors.py            — 9-class exception hierarchy (F-06: extracted from provider.py)
-├── provider.py          — LLMProvider protocol, ToolCallingProvider protocol,
-│                          Provider concrete class, LLMResponse, ToolCall;
-│                          re-exports error classes from errors.py for backwards compatibility;
-│                          _classify_http_error() is the single HTTP status→exception mapping
-│                          point for both urllib and httpx backends (F-02)
-├── cost.py              — CostTracker mutable accumulator
-├── compose.py           — pipe() composition helper, PatternStep protocol
-├── kit.py               — Kit session facade (provider + cumulative usage)
-├── _mock.py             — MockProvider test double (satisfies both protocols)
-├── batches.py           — consensus_batch() / map_batch() over Anthropic Message
-│                          Batches via stdlib urllib; shares tally_votes with the
-│                          live consensus pattern (ADR-014)
-├── evals.py             — repeatable golden evals and env-gated live eval helper
-├── observability.py     — TraceEvent, TraceCallback, and async trace emission
-├── routing.py           — Router and RouteRule provider selection primitives
-├── workflow.py          — dependency-ordered async Step/Workflow execution
-├── planning.py          — ordered Plan/PlanStep execution
-├── approval.py          — ApprovalGate, ApprovalRequest, and approval decisions
-├── patterns/
-│   ├── base.py          — checked_complete(), validate_score(), _TrackedProvider;
-│   │                      _check_budget() uses getattr() field loop replacing per-field
-│   │                      if-chains (F-05/F-08); _TrackedProvider.supports_tools delegates
-│   │                      to wrapped provider via getattr (F-04)
-│   ├── consensus.py     — parallel majority/unanimous voting
-│   ├── map_reduce.py    — parallel fan-out map over many inputs + single reduce (ADR-011)
-│   ├── refine_loop.py   — iterative score-guided refinement
-│   ├── react_loop.py    — tool-calling think-act-observe loop
-│   └── structured.py    — JSON extraction, validation, and repair retries
-├── engine/
-│   ├── convergence.py   — ConvergenceDetector (delta + patience)
-│   ├── retry.py         — RetryConfig, with_retry() exponential backoff
-│   ├── parallel.py      — gather_strict() / gather_resilient() semaphore wrappers
-│   ├── json_extraction.py — extract_json() multi-strategy JSON parser
-│   ├── messages.py      — message-construction helpers (system/tool/assistant shapes)
-│   ├── rate_bucket.py   — TokenBucket adaptive rate-limit strategy
-│   └── voting.py        — pure vote tallying shared by consensus() and batches.py
-└── mcp/
-    ├── __main__.py      — entry point: python -m executionkit.mcp
-    ├── _constants.py    — named protocol constants for the MCP server
-    ├── _demo_tools.py   — fixed, side-effect-free demo toolset for the react_loop MCP tool
-    ├── server.py        — stdlib stdio MCP server, newline-delimited JSON-RPC 2.0 (ADR-012)
-    └── tools.py         — MCP tool definitions and dispatch
+```mermaid
+flowchart TD
+    App["Calling application"] --> Public["Public API"]
+    Public --> Coordination["Kit, routing, plans, workflows, approvals"]
+    Public --> Patterns["Patterns and pipe"]
+    Coordination --> Patterns
+    Patterns --> Engine["Retry, budgets, parsing, voting, concurrency"]
+    Engine --> Protocols["Provider protocols and value types"]
+    Patterns --> Protocols
+    Protocols --> HTTP["OpenAI-compatible HTTP provider"]
+    HTTP --> Endpoint["Configured model endpoint"]
+    Public --> Batch["Anthropic batch integration"]
+    Public --> MCP["MCP stdio server"]
 ```
 
-### Dependency graph (arrows = "imports from")
+Dependencies point downward. The engine does not select providers or own
+application state. Patterns use the provider protocols, not the concrete HTTP
+client.
 
-```
-__init__  ──► kit, compose, patterns/*, engine/*, provider, types, _mock
-kit       ──► patterns/*, compose, provider, types, cost
-compose   ──► provider, types
-evals     ──► provider, types
-routing   ──► provider, types
-workflow  ──► approval, observability, types
-planning  ──► approval, observability, types
-approval  ──► observability
-patterns/base    ──► cost, engine/retry, provider, types, observability
-patterns/consensus  ──► cost, engine/parallel, engine/retry, patterns/base, provider, types
-patterns/refine_loop ──► cost, engine/convergence, engine/retry, patterns/base, provider, types
-patterns/react_loop  ──► approval, cost, engine/retry, patterns/base, provider, types, observability
-patterns/structured  ──► engine/json_extraction, engine/retry, patterns/base, provider, types
-patterns/map_reduce  ──► _constants, cost, engine/messages, engine/parallel, engine/retry, patterns/base, provider, types
-batches   ──► _constants, engine/messages, engine/voting, errors, types
-provider  ──► types, errors  (re-exports all 9 error classes from errors.py)
-errors    ──► types
-cost      ──► types
-engine/*  ──► provider (retry only)
-engine/voting ──► errors, types
-mcp/server ──► executionkit (public API), mcp/_constants, mcp/tools
-```
+## Module map
 
-The dependency flows strictly downward. No engine module imports a pattern;
-no types module imports provider details. This keeps the layering clean and
-prevents circular imports. The one deliberate exception is `mcp/`, which sits
-*above* the package: it is an adapter that imports the public API to expose
-patterns as MCP tools, and nothing in the package imports it back.
+The public and top-level coordination modules are:
 
----
+| File | Responsibility |
+|---|---|
+| `executionkit/__init__.py` | Public exports, version, and synchronous wrappers. |
+| `executionkit/_constants.py` | Shared internal defaults and limits. |
+| `executionkit/_mock.py` | Scripted provider used by tests and examples. |
+| `executionkit/types.py` | Result, usage, tool, callback, and enum types. |
+| `executionkit/errors.py` | Exception hierarchy. |
+| `executionkit/provider.py` | Provider protocols, responses, and OpenAI-compatible HTTP transport. |
+| `executionkit/cost.py` | Mutable usage tracker and price arithmetic. |
+| `executionkit/kit.py` | Session facade, conversation history, and cumulative usage. |
+| `executionkit/compose.py` | Sequential `pipe()` execution. |
+| `executionkit/routing.py` | Ordered provider selection rules. |
+| `executionkit/planning.py` | Sequential named steps. |
+| `executionkit/workflow.py` | Dependency-ordered steps, checkpoints, and resume. |
+| `executionkit/approval.py` | Approval requests, decisions, and timeout policy. |
+| `executionkit/evals.py` | Deterministic eval cases, conversation scripts, and live-provider opt-in. |
+| `executionkit/observability.py` | Trace callbacks and optional OpenTelemetry spans. |
+| `executionkit/batches.py` | Anthropic Message Batches client and batch helpers. |
 
-## Data Flow
+Pattern modules are:
 
-A typical call through the library follows this path:
+| File | Responsibility |
+|---|---|
+| `executionkit/patterns/__init__.py` | Pattern package exports. |
+| `executionkit/patterns/base.py` | Checked provider calls, budgets, retry integration, and checkpoints. |
+| `executionkit/patterns/consensus.py` | Concurrent sampling and exact normalized voting. |
+| `executionkit/patterns/refine_loop.py` | Generate, evaluate, and revise loop. |
+| `executionkit/patterns/react_loop.py` | Tool-call loop, validation, approvals, history limits, and tool execution. |
+| `executionkit/patterns/structured.py` | JSON extraction, validation, and repair. |
+| `executionkit/patterns/map_reduce.py` | Concurrent map calls followed by one reduce call. |
 
-```
-User code
-  │
-  ▼
-Kit.refine(prompt)          ← optional session facade
-  │
-  ▼
-refine_loop(provider, prompt, ...)
-  │
-  ├─► CostTracker()          ← fresh mutable accumulator for this call
-  ├─► ConvergenceDetector()  ← stateful score tracker
-  │
-  ▼
-checked_complete(provider, messages, tracker, budget, retry)
-  │  [patterns/base.py]
-  ├─► budget guard            ← raises BudgetExhaustedError if over limit
-  ├─► tracker._calls += 1    ← TOCTOU-safe pre-increment
-  ├─► trace event             ← optional llm_call_start / end / error
-  │
-  ▼
-with_retry(provider.complete, config, messages, **kwargs)
-  │  [engine/retry.py]
-  └─► provider.complete(messages, ...)
-        │  [provider.py — Provider]
-        ├─► _post() → httpx or urllib → HTTP POST to /chat/completions
-        └─► _parse_response() → LLMResponse(content, tool_calls, usage, ...)
-  │
-  ▼  (on success)
-tracker.record_without_call(response)   ← adds tokens, call slot already counted
-  │
-  ▼
-Evaluator(text, provider)              ← optional; can re-enter checked_complete
-  │
-  ▼
-ConvergenceDetector.should_stop(score) ← returns bool; loop continues or exits
-  │
-  ▼
-PatternResult(value, score, cost=tracker.to_usage(), metadata=MappingProxyType(...))
-  │
-  ▼
-Kit._record(result.cost)               ← adds to session cumulative tracker
-  │
-  ▼
-User code receives PatternResult       ← immutable, complete
-```
+Engine modules are:
 
-For `consensus`, the flow fans out: `gather_strict()` runs `num_samples`
-`checked_complete()` coroutines concurrently behind a semaphore, collects
-results, then applies the voting strategy before returning a single `PatternResult`.
+| File | Responsibility |
+|---|---|
+| `executionkit/engine/__init__.py` | Engine package marker. |
+| `executionkit/engine/convergence.py` | Score-threshold and patience-based stopping. |
+| `executionkit/engine/json_extraction.py` | JSON extraction from plain or fenced model output. |
+| `executionkit/engine/messages.py` | OpenAI-format message constructors. |
+| `executionkit/engine/parallel.py` | Strict and resilient async gathering. |
+| `executionkit/engine/rate_bucket.py` | Async token bucket and retry-after penalty. |
+| `executionkit/engine/retry.py` | Retry classification and jittered backoff. |
+| `executionkit/engine/voting.py` | Response normalization and vote tallying. |
 
-For `react_loop`, the flow iterates: each round calls `checked_complete()`, then
-dispatches any tool calls via `asyncio.wait_for(tool.execute(...))`, appends
-tool-role messages, and loops until the LLM returns no tool calls or
-`max_rounds` is hit.
+MCP modules are:
 
----
+| File | Responsibility |
+|---|---|
+| `executionkit/mcp/__init__.py` | MCP package exports. |
+| `executionkit/mcp/__main__.py` | `python -m executionkit.mcp` entry point. |
+| `executionkit/mcp/_constants.py` | Supported protocol versions and server limits. |
+| `executionkit/mcp/_demo_tools.py` | Fixed calculator and echo tools used by the server. |
+| `executionkit/mcp/server.py` | JSON-RPC framing and stdio server lifecycle. |
+| `executionkit/mcp/tools.py` | MCP tool definitions, argument checks, and pattern handlers. |
 
-## Immutability Contract
+## Pattern call lifecycle
 
-All value objects use `@dataclass(frozen=True, slots=True)`:
+A normal pattern call follows this order:
 
-| Type | Where defined |
-|------|---------------|
-| `TokenUsage` | `types.py` |
-| `PatternResult[T]` | `types.py` |
-| `Tool` | `types.py` |
-| `ToolCall` | `provider.py` |
-| `LLMResponse` | `provider.py` |
-| `Provider` | `provider.py` |
-| `RetryConfig` | `engine/retry.py` |
+1. Validate pattern arguments.
+2. Build provider messages.
+3. Check the remaining budget and reserve one LLM call.
+4. Apply retry pacing, then call the provider.
+5. Parse the response and record returned token usage.
+6. Continue the pattern or build a `PatternResult`.
+7. Emit trace events and checkpoints at documented boundaries.
 
-`frozen=True` prevents field assignment after construction. `slots=True` saves
-memory and makes attribute access faster — at the cost of forbidding `__dict__`.
+Retry attempts repeat steps 3 through 5. A failed attempt therefore consumes a
+call slot. It normally adds no token usage because the provider did not return
+usage.
 
-`PatternResult.metadata` is additionally wrapped in `types.MappingProxyType` so
-that even the mapping itself is read-only. Pattern internals build a plain
-`dict[str, Any]` during execution, then wrap it only at the point of return.
+## Concurrency and accounting
 
-The one intentional exception is `Provider.__post_init__`, which uses
-`object.__setattr__` to set two derived private fields (`_client`, `_use_httpx`)
-after construction. This is the standard Python pattern for computed state on
-frozen dataclasses and does not violate the public immutability contract because
-both fields are marked `repr=False, compare=False, hash=False`.
+Concurrent pattern calls share one `CostTracker` inside the pattern. Budget
+check and call reservation occur without an `await` between them, so the LLM
+call limit cannot be raced by coroutines on one event loop.
 
-`CostTracker` is intentionally mutable — it is a private accumulator that only
-exists within a single pattern invocation and is never exposed to user code
-directly. Its snapshot is emitted as an immutable `TokenUsage` via `to_usage()`.
+The token fields are pre-dispatch checks, not response-size ceilings. A
+successful response can exceed a token field because its usage is known only
+after completion. The next attempted call is blocked.
 
----
+`CostTracker`, `TokenBucket`, `Kit`, and workflow state are not designed for
+concurrent access from multiple operating-system threads. Create separate
+instances or provide application-level locking.
 
-## Error Handling Architecture
+`Kit(rate_limiter=...)` takes one token per top-level Kit method. A
+`RetryConfig(rate_limit_strategy=...)` takes one token per provider attempt.
+Use the setting that matches the limit being enforced.
 
-The full 9-class exception hierarchy lives in `executionkit/errors.py` (F-06).
-`provider.py` re-exports all nine classes under the same names so that existing
-`from executionkit.provider import XError` imports continue to work without
-modification (PEP 387 backwards compatibility).
+## Provider boundary
 
-```
-ExecutionKitError              ← executionkit/errors.py
-├── LLMError                  ← provider communication failures
-│   ├── RateLimitError        ← HTTP 429; carries retry_after float
-│   ├── PermanentError        ← HTTP 401/403/404; do not retry
-│   └── ProviderError         ← catch-all retryable HTTP failures
-└── PatternError              ← reasoning logic failures
-    ├── BudgetExhaustedError  ← token or call budget exceeded
-    ├── ConsensusFailedError  ← unanimous strategy failed
-    └── MaxIterationsError    ← react_loop exhausted max_rounds
-```
+`LLMProvider` requires one async `complete()` method. `ToolCallingProvider`
+adds an explicit tool-support marker. `StreamingProvider` adds `stream()`,
+which returns an async iterator.
 
-All errors carry `cost: TokenUsage` so callers can see what was spent before
-the failure. `pipe()` augments errors with the cumulative cross-step cost before
-re-raising.
+The concrete `Provider`:
 
-**HTTP error classification:** `_classify_http_error()` in `provider.py` is the
-single function responsible for mapping HTTP status codes to the correct error
-subclass. Both the `_post_httpx` and `_post_urllib` backends call it, eliminating
-duplicated mapping logic (F-02). This mirrors the pattern used by the Anthropic
-SDK's `_make_status_error()`.
+- sends OpenAI-compatible chat-completions requests;
+- accepts only `http` and `https` base URLs;
+- does not follow redirects;
+- redacts credential-like values from HTTP error text;
+- uses `httpx` when installed and falls back to `urllib`; and
+- does not translate native provider request formats.
 
-**Retry boundary:** `with_retry()` in `engine/retry.py` only retries
-`RateLimitError` and `ProviderError`. `PermanentError` propagates immediately.
-`asyncio.CancelledError` is always re-raised without retry.
+Provider and model compatibility remain configuration concerns. The transport
+does not discover model capabilities.
 
-**Pattern boundary:** patterns let `LLMError` propagate; they raise their own
-`PatternError` subclass when their own invariants are violated (budget exceeded,
-consensus impossible, iterations exhausted).
+## Tool execution boundary
 
-**Tool boundary:** `react_loop` catches all exceptions from tool execution and
-returns them as error-string observations rather than propagating. This is
-intentional: a broken tool should not abort a reasoning loop.
+`react_loop()` treats model-requested tool calls as untrusted input.
 
----
+1. It rejects duplicate tool names when the loop starts.
+2. It validates the argument object and the supported top-level schema subset.
+3. If `jsonschema` is installed, it applies full JSON Schema validation.
+4. It asks the configured `ApprovalGate`, if any.
+5. It applies a timeout and runs calls from the same round concurrently.
+6. It truncates tool observations before adding them to model history.
 
-## Security Layers
+These checks do not replace authorization inside a tool. Tool code must still
+validate resource identifiers, caller permissions, and side-effect rules.
 
-### Credential redaction in error messages
+## State, checkpoints, and resume
 
-`provider.py::_redact_sensitive()` uses a regex to replace substrings that
-look like API keys (`sk-...`, `ghp_...`, `gho_...`, `AIza...`, `xox...`,
-`gsk_...`, bearer/token/secret variants, etc.) with `[REDACTED]` in provider
-error messages before they surface in `PermanentError` or `ProviderError`.
-Transport failures and malformed tool-argument JSON errors pass through the
-same redaction helper before they are raised.
+Pattern checkpoints are observation callbacks. Exceptions raised by a pattern
+checkpoint callback are logged and do not stop that pattern.
 
-`Provider.__repr__` masks the `api_key` field entirely — it prints `'***'` if
-non-empty, and `''` if empty. Never log provider instances at INFO level or
-above in production.
+Workflow checkpoints are different: they contain completed outputs and
+accumulated usage after each ready batch. The caller provides the persistence
+function. A workflow resumed from a checkpoint skips step names already found
+in `checkpoint.outputs`. Workflow checkpoint callback exceptions propagate to
+the caller.
 
-### XML sandboxing in the default evaluator
+Checkpoint data can contain prompts, outputs, tool observations, and
+application context. The caller is responsible for access control, encryption,
+retention, and schema migration.
 
-`refine_loop`'s built-in evaluator wraps generated content in
-`<response_to_rate>` XML delimiters and prepends an explicit instruction to
-ignore any instructions inside those tags. This mitigates prompt injection
-attacks where adversarial content in the LLM output could override the scoring
-instruction. Content is also truncated to 32 768 characters before being
-embedded.
+## Value and mutation model
 
-### Tool argument validation
+Public result types use frozen, slotted dataclasses. Field reassignment is
+blocked, and metadata created by the library is generally wrapped in
+`MappingProxyType`.
 
-`react_loop` calls `_validate_tool_args()` against the tool's JSON Schema subset
-before invoking the tool. Missing required fields, `additionalProperties:
-false`, and top-level primitive type mismatches are caught and returned as error
-observations rather than passed to the tool. This prevents malformed LLM output
-from causing unexpected behaviour in tool implementations without adding a
-runtime `jsonschema` dependency.
+This is shallow immutability. A caller-supplied nested list or mapping can
+remain mutable after it is placed inside another value. Copy untrusted mutable
+inputs when a stable snapshot is required.
 
-### Approval gates
+Stateful helpers are intentionally mutable:
 
-`ApprovalGate` can block side effects before tool bodies, workflow steps, or
-plan steps execute. Denied ReAct tool calls become observations so the model can
-recover without the side effect occurring.
+- `CostTracker` accumulates counts;
+- `TokenBucket` tracks refill time and penalties;
+- `Kit` stores cumulative usage and conversation messages.
 
-### No eval or exec
+## Errors
 
-ExecutionKit never calls `eval()` or `exec()` on LLM output. JSON is parsed
-with `json.loads()` only.
+All library exceptions derive from `ExecutionKitError` and can carry partial
+`cost` and diagnostic `metadata`.
 
-### Bandit in CI
-
-`bandit[toml]` is a dev dependency. `pyproject.toml` configures it with
-targeted skips (`B101` assert guards, `B310` urllib intentional HTTP client,
-`B311` jitter random). Any new code must pass Bandit without adding blanket
-skips.
-
----
-
-## Extension Points
-
-### Implementing a custom LLMProvider
-
-Any class with this method signature satisfies the `LLMProvider` structural
-protocol (PEP 544 — no inheritance required):
-
-```python
-from executionkit import LLMProvider, LLMResponse
-
-class MyProvider:
-    async def complete(
-        self,
-        messages: Sequence[dict[str, Any]],
-        *,
-        temperature: float | None = None,
-        max_tokens: int | None = None,
-        tools: Sequence[dict[str, Any]] | None = None,
-        **kwargs: Any,
-    ) -> LLMResponse:
-        ...
+```text
+ExecutionKitError
+├── LLMError
+│   ├── RateLimitError
+│   ├── PermanentError
+│   └── ProviderError
+└── PatternError
+    ├── BudgetExhaustedError
+    ├── ConsensusFailedError
+    └── MaxIterationsError
 ```
 
-To satisfy `ToolCallingProvider` (required by `react_loop`), additionally set:
+Approval denial and timeout errors also derive directly from
+`ExecutionKitError`.
 
-```python
-    supports_tools: Literal[True] = True
-```
+Retry behavior is type-based. By default, `RateLimitError` and
+`ProviderError` are retryable; `PermanentError` is not.
 
-Use `MockProvider` from `executionkit._mock` in tests — it accepts a list of
-string or `LLMResponse` responses and cycles through them.
+## Extension rules
 
-### Implementing a custom pattern
+- Implement `LLMProvider` for another OpenAI-compatible transport or a test
+  double.
+- Implement the larger protocols only when the object actually supports tools
+  or streaming.
+- Write a pattern as an async function that returns `PatternResult` and uses
+  the checked-call helpers for consistent retry, budget, trace, and cost
+  behavior.
+- Put branching, persistence, identity, and business authorization in the
+  application.
 
-A pattern is an async function with this signature:
-
-```python
-async def my_pattern(
-    provider: LLMProvider,
-    prompt: str,
-    **kwargs: Any,
-) -> PatternResult[str]:
-    ...
-```
-
-Use `checked_complete()` from `patterns/base.py` instead of calling
-`provider.complete()` directly. It handles budget enforcement, retry wrapping,
-and call-slot TOCTOU safety in one call.
-
-Return a `PatternResult` with a `MappingProxyType` metadata dict. Document all
-public metadata keys in the function docstring under a `Metadata:` section.
-
-To make the pattern work with `pipe()`, ensure it accepts `max_cost` as a
-keyword argument (forwarded by `pipe` for budget propagation) or declare
-`**kwargs` to absorb it silently.
-
-### Evaluator functions
-
-An `Evaluator` is:
-
-```python
-Evaluator: TypeAlias = Callable[[str, LLMProvider], Awaitable[float]]
-```
-
-It receives the response text and the same provider. Return a float in
-`[0.0, 1.0]`. Use `validate_score()` from `patterns/base.py` to ensure the
-value is in range before returning.
-
----
-
-## Engine Layer
-
-### `engine/convergence.py` — ConvergenceDetector
-
-Stateful detector used inside `refine_loop`. Call `should_stop(score)` after
-each iteration. Returns `True` when either:
-- `score >= score_threshold` (absolute target reached), or
-- The score delta has been below `delta_threshold` for `patience` consecutive
-  iterations.
-
-`reset()` clears all state. The detector is not thread-safe — create one per
-loop invocation.
-
-### `engine/retry.py` — RetryConfig and with_retry
-
-`RetryConfig` (frozen dataclass) holds `max_retries`, `base_delay`, `max_delay`,
-`exponential_base`, and the tuple of retryable exception types. `DEFAULT_RETRY`
-is the module-level singleton with sensible defaults (3 retries, 1 s base, 60 s
-cap, factor 2).
-
-`with_retry(fn, config, *args, **kwargs)` wraps any async callable and makes at
-most `1 + max_retries` attempts — the initial call plus `max_retries` retries.
-Uses full jitter (`random.uniform(0, cap)`) to prevent thundering-herd effects
-when many coroutines retry simultaneously. `CancelledError` is always re-raised
-immediately.
-
-### `engine/parallel.py` — gather_strict and gather_resilient
-
-Both functions accept a list of coroutines and a `max_concurrency` semaphore
-limit.
-
-- `gather_strict` — all-or-nothing. Uses `asyncio.TaskGroup`. If exactly one
-  task fails, the exception is unwrapped from the `ExceptionGroup` for cleaner
-  tracebacks. Used by `consensus`.
-- `gather_resilient` — tolerant. Uses `asyncio.gather(return_exceptions=True)`.
-  Returns exceptions as values in the result list. Suitable for fan-out where
-  partial results are acceptable.
-
-### `engine/json_extraction.py` — extract_json
-
-Three-strategy extractor for JSON embedded in LLM prose. The module is
-deliberately regex-free — fence detection uses `str.find` so an unterminated
-fence in untrusted input degrades to a linear scan instead of risking the
-polynomial backtracking a `.*?` pattern can incur under `DOTALL`:
-
-1. Raw `json.loads()` on stripped text.
-2. Markdown code fences located with `str.find`: the first ` ```json ` fence,
-   then the first generic ` ``` ` fence whose body starts with `{` or `[`.
-3. Balanced-brace scan: finds the first `{` or `[`, tracks nesting depth while
-   respecting string boundaries and escape sequences, extracts the substring
-   ending at depth zero.
-
-Returns `dict | list`. Raises `ValueError` if no valid JSON is found. Handles
-both objects and arrays.
+Architecture changes that alter these boundaries should include an ADR in
+[`docs/adr/`](adr/README.md).

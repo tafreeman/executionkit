@@ -1,6 +1,6 @@
 """Balanced-brace JSON extraction from LLM output.
 
-Provides robust extraction that handles markdown fences and raw embedded
+Handles extraction from Markdown fences and raw embedded
 JSON, avoiding the greedy-regex problem that captures to the *last* closing
 brace in the entire response.
 """

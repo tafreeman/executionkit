@@ -6,7 +6,8 @@ tags:
 
 # Map-Reduce
 
-`map_reduce()` fans out a prompt template over many inputs concurrently, then folds all results into a single answer with a reduce prompt. It is the canonical way to apply the same LLM operation to a list of items and synthesise the outputs.
+`map_reduce()` applies one prompt template to several inputs concurrently, then
+sends their outputs to one reduce prompt.
 
 ## When to use / when not to use
 
@@ -14,7 +15,7 @@ tags:
 |--------------|----------------|
 | You need to process N independent items with the same prompt. | Items depend on each other's outputs — use sequential chaining instead. |
 | The final answer benefits from combining partial results (summaries, classifications, extractions). | N is very large and token cost per item is high — bound with `max_concurrency` and monitor `cost`. |
-| You want to parallelize and then synthesize (fan-out/fan-in). | The reduce step doesn't need the map outputs — call the provider directly. |
+| You want to process items concurrently and then combine their results. | The final call does not need the map outputs. |
 
 ## Call flow
 
@@ -51,9 +52,9 @@ DOCS = [
 
 async def main() -> None:
     async with Provider(
-        base_url="https://api.openai.com/v1",
-        api_key=os.environ["OPENAI_API_KEY"],
-        model="gpt-4o-mini",
+        base_url=os.environ["LLM_BASE_URL"],
+        api_key=os.environ.get("LLM_API_KEY", ""),
+        model=os.environ["LLM_MODEL"],
     ) as provider:
         result = await map_reduce(
             provider,
@@ -61,7 +62,7 @@ async def main() -> None:
             map_prompt_template="Extract one key fact from: {item}",
             reduce_prompt_template=(
                 "You have these key facts:\n{mapped_outputs}\n\n"
-                "Write a two-sentence executive summary."
+                "Write a two-sentence summary."
             ),
         )
         print(result.value)
@@ -81,7 +82,7 @@ asyncio.run(main())
 
 Both placeholders are **required**. A `ValueError` is raised at call time if either is absent.
 
-## Configuration knobs
+## Parameters
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
@@ -91,6 +92,7 @@ Both placeholders are **required**. A `ValueError` is raised at call time if eit
 | `max_cost` | `None` | `TokenUsage` budget shared across all calls. |
 | `retry` | `DEFAULT_RETRY` | Per-call retry config for transient errors. |
 | `trace` | `None` | Optional callback for `llm_call_*` events. |
+| `stream` | `False` | `True` is rejected because the reduce call needs complete map outputs. |
 
 ## Empty inputs
 
@@ -117,9 +119,13 @@ result = await map_reduce(
 
 ## Cost characteristics
 
-- **`O(map_count + 1)` LLM calls.** Map calls run concurrently; wall-clock latency is bounded by the slowest map call plus the reduce call.
+- **At least `map_count + 1` LLM calls.** Retries can increase the count. Map
+  calls run concurrently up to `max_concurrency`; the reduce call starts after
+  all map calls succeed.
 - **Reduce prompt grows with N.** Each map output is appended to the reduce prompt. For large N or verbose map outputs, monitor `result.cost.input_tokens`.
-- **Budget enforcement is TOCTOU-safe** via `checked_complete` — concurrent map calls cannot race past `max_cost.llm_calls`.
+- **Call-budget reservations are safe within one asyncio event loop.**
+  Concurrent map calls cannot claim the same remaining call slot. Token limits
+  are pre-dispatch checks and may be crossed by the final successful response.
 
 ## Errors
 

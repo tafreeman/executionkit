@@ -1,63 +1,79 @@
 # Installation
 
-## Requirements
+ExecutionKit supports Python 3.11, 3.12, and 3.13.
 
-- Python **3.11+**
-- An OpenAI-compatible LLM endpoint (OpenAI, Ollama, vLLM, GitHub Models, llama.cpp, Azure through a compatible gateway, etc.)
-
-## From PyPI
+## Create an environment
 
 ```bash
-pip install executionkit
+python -m venv .venv
 ```
 
-This pulls **zero runtime dependencies** — the default backend is stdlib `urllib`.
-
-## With connection pooling (`httpx`)
-
-For high-throughput workloads (e.g. `consensus` with many samples, or long `react_loop` chains), install the optional `httpx` extra:
+On macOS or Linux:
 
 ```bash
-pip install "executionkit[httpx]"
+source .venv/bin/activate
 ```
 
-The `Provider` automatically detects `httpx` at import time and uses an `httpx.AsyncClient` with connection pooling. With the stdlib backend, every LLM call opens a fresh TCP+TLS connection.
+In PowerShell:
 
-## Verify the install
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+## Install the base package
 
 ```bash
-python -c "from executionkit import Provider, consensus, refine_loop, react_loop; print('OK')"
+python -m pip install executionkit
 ```
 
-## From source (development)
+The base install has no required third-party dependencies. `Provider` uses
+the standard-library `urllib` transport.
+
+Verify the install:
+
+```bash
+python -c "import executionkit; print(executionkit.__version__)"
+```
+
+## Optional extras
+
+| Extra | Install command | Adds |
+|---|---|---|
+| `httpx` | `python -m pip install "executionkit[httpx]"` | An async HTTP client with connection pooling. `Provider` uses it automatically when installed. |
+| `jsonschema` | `python -m pip install "executionkit[jsonschema]"` | Full JSON Schema validation for `react_loop()` tool arguments. |
+| `otel` | `python -m pip install "executionkit[otel]"` | The OpenTelemetry API used by the package's span helpers. |
+| `docs` | `python -m pip install "executionkit[docs]"` | MkDocs, the Material theme, Mermaid, and mkdocstrings. |
+| `dev` | `python -m pip install "executionkit[dev]"` | Test, lint, type-check, coverage, build, and Bandit tools. |
+
+The `jsonschema` extra matters when a tool schema uses features outside the
+built-in top-level subset. Without the extra, those schemas fail closed before
+the tool runs.
+
+The `otel` extra contains the API used by library code. Tests or applications
+that export spans also need an OpenTelemetry SDK and exporter chosen by the
+application.
+
+## Install from a checkout
 
 ```bash
 git clone https://github.com/tafreeman/executionkit.git
 cd executionkit
-python -m venv .venv
-source .venv/bin/activate     # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
+python -m pip install -e ".[dev,docs]" pip-audit
 ```
 
-The `[dev]` extra adds `pytest`, `pytest-asyncio`, `pytest-cov`, `ruff`, `mypy`, `bandit`, `build`, and the optional `httpx` backend. See [Contributing](../contributing.md) for the full dev workflow.
-
-## Build the docs locally
+Run the standard checks:
 
 ```bash
-pip install -e ".[docs]"
-mkdocs build --strict
+python -m ruff check executionkit tests scripts
+python -m mypy --strict executionkit
+python -m pytest -q
+python -m mkdocs build --strict
 ```
 
-The docs extra includes MkDocs Material, mkdocstrings, and Mermaid support used by the public site.
-
-## Run the test suite
-
-```bash
-pytest                                                   # repeatable tests, no API keys
-pytest --cov=executionkit --cov-fail-under=80            # full suite with coverage
-```
+See [Contributing](../contributing.md) for the complete validation matrix.
 
 ## Next
 
-- [Quick Start](quickstart.md) — first call in 5 lines.
-- [Provider Setup](providers.md) — configure OpenAI, Ollama, GitHub Models, Together, Groq, and Azure through a compatible gateway.
+- [Quick start](quickstart.md)
+- [Provider setup](providers.md)
+- [Pattern selection](../patterns/index.md)

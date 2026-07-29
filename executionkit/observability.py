@@ -4,8 +4,8 @@ OTel integration
 ----------------
 If ``opentelemetry-api`` is installed (``pip install executionkit[otel]``),
 :func:`llm_span` wraps LLM calls in a real OpenTelemetry span.  When the
-package is absent the function returns a no-op context manager so the call
-path is identical — zero overhead, zero import error.
+package is absent, the function returns a no-op context manager and does not
+import OpenTelemetry.
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ LLM_CALL_SPAN_NAME = "llm.call"
 
 @dataclass(frozen=True, slots=True)
 class TraceEvent:
-    """A structured event emitted by patterns and lightweight primitives."""
+    """A structured event emitted during pattern and coordination calls."""
 
     kind: str
     payload: MappingProxyType[str, Any] = field(
