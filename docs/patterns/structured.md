@@ -65,9 +65,9 @@ def is_valid_user(value: object) -> str | None:
 
 async def main() -> None:
     async with Provider(
-        base_url="https://api.openai.com/v1",
-        api_key=os.environ["OPENAI_API_KEY"],
-        model="gpt-4o-mini",
+        base_url=os.environ["LLM_BASE_URL"],
+        api_key=os.environ.get("LLM_API_KEY", ""),
+        model=os.environ["LLM_MODEL"],
     ) as provider:
         result = await structured(
             provider,
@@ -84,16 +84,18 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-## Configuration knobs
+## Parameters
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `validator` | `None` | `(value) -> None / True / "" → accept; False / "..." → repair`. `None` accepts any parsed JSON. |
 | `max_retries` | `3` | Number of repair attempts after the initial parse. `0` = parse-once-no-repair. |
-| `temperature` | `0.0` | Lower = more predictable JSON. |
+| `temperature` | `0.0` | Sampling temperature sent to the provider. |
 | `max_tokens` | `4096` | Per-completion token cap. Must be `>= 1`. |
 | `max_cost` | `None` | Optional `TokenUsage` budget across the initial call + all repairs. |
 | `retry` | `DEFAULT_RETRY` | Per-call retry config for transient transport errors (separate from repair retries). |
+| `trace` | `None` | Optional callback for `llm_call_*` events. |
+| `stream` | `False` | `True` is rejected because parsing requires a complete response. |
 
 ## Validator contract
 
@@ -122,7 +124,7 @@ The validator runs only when JSON parses successfully. Parse errors trigger repa
 - **Best case: 1 LLM call.** Initial response parses and validates on the first try.
 - **Worst case: `1 + max_retries` LLM calls.** Each failed attempt costs one repair call.
 - **Sequential.** Repair depends on the prior response; no parallelism.
-- **`temperature=0.0` by default** keeps repairs predictable.
+- **`temperature=0.0` is the default.** Endpoint behavior can still vary.
 
 ## Errors
 
@@ -136,7 +138,8 @@ The validator runs only when JSON parses successfully. Parse errors trigger repa
 ## Tips
 
 - **Use a strict validator.** Type-check, bound-check, and field-presence-check at the validator level — the model is fast at obeying clear error messages.
-- **Schema-as-validator.** Pair `structured` with a Pydantic model:
+- **Schema-as-validator.** If the application already uses Pydantic 2, its
+  model validation can supply the error text:
 
   ```python
   from pydantic import BaseModel, ValidationError
@@ -156,7 +159,10 @@ The validator runs only when JSON parses successfully. Parse errors trigger repa
   result = await structured(provider, prompt, validator=validate)
   ```
 
-- **Keep `max_retries` low** (`2`–`3`). If the model can't produce valid JSON in three tries, your prompt is the problem, not the retry budget.
+  Pydantic is not an ExecutionKit dependency.
+
+- Keep repair counts bounded. Repeated failures can indicate an unclear prompt,
+  an unsupported schema, or a model that does not follow the requested format.
 
 ## Source
 

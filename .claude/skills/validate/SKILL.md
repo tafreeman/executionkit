@@ -1,69 +1,50 @@
 ---
 name: validate
-description: Run the full local validation gate (lint + format + typecheck + tests) before pushing
+description: Run the local checks that match ExecutionKit CI and documentation gates.
 ---
 
-Run all 4 steps in order. ALL must pass before the branch is safe to push.
+# Validate the repository
 
-## Step 1 — Lint check (ruff check)
+Run from the repository root. Stop and fix a failure before treating the
+branch as ready.
 
-Catches code errors, style violations, and anti-patterns.
+## Static checks
 
-```
-python -m ruff check executionkit tests
-```
-
-If it fails: auto-fix what ruff can, then review the rest manually.
-
-```
-python -m ruff check --fix executionkit tests
+```bash
+python -m ruff check executionkit tests scripts
+python -m ruff format --check executionkit tests scripts
+python -m mypy --strict executionkit
+python scripts/check_lock_parity.py
 ```
 
-## Step 2 — Format check (ruff format)
+## Documentation
 
-CRITICAL: This is a separate step from lint. CI has a dedicated "Format check (ruff)" job
-that runs `ruff format --check`. Skipping this is a common cause of CI failures.
-
-```
-python -m ruff format --check executionkit tests
+```bash
+python scripts/check_doc_facts.py
+python -m mkdocs build --strict
 ```
 
-If it fails: reformat the files, then re-run the check.
+The fact check compares public exports, maintained pages, pattern links,
+navigation, root-file includes, and the architecture module map with the
+repository.
 
-```
-python -m ruff format executionkit tests
-```
+## Tests
 
-## Step 3 — Type check (mypy)
-
-Strict static analysis on the source package only. Tests are excluded in pyproject.toml,
-so do NOT pass `tests/` or `.` — that triggers mypy-over-tests double-discovery in
-editable-install mode and produces spurious errors.
-
-```
-python -m mypy executionkit
+```bash
+python -m pytest tests --cov=executionkit --cov-report=term-missing --cov-fail-under=80 -q
 ```
 
-If it fails: investigate each error and fix the type annotation or logic. There is no
-auto-fix; read the mypy output carefully.
+Normal tests are offline. Live-provider and model-judged evaluations are
+separate opt-in workflows and are not substitutes for the deterministic suite.
 
-## Step 4 — Test suite (pytest)
+## Security and package checks
 
-Runs all ~420 tests with 80% coverage enforcement (via pyproject.toml addopts).
-
-```
-python -m pytest -q
-```
-
-Quick run without coverage (faster feedback loop while iterating):
-
-```
-python -m pytest -q -o addopts=""
+```bash
+python -m bandit -r executionkit -c pyproject.toml
+python -m pip_audit --requirement requirements.lock
+python -m build
 ```
 
-If tests fail: fix the failing tests or the implementation before pushing.
-
----
-
-All 4 steps must show a clean exit before the branch is safe to push.
-System Python 3.13 has all tools installed globally — no venv activation needed.
+`pip-audit` is installed separately from the project extras. Review any
+reported advisory against the locked version and runtime use before changing a
+dependency.

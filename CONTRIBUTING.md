@@ -1,188 +1,211 @@
 # Contributing to ExecutionKit
 
-Thanks for contributing. ExecutionKit is a minimal library — keep changes
-focused and test-first.
+Keep changes small enough to review, add tests for behavior changes, and update
+the documentation when a public contract changes.
 
-## Dev Setup
+## Set up the repository
 
 ```bash
 git clone https://github.com/tafreeman/executionkit.git
 cd executionkit
 python -m venv .venv
-source .venv/bin/activate      # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
 ```
 
-Verify the install:
+Activate the environment on macOS or Linux:
 
 ```bash
-python -c "from executionkit import Provider, consensus, refine_loop, react_loop; print('OK')"
+source .venv/bin/activate
 ```
 
-### Pre-commit hooks
+Activate it in PowerShell:
 
-Install once after cloning:
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+Install the package, development tools, and documentation tools:
 
 ```bash
-pip install pre-commit
+python -m pip install -e ".[dev,docs]" pip-audit
+```
+
+Verify the import:
+
+```bash
+python -c "import executionkit; print(executionkit.__version__)"
+```
+
+## Run the required checks
+
+Run these commands from the repository root:
+
+```bash
+python -m ruff check executionkit tests scripts
+python -m ruff format --check executionkit tests scripts
+python -m mypy --strict executionkit
+python scripts/check_doc_facts.py
+python scripts/check_lock_parity.py
+python -m pytest -q
+python -m bandit -r executionkit -c pyproject.toml
+python -m pip_audit --requirement requirements.lock
+python -m mkdocs build --strict
+```
+
+`pytest` enforces branch coverage through `pyproject.toml` and fails below 80
+percent. Tests marked `live` skip unless `EXECUTIONKIT_LIVE_EVAL=1`. Use the
+following command when you need an explicit no-network test run:
+
+```bash
+python -m pytest -m "not live" -q
+```
+
+Focused test runs are useful while developing, but they do not replace the
+full suite because the repository applies a package-wide coverage gate.
+
+## Optional pre-commit hooks
+
+Install the hooks once:
+
+```bash
+python -m pip install pre-commit
 pre-commit install
 ```
 
-Hooks run automatically on `git commit`. What they check:
-
-| Hook | Purpose |
-|------|---------|
-| `ruff` | Lint + auto-fix (E, F, W, I, N, UP, S, B, A, C4, SIM, TCH, RUF) |
-| `ruff-format` | Consistent formatting |
-| `mypy --strict` | Full type checking |
-| `detect-private-key` | Block accidental key commits |
-| `check-merge-conflict` | Block conflict markers |
-| `end-of-file-fixer` | Ensure newline at EOF |
-| `trailing-whitespace` | Strip trailing spaces |
-
-To run hooks manually without committing:
+Run them manually with:
 
 ```bash
 pre-commit run --all-files
 ```
 
-## Running the Test Suite
+The hooks run Ruff, Ruff formatting, mypy, private-key detection, merge-marker
+checks, whitespace fixes, and Gitleaks. The full commands in the previous
+section remain the final local check.
+
+## Testing rules
+
+- Use `MockProvider` for unit tests that need model responses.
+- Keep required tests offline and repeatable.
+- Mark real-endpoint tests with `@pytest.mark.live`.
+- Add a regression test for every fixed defect.
+- Test error behavior and accounting, not only successful return values.
+- When changing an optional integration, test both the installed and
+  not-installed paths where practical.
+
+`MockProvider` is part of the package's public test surface:
+
+```python
+from executionkit import MockProvider
+
+provider = MockProvider(responses=["first response", "second response"])
+```
+
+## Code rules
+
+- Add type annotations to public and internal function signatures.
+- Keep `mypy --strict` clean.
+- Do not mutate frozen result objects. Create a new value instead.
+- Treat nested mappings carefully: a frozen dataclass prevents field
+  reassignment but does not make every caller-supplied nested object immutable.
+- Use named constants or configuration fields for behavior that callers may
+  need to tune.
+- Keep provider-independent behavior outside the concrete `Provider` class.
+- Do not add a required runtime dependency without revisiting
+  [ADR-004](https://tafreeman.github.io/executionkit/adr/004-zero-runtime-dependencies/).
+
+## Documentation rules
+
+Update documentation in the same change when you alter:
+
+- a public import, signature, default, return value, metadata key, or exception;
+- an environment variable or install extra;
+- a command, workflow, or release step;
+- provider compatibility or a security boundary; or
+- the package scope.
+
+Write for a software engineer who has not read the implementation. Define a
+term before using it, prefer short sentences, and state limits next to
+capabilities.
+
+Run:
 
 ```bash
-# Unit tests and deterministic smoke tests — no real API calls
-python -m pytest
-
-# With coverage report — must stay above 80%
-python -m pytest --cov=executionkit --cov-fail-under=80
+python scripts/check_doc_facts.py
+python -m mkdocs build --strict
 ```
 
-Coverage is enforced in CI via `fail_under = 80` in `pyproject.toml`. New code
-must include tests — follow TDD: write the test first (RED), implement to pass
-(GREEN), then refactor (IMPROVE).
+The documentation check compares public exports, pattern pages, tracked pages,
+navigation, root-file includes, Python examples, and the architecture module
+map with the source tree. The strict MkDocs build checks links and anchors.
 
-Use `MockProvider` from `executionkit._mock` in tests. The public test suite is
-deterministic and does not call live LLM APIs; add a separately documented
-manual smoke script before introducing provider-backed tests.
+`CONTRIBUTING.md`, `SECURITY.md`, and `CHANGELOG.md` are the source files for
+their corresponding documentation-site pages. Edit the root file, not the
+small include file under `docs/`.
 
-## Code Quality
+## Architecture boundaries
 
-Run these before every commit (or let pre-commit do it):
+| Area | Location |
+|---|---|
+| Public exports and sync wrappers | `executionkit/__init__.py` |
+| Provider protocols and HTTP client | `executionkit/provider.py` |
+| Result, usage, tool, and enum types | `executionkit/types.py` |
+| Call patterns | `executionkit/patterns/` and `executionkit/compose.py` |
+| Retry, parallelism, parsing, voting | `executionkit/engine/` |
+| Session facade | `executionkit/kit.py` |
+| Routing, workflow, planning, approval | `routing.py`, `workflow.py`, `planning.py`, `approval.py` |
+| Evaluation and tracing | `evals.py`, `observability.py` |
+| Anthropic batch integration | `executionkit/batches.py` |
+| MCP stdio server | `executionkit/mcp/` |
 
-```bash
-ruff check .
-ruff format .
-mypy --strict executionkit/
+ExecutionKit is an in-process library. Do not add dashboards, persistent
+schedulers, retrieval storage, a native provider-adapter matrix, or
+multi-agent coordination. Those concerns belong in the calling application or
+a higher-level runtime.
+
+Read the [architecture guide](https://tafreeman.github.io/executionkit/architecture/)
+before changing a boundary between these areas.
+
+## Commits and pull requests
+
+Use a short Conventional Commit subject:
+
+```text
+feat(patterns): add bounded sampling mode
+fix(workflow): reject duplicate step names
+docs(api): document checkpoint resume
 ```
 
-All three must pass. CI blocks on any failure. Bandit (`bandit -r executionkit/`)
-also runs in CI for security scanning.
+A pull request should explain:
 
-### Style rules
+1. the problem;
+2. the behavior after the change;
+3. compatibility or security effects; and
+4. the exact commands used to verify it.
 
-**Immutability.** All value types are `@dataclass(frozen=True, slots=True)`.
-Never mutate an existing object; return a new one.
-
-**Type hints required.** Every function signature and class attribute must be
-annotated. `mypy --strict` is enforced. Avoid `Any` without justification.
-
-**Keep helpers small — under ~50 lines as a guideline, not a gate.** Decompose
-larger functions unless readability clearly suffers. The long public pattern
-entry points (`react_loop`, `refine_loop`, `map_reduce`, `checked_complete`) are
-deliberate exceptions, and no CI rule enforces the limit.
-
-**No magic numbers.** Use `RetryConfig` and `ConvergenceDetector` for tunable
-parameters; extract other constants.
-
-## Architecture
-
-See [`docs/architecture.md`](https://github.com/tafreeman/executionkit/blob/main/docs/architecture.md) for the full module map,
-data-flow diagram, immutability contract, error hierarchy, and extension points.
-
-Key modules:
-
-| Module | Role |
-|--------|------|
-| `provider.py` | `LLMProvider` protocol, `Provider` class, error hierarchy |
-| `types.py` | Frozen value types (`PatternResult`, `TokenUsage`, `Tool`) |
-| `patterns/` | `consensus`, `refine_loop`, `react_loop`, `structured`, `map_reduce` |
-| `engine/` | `ConvergenceDetector`, retry, parallel, JSON extraction, messages, rate bucket, voting |
-| `compose.py` | `pipe()` composition |
-| `kit.py` | `Kit` session facade |
-| `batches.py` | Anthropic Message Batches transport (`consensus_batch`, `map_batch`) |
-| `mcp/` | stdlib stdio MCP server (`python -m executionkit.mcp`) |
-
-## Commit Convention
-
-Use [Conventional Commits](https://www.conventionalcommits.org/):
-
-```
-<type>(<scope>): <description>
-```
-
-Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `perf`, `ci`
-
-Examples:
-
-```
-feat(patterns): add tree_of_thought pattern
-fix(consensus): handle unanimous tie correctly
-docs: add react_loop example
-test(refine_loop): cover early convergence path
-```
-
-## PR Process
-
-1. Branch from `main` using a `feature/`, `fix/`, `docs/`, or `chore/` prefix.
-2. Write tests first (RED → GREEN → IMPROVE).
-3. Ensure `ruff check .`, `mypy --strict executionkit/`, and
-   `pytest --cov-fail-under=80` all pass.
-4. Open a PR describing what changed, why, and how to verify.
-5. One approval required before merge.
-
-PRs should stay under 400 lines of diff. For larger changes, open an issue
-first to discuss scope.
+Avoid mixing unrelated cleanup into the same pull request.
 
 ## Security
 
-See [`SECURITY.md`](https://github.com/tafreeman/executionkit/blob/main/SECURITY.md) for the full security policy, including the
-vulnerability reporting process and response SLAs.
+Read the [security policy](https://github.com/tafreeman/executionkit/blob/main/SECURITY.md)
+before changing HTTP handling, credential handling, tool execution, prompt
+construction, serialization, subprocess use, or release workflows.
 
-Key rules for contributors:
+Do not commit credentials or realistic-looking placeholder secrets. Examples
+must read credentials from environment variables. Do not weaken a security
+check with a broad suppression; document the specific false positive and keep
+the suppression as narrow as possible.
 
-- Never commit API keys, tokens, or `.env` files.
-- All examples must read credentials from environment variables.
-- Bandit runs in CI — do not add blanket `# noqa: S` suppressions without
-  discussion.
-- LLM output is untrusted. See the security doc for prompt injection and
-  tool execution guidance.
+## Release changes
 
-## Anti-Scope
+Add user-visible changes to the `Unreleased` section of
+[CHANGELOG.md](https://github.com/tafreeman/executionkit/blob/main/CHANGELOG.md).
+Call out behavior changes, migration steps, and new failure modes directly.
 
-ExecutionKit is a pattern library, not a framework. Reject changes that add:
+The release workflow publishes through PyPI trusted publishing. Do not add API
+tokens to the workflow or repository.
 
-- Dashboard, routing, or spend-tracking UI
-- Stateful graph runtimes or durable execution
-- Native provider adapters beyond the OpenAI-compatible format
-- Multi-agent handoff or cross-agent orchestration — that tier lives in
-  [agentic-runtime-platform](https://github.com/tafreeman/agentic-runtime-platform);
-  ExecutionKit's `Router`/`Workflow`/`Plan`/`ApprovalGate` stay single-run
-  composition primitives
+## Questions
 
-If in doubt, open an issue before writing code.
-
-## Need Help?
-
-Open a GitHub issue. Tag it `question` for support, `bug` for defects,
-`enhancement` for feature requests.
-
----
-
-## Development Provenance & Verification
-
-This repository is built solo with AI-assisted tooling. Because there is no second human reviewer, correctness is gated by **automated evidence**, not peer sign-off:
-
-- **CI gates (every push / PR):** ruff, ruff-format, `mypy --strict`, `pytest --cov-fail-under=80`, Bandit, and pip-audit (2-OS × 3-Python matrix). Merges block on a red pipeline.
-- **Behavioral verification:** the deterministic golden suite and the model-failure corpus (`tests/test_eval_goldens.py`, `tests/test_eval_failure_corpus.py`) run in normal CI and assert output correctness, not just coverage.
-- **Provenance:** AI-assisted changes are verified against these gates before merge; the CI and evaluation output is the verification artifact of record.
-
-Contributions are welcome via PR; CI must pass and changes should add or update tests.
+Use a [GitHub issue](https://github.com/tafreeman/executionkit/issues) for
+usage questions, defects, or proposed changes. Report vulnerabilities through
+the private channel described in the
+[security policy](https://github.com/tafreeman/executionkit/blob/main/SECURITY.md).

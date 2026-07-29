@@ -1,7 +1,7 @@
 """Core value types for ExecutionKit.
 
-All value types use ``@dataclass(frozen=True, slots=True)`` for immutability
-and memory efficiency.
+The dataclasses in this module are frozen and slotted. Freezing prevents field
+reassignment; it does not make caller-supplied nested objects immutable.
 """
 
 from __future__ import annotations

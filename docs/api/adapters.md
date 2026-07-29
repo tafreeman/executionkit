@@ -1,20 +1,31 @@
-# Adapters
+# Providers and responses
 
-The provider layer: HTTP client, structural protocols, and response types.
+## Built-in HTTP client
 
-## `Provider`
-
-The default OpenAI-compatible HTTP client. Speaks `/chat/completions` JSON. Uses stdlib `urllib` by default; switches to `httpx.AsyncClient` (with connection pooling) when `httpx` is installed.
+`Provider` appends `/chat/completions` to `base_url`, sends OpenAI-format JSON,
+and parses OpenAI-format responses. It uses `urllib` in the base install and
+an `httpx.AsyncClient` when the `httpx` extra is installed.
 
 ::: executionkit.provider.Provider
 
-## Protocols
+## Provider protocols
 
-`LLMProvider` and `ToolCallingProvider` are `@runtime_checkable` `Protocol`s. Any object matching the interface satisfies the protocol — no inheritance required.
+These are structural protocols. A custom provider does not need to inherit
+from them, but its methods and attributes must have compatible signatures.
 
 ::: executionkit.provider.LLMProvider
 
 ::: executionkit.provider.ToolCallingProvider
+
+::: executionkit.provider.StreamingProvider
+
+At runtime, a `@runtime_checkable` protocol checks whether required attributes
+exist; it does not validate the full type signature. Run a static type checker
+and integration tests for custom adapters.
+
+Set `supports_tools = True` only when the adapter can send OpenAI-format tool
+schemas and parse tool calls. `react_loop()` rejects a provider when the flag
+is absent or false.
 
 ## Response types
 
@@ -22,43 +33,44 @@ The default OpenAI-compatible HTTP client. Speaks `/chat/completions` JSON. Uses
 
 ::: executionkit.provider.ToolCall
 
-## MockProvider
+`LLMResponse.raw` is the unmodified provider payload. ExecutionKit does not
+emit it in package-owned traces. Caller code must redact it before logging.
 
-For unit tests. Yields canned responses, tracks all calls, and never makes real HTTP calls.
+`LLMResponse.usage` accepts these token field names:
+
+- `prompt_tokens` and `completion_tokens`; or
+- `input_tokens` and `output_tokens`.
+
+Missing usage fields count as zero. Boolean, negative, or implausibly large
+counts raise `ProviderError` when the properties are read.
+
+## Test provider
 
 ::: executionkit._mock.MockProvider
 
-## Custom adapter checklist
+Import it from the package root:
 
-Implement a custom provider in three steps:
+```python
+from executionkit import MockProvider
 
-1. **Define a class with an async `complete` method** matching `LLMProvider`:
+provider = MockProvider(responses=["draft", "final"])
+```
 
-   ```python
-   from executionkit.provider import LLMResponse
+It records calls and returns scripted responses without network access.
 
-   class MyProvider:
-       async def complete(
-           self,
-           messages,
-           *,
-           temperature=None,
-           max_tokens=None,
-           tools=None,
-           **kwargs,
-       ) -> LLMResponse:
-           ...
-   ```
+## Adapter checklist
 
-2. **Return `LLMResponse(content=..., usage={...})`.** `usage` should be a dict with at least `input_tokens` and `output_tokens` so cost tracking works. Empty dict is acceptable (cost will be `0`).
+A custom adapter should:
 
-3. **For tool calling, set `supports_tools = True`** and populate `LLMResponse.tool_calls` from the upstream response. `react_loop` will refuse providers without `supports_tools=True`.
+1. accept OpenAI-format message dictionaries;
+2. translate pattern options such as `temperature`, `max_tokens`, and `tools`;
+3. return `LLMResponse`;
+4. translate provider tool calls into `ToolCall`;
+5. report token usage when available;
+6. map retryable and non-retryable failures to the appropriate ExecutionKit
+   exception; and
+7. test basic calls, tools, streaming, cancellation, timeout, and malformed
+   responses separately.
 
-The structural-protocol design means **no registration step** — pass your provider directly to any pattern.
-
-## Notes on the default `Provider`
-
-- **API key masking.** `Provider.__repr__` always shows `api_key='***'` regardless of the actual key length or prefix. Keys are never written to repr output, log lines, or exception messages.
-- **Credential redaction in errors.** HTTP error messages are scanned for credential-shaped substrings (matching `sk-...`, `bearer ...`, `token=...`, etc.) and redacted to `[REDACTED]` before being raised.
-- **Connection lifecycle.** `Provider` supports `async with` and `await provider.aclose()`. With the `httpx` backend, this closes the underlying `AsyncClient` cleanly.
-- **Retries are at the call layer**, not the HTTP layer. Use `RetryConfig` on the pattern call (e.g. `consensus(..., retry=RetryConfig(...))`).
+See [Provider setup](../getting-started/providers.md) for a complete custom
+adapter skeleton.

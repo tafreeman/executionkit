@@ -1,84 +1,105 @@
-# Patterns Overview
+# Patterns overview
 
-ExecutionKit ships **six pattern utilities** you can combine. Each is a single async function that takes a provider and a prompt and returns a `PatternResult` carrying the answer, a score, accumulated cost, and per-pattern metadata. Lightweight orchestration helpers such as `Router`, `Workflow`, `Plan`, `ApprovalGate`, and evals live alongside these patterns in the public API.
+ExecutionKit provides six async call patterns. Each takes a provider and
+returns `PatternResult`.
 
-| Pattern | Use when… | Cost shape |
-|---------|-----------|------------|
-| [Consensus](consensus.md) | You need agreement scoring across multiple independent factual or classification samples. | `O(num_samples)` parallel calls. |
-| [Iterative Refinement](iterative-refinement.md) | Quality of the answer matters more than latency, and you can score it. | Up to `O(2 × (1 + max_iterations))` calls with the default evaluator; fewer with a non-LLM evaluator. |
-| [ReAct Tool Loop](react-loop.md) | The model needs to call tools to gather information before answering. | `O(rounds)` sequential calls; bounded by `max_rounds`. |
-| [Structured Output](structured.md) | You need a JSON object or array with optional validation and repair. | `1 + max_retries` sequential calls in the worst case. |
-| [Pipe](pipe.md) | You want to chain patterns end-to-end with a shared budget. | Sum of the individual pattern costs. |
-| [Map-Reduce](map-reduce.md) | You need to fan out over a collection of inputs, process each independently, then reduce to a single answer. | `O(len(inputs))` parallel calls for map; one call for reduce. |
+| Pattern | Choose it when | Model-call shape |
+|---|---|---|
+| [Consensus](consensus.md) | Several independent calls can return a short answer from a constrained set, and exact-answer agreement is useful. | `num_samples` calls, concurrent up to `max_concurrency`. |
+| [Iterative refinement](iterative-refinement.md) | You can score an answer and want bounded revisions. | One generation and one score per round with the default evaluator. |
+| [ReAct tool loop](react-loop.md) | The model needs registered tools before it can answer. | One model call per round; tool calls within a round run concurrently. |
+| [Structured output](structured.md) | You need a JSON object or array with an application validator. | One initial call plus up to `max_retries` repair calls. |
+| [Pipe](pipe.md) | Each step can use the previous result as its next prompt. | Sum of the step costs. |
+| [Map-reduce](map-reduce.md) | Independent inputs need the same operation before one combined result. | One call per input, then one reduce call. |
 
-## Choosing a pattern
+Retries can increase every model-call count in the table.
+
+## Decision guide
 
 ```mermaid
 flowchart TD
-    A[Need an LLM answer?] --> B{Need tools<br/>e.g. search, math, API?}
-    B -- yes --> C[ReAct Tool Loop]
-    B -- no --> D{Can you score<br/>answer quality?}
-    D -- yes --> E[Iterative Refinement]
-    D -- no --> F{Need agreement<br/>scoring?}
-    F -- yes --> G[Consensus]
-    F -- no --> K{Need JSON<br/>with validation?}
-    K -- yes --> L[Structured Output]
-    K -- no --> M{Have a collection<br/>of inputs to process?}
-    M -- yes --> N[Map-Reduce]
-    M -- no --> H[Single completion<br/>via Provider directly]
-    C --> I{Need multi-step?}
-    E --> I
-    G --> I
-    L --> I
-    N --> I
-    I -- yes --> J[Pipe to chain them]
+    A["What must the model do?"] --> B{"Call tools?"}
+    B -- "yes" --> C["react_loop"]
+    B -- "no" --> D{"Return validated JSON?"}
+    D -- "yes" --> E["structured"]
+    D -- "no" --> F{"Process many independent inputs?"}
+    F -- "yes" --> G["map_reduce"]
+    F -- "no" --> H{"Revise against a score?"}
+    H -- "yes" --> I["refine_loop"]
+    H -- "no" --> J{"Compare several constrained answers?"}
+    J -- "yes" --> K["consensus"]
+    J -- "no" --> L["Provider.complete"]
+    C --> M{"Feed result into another pattern?"}
+    E --> M
+    G --> M
+    I --> M
+    K --> M
+    M -- "yes, without branching" --> N["pipe"]
 ```
 
-## Common contract
+Use ordinary async Python when you need branching or when later work needs
+several earlier outputs. `pipe()` intentionally passes only the string form of
+the previous value.
 
-Every pattern function returns a `PatternResult[T]`:
+## Return contract
 
 ```python
-@dataclass(frozen=True, slots=True)
-class PatternResult(Generic[T]):
-    value: T                                      # the answer
-    score: float | None = None                    # quality score (pattern-specific)
-    cost: TokenUsage = TokenUsage()               # tokens + LLM calls used
-    metadata: MappingProxyType[str, Any] = ...    # immutable, pattern-specific keys
+result.value
+result.score
+result.cost
+result.metadata
 ```
 
-`metadata` is a read-only `MappingProxyType` — frozen at construction. Each pattern's docstring lists its metadata keys; do not rely on undocumented ones.
+- `value` is the pattern output.
+- `score` is `None` unless the pattern defines a score.
+- `cost` is `TokenUsage(input_tokens, output_tokens, llm_calls)`.
+- `metadata` is a read-only mapping with keys listed on the pattern page.
 
-## Common kwargs
+`llm_calls` counts dispatched attempts, including retries. Token counts come
+from successful provider responses.
 
-The reasoning patterns accept these (all optional). `pipe()` forwards compatible shared kwargs to each step rather than declaring them directly:
+## Shared controls
 
-| Kwarg | Default | Purpose |
-|-------|---------|---------|
-| `temperature` | pattern-specific | Sampling temperature override per call. |
-| `max_tokens` | `4096` | Per-completion token cap. |
-| `max_cost` | `None` | `TokenUsage` budget. Raises `BudgetExhaustedError` when exceeded. |
-| `retry` | `DEFAULT_RETRY` | `RetryConfig` for transient errors (429, 5xx). |
-| `trace` | `None` | Optional `TraceCallback` receiving structured events for calls, tools, workflow steps, plan steps, approvals, cost, and latency. |
+Most call patterns accept:
 
-`max_cost` enforcement uses two-phase accounting (`reserve_call` before the await, `record_without_call` after). This makes the `llm_calls` guard TOCTOU-safe under `consensus`'s parallel calls and counts every dispatched wire attempt, including failed retries.
+| Parameter | Meaning |
+|---|---|
+| `temperature` | Sampling temperature sent to the provider. The default differs by pattern. |
+| `max_tokens` | Per-response output-token request limit. |
+| `max_cost` | Token and call budget checked before dispatch. |
+| `retry` | `RetryConfig` for retryable provider errors. |
+| `trace` | Sync or async callback receiving `TraceEvent`. |
 
-## Sync wrappers
+Some patterns also accept `on_checkpoint` callbacks. These callbacks expose
+progress state but do not persist it; storage belongs to the caller.
 
-Every pattern has a `_sync` twin in the package root for use outside an async context:
+Read [Execution controls](../guides/execution-controls.md) before relying on
+budgets. Call-count limits are strict within one asyncio event loop, while a
+completed response can take a recorded token total beyond its pre-dispatch
+limit.
+
+## Synchronous wrappers
+
+Each pattern has a package-root wrapper:
 
 ```python
 from executionkit import (
     consensus_sync,
-    refine_loop_sync,
-    react_loop_sync,
-    structured_sync,
+    map_reduce_sync,
     pipe_sync,
+    react_loop_sync,
+    refine_loop_sync,
+    structured_sync,
 )
 ```
 
-The wrappers raise `RuntimeError` if called inside a running event loop — use `await` directly there (e.g. Jupyter, FastAPI handlers).
+The wrappers call `asyncio.run()`. Use the async functions inside notebooks,
+async web handlers, or any other active event loop.
 
-## Errors
+## Exceptions
 
-All exceptions inherit from `ExecutionKitError` and carry `.cost` (the `TokenUsage` accumulated up to the failure) and `.metadata`. See [API → Core](../api/core.md#errors) for the full hierarchy.
+Provider failures derive from `LLMError`. Pattern failures derive from
+`PatternError`. Both derive from `ExecutionKitError` and carry partial `cost`
+and `metadata`.
+
+See [Execution helper API](../api/execution.md#exceptions).

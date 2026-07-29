@@ -41,35 +41,49 @@ import os
 from functools import partial
 from executionkit import Provider, consensus, pipe, refine_loop
 
+
+async def explain_label(provider, prompt, *, max_cost=None):
+    return await refine_loop(
+        provider,
+        f"Explain the support category {prompt!r} in one sentence.",
+        target_score=0.85,
+        max_iterations=2,
+        max_cost=max_cost,
+    )
+
+
 async def main() -> None:
     async with Provider(
-        base_url="https://api.openai.com/v1",
-        api_key=os.environ["OPENAI_API_KEY"],
-        model="gpt-4o-mini",
+        base_url=os.environ["LLM_BASE_URL"],
+        api_key=os.environ.get("LLM_API_KEY", ""),
+        model=os.environ["LLM_MODEL"],
     ) as provider:
         result = await pipe(
             provider,
-            "Explain gradient descent in simple terms.",
+            "Classify this request as billing, technical, or other: "
+            "'My card was charged twice.'",
             partial(consensus, num_samples=3),
-            partial(refine_loop, target_score=0.9, max_iterations=2),
+            explain_label,
         )
 
-        print(result.value)                                 # final refined answer
-        print(result.cost)                                  # cumulative across both steps
-        print(result.metadata["step_count"])                # 2
-        print(result.metadata["step_metadata"])             # [consensus_meta, refine_meta]
+        print(result.value)
+        print(result.cost)
+        print(result.metadata["step_count"])
+        print(result.metadata["step_metadata"])
+        print(result.metadata["step_costs"])
 
 asyncio.run(main())
 ```
 
-`functools.partial` is the idiomatic way to pre-bind per-step kwargs. `pipe` itself filters its `**shared_kwargs` to keys each step actually accepts, so you can pass `max_cost=` once and have it forwarded only to steps that declare it.
+`functools.partial` binds settings to one step. `pipe()` also filters its
+shared keyword arguments to names accepted by each step.
 
-## Configuration knobs
+## Parameters
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `*steps` | — | One or more async pattern callables. Each must accept `(provider, prompt, **kwargs)`. |
-| `max_budget` | `None` | Optional shared `TokenUsage` ceiling forwarded to each step as `max_cost`. |
+| `max_budget` | `None` | Optional shared `TokenUsage` budget forwarded to each step as `max_cost`. |
 | `**shared_kwargs` | — | Extra kwargs forwarded to every step (filtered to each step's signature). |
 
 ## Metadata keys
@@ -78,6 +92,7 @@ asyncio.run(main())
 |-----|------|---------|
 | `step_count` | `int` | Number of steps in the chain. |
 | `step_metadata` | `list[dict]` | Each step's metadata, in order. |
+| `step_costs` | `tuple[TokenUsage, ...]` | Cost of each step in order. Also attached to `ExecutionKitError.metadata` on failure. |
 | (final step keys) | — | The last step's metadata is also merged in at the top level. |
 
 ## Budget arithmetic
@@ -90,13 +105,20 @@ When `max_budget` is set, `pipe` computes `remaining = max_budget - total_cost` 
 | `> 0` | Tokens / calls still available. |
 | `-1` | Field was limited and is now exhausted. (Not `0`, to avoid being misread as "unlimited".) |
 
-This means a single `max_budget=TokenUsage(input_tokens=10_000, output_tokens=2_000, llm_calls=20)` enforces an end-to-end ceiling across the chain. If any step would push past it, that step raises `BudgetExhaustedError` carrying the accumulated cost.
+This means a single
+`max_budget=TokenUsage(input_tokens=10_000, output_tokens=2_000, llm_calls=20)`
+passes the remaining values to each step. Call limits are reserved before
+dispatch. Token limits are checked against completed responses, so one response
+can take a token total past its limit before the next step is blocked.
 
 ## Cost characteristics
 
 - **Sum of step costs.** No additional LLM calls beyond what the steps themselves make.
 - **Sequential by definition** — each step's input is the previous step's output.
 - **Errors propagate with cumulative cost.** If a step raises `ExecutionKitError`, `pipe` adds `total_cost` to the exception's `.cost` before re-raising.
+- **Unknown shared keywords may be dropped.** If a step does not accept
+  `**kwargs`, `pipe` forwards only names present in its inspected signature.
+  Validate custom step configuration in tests.
 
 ## Empty chain
 

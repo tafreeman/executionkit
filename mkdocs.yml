@@ -1,5 +1,5 @@
 site_name: ExecutionKit
-site_description: Composable LLM reasoning patterns. Provider-agnostic. Zero SDK lock-in.
+site_description: Async Python functions for LLM call patterns, tool loops, and small execution workflows.
 site_url: https://tafreeman.github.io/executionkit/
 repo_url: https://github.com/tafreeman/executionkit
 repo_name: tafreeman/executionkit
@@ -12,14 +12,25 @@ exclude_docs: |
   review-process/
   c4/
   test-audit/
+  advanced/
+  bmad-index.md
+  component-inventory.md
+  contribution-guide.md
+  deployment-guide.md
+  development-guide.md
+  engine-internals.md
+  project-context.md
+  project-overview.md
+  source-tree-analysis.md
+  testing-guide.md
 
-# Quiet strict-mode complaints about files we keep in the docs tree but don't
-# link from nav (legacy references, snippets, etc.).
+# Treat broken public links as build failures. Omitted local/generated files
+# are listed under exclude_docs above and do not belong to the public site.
 validation:
   omitted_files: info
-  absolute_links: info
-  unrecognized_links: info
-  anchors: info
+  absolute_links: warn
+  unrecognized_links: warn
+  anchors: warn
 
 theme:
   name: material
@@ -89,7 +100,10 @@ markdown_extensions:
   - pymdownx.tabbed:
       alternate_style: true
   - pymdownx.details
-  - pymdownx.snippets
+  - pymdownx.snippets:
+      base_path:
+        - .
+      check_paths: true
   - pymdownx.emoji:
       emoji_index: !!python/name:material.extensions.emoji.twemoji
       emoji_generator: !!python/name:material.extensions.emoji.to_svg
@@ -112,10 +126,22 @@ nav:
       - Multi-provider failover: recipes/failover.md
       - Cost-aware routing: recipes/cost-routing.md
       - Conversational assistant: recipes/assistant.md
-      - Combining patterns: recipes/composition.md
+      - Pattern composition: recipes/composition.md
+  - Guides:
+      - Execution controls: guides/execution-controls.md
+      - Workflows and approvals: guides/workflows.md
+      - Evaluation: guides/evaluation.md
+      - Streaming: guides/streaming.md
+  - Integrations:
+      - MCP server: integrations/mcp.md
+      - Anthropic Message Batches: integrations/message-batches.md
   - API Reference:
-      - Core: api/core.md
-      - Adapters: api/adapters.md
+      - Overview: api/index.md
+      - Patterns: api/core.md
+      - Providers and responses: api/adapters.md
+      - Execution helpers: api/execution.md
+      - Evaluation: api/evaluation.md
+      - Batch API: api/batches.md
       - Configuration: api/configuration.md
   - Project:
       - Architecture: architecture.md

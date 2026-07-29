@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "executionkit"
 dynamic = ["version"]
-description = "Composable LLM reasoning patterns with budget-aware execution"
+description = "Async LLM call patterns, tool loops, and small execution workflows"
 requires-python = ">=3.11"
 license = "MIT"
 readme = "README.md"

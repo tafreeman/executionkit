@@ -1,53 +1,129 @@
 # Security Policy
 
-## Supported Versions
+## Supported versions
 
-| Version | Supported |
-|---------|-----------|
-| 0.3.x   | ✅        |
-| 0.2.x   | ❌        |
+| Version | Security fixes |
+|---|---|
+| 0.3.x | Yes |
+| 0.2.x and earlier | No |
 
-## Reporting a Vulnerability
+Upgrade to the newest 0.3.x release before reporting a defect that may already
+be fixed.
 
-**Please do not open a public GitHub issue for security vulnerabilities.**
+## Report a vulnerability
 
-To report a security vulnerability, use [GitHub's private security advisory feature](https://github.com/tafreeman/executionkit/security/advisories/new).
+Do not open a public issue for a suspected vulnerability. Use
+[GitHub private security advisories](https://github.com/tafreeman/executionkit/security/advisories/new)
+to send the report to the maintainer.
 
-Alternatively, email the maintainers directly. Include:
-- Description of the vulnerability
-- Steps to reproduce
-- Potential impact
-- Suggested fix (if any)
+Include:
 
-**Response SLA:**
-- Acknowledgement within 48 hours
-- Assessment within 7 days
-- Fix or mitigation within 30 days for critical issues
+- the affected version or commit;
+- the smallest reproducible example;
+- the security impact;
+- any conditions required to trigger the issue; and
+- a suggested fix, if you have one.
 
-## Security Considerations
+Do not include working credentials, private endpoint URLs, or unrelated user
+data.
 
-### LLM Output is Untrusted
+## Security model
 
-ExecutionKit passes LLM-generated content to evaluators and tools. Treat all LLM outputs as untrusted:
+ExecutionKit runs inside the caller's Python process. It sends prompts to a
+configured model endpoint and may execute async Python tools registered by the
+caller. The package does not isolate the process, authenticate end users, or
+authorize application-level actions.
 
-- **Never `eval()` LLM output** — use AST-based safe evaluators for math expressions
-- **Validate tool arguments** against their JSON Schema before execution
-- **Sanitize tool observations** before logging or displaying to end users
+The main trust boundaries are:
 
-### API Key Handling
+1. caller code to the configured model endpoint;
+2. model output to parser and pattern code;
+3. model-requested arguments to registered tools;
+4. caller-owned callbacks for traces, approvals, checkpoints, and evaluators;
+   and
+5. serialized state returned to caller-owned storage.
 
-- Store API keys in environment variables, not source code
-- The `Provider` class accepts `api_key=""` for keyless endpoints (e.g. local Ollama)
-- `Provider.__repr__` **masks** the API key (prints `'***'` when non-empty), so logging provider instances is safe
-- API keys may still appear in environment variable dumps, raw error messages before redaction, or user-created logs — ensure logging practices exclude credentials
+## Credentials and provider responses
 
-### Prompt Injection
+- Pass credentials through environment variables or a secret manager.
+- `Provider.__repr__` masks its configured `api_key`.
+- Library-owned provider error messages apply best-effort credential-pattern
+  redaction. Redaction is not a substitute for safe logging.
+- `LLMResponse.raw` contains the unmodified provider payload. ExecutionKit does
+  not log it, but caller code must redact it before logging or tracing.
+- Trace callbacks are caller-owned. Review the payload before forwarding it to
+  a third-party telemetry service.
+- `Provider` accepts HTTP and HTTPS URLs so local endpoints work. Use HTTPS for
+  remote endpoints and enforce any host allowlist in the calling application.
 
-The `refine_loop` default evaluator wraps generated content in
-`<response_to_rate>` delimiters and instructs the model to ignore any
-instructions inside those tags. Prefer explicit delimiters like this when
-evaluating untrusted content.
+Avoid logging environment dumps, request headers, raw exception objects from
+custom transports, tool arguments, or complete model transcripts.
 
-### Tool Execution
+## Model output
 
-Tools execute arbitrary async Python functions. Ensure tool implementations validate their own inputs and have appropriate resource limits.
+Treat every model response as untrusted input.
+
+- `structured()` parses JSON and can run a caller-supplied validator. A parsed
+  value is not automatically safe or authorized.
+- The default `refine_loop()` evaluator uses delimiters and truncation to
+  reduce prompt-injection risk. It is still an LLM-based evaluator, not a
+  security control.
+- Provider-reported token counts are range-checked before they enter budget
+  accounting.
+- Do not call `eval()`, `exec()`, or a shell with model-generated text.
+
+Use deterministic application checks for permissions, money movement, data
+access, and other high-impact decisions.
+
+## Tool execution
+
+`react_loop()` validates the model-to-tool boundary, but registered tools are
+normal Python callables with the permissions of the current process.
+
+The loop:
+
+- rejects duplicate tool names before the first provider call;
+- checks arguments with a built-in JSON Schema subset;
+- fails closed on unsupported schema features unless the `jsonschema` extra is
+  installed;
+- limits rounds and tool calls per round;
+- applies a timeout to each tool call;
+- truncates tool observations; and
+- returns only an exception type to the model when a tool raises.
+
+The caller must still:
+
+- validate domain rules inside each tool;
+- authenticate and authorize the current user;
+- set time, size, and rate limits appropriate for the operation;
+- use `ApprovalGate` before side effects that require review; and
+- isolate untrusted tool implementations in another process or container.
+
+Approval callbacks and tool code can themselves fail or leak data. Treat them
+as application code, not as a package sandbox.
+
+## Checkpoints and serialization
+
+`WorkflowCheckpoint.to_dict()` returns plain Python data, but step outputs may
+contain caller-defined objects. Validate checkpoint contents before
+serializing them, and do not load untrusted pickle data.
+
+The caller owns checkpoint confidentiality, integrity, retention, and access
+control.
+
+## Dependencies and releases
+
+The base package has no required third-party runtime dependencies. Optional
+extras and development tools still need normal vulnerability management.
+
+Repository checks include:
+
+- Bandit for Python source scanning;
+- `pip-audit` against `requirements.lock`;
+- CodeQL;
+- dependency updates through Dependabot;
+- private-key and secret scanning in pre-commit hooks; and
+- PyPI trusted publishing for releases.
+
+These checks reduce risk but do not prove that the package is free of
+vulnerabilities.

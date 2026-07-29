@@ -4,122 +4,113 @@ tags:
   - composition
 ---
 
-# Wrapping consensus inside iterative refinement
+# Compose pattern calls
 
-You want the **stability** of consensus voting *and* the **quality bar** of iterative refinement. Run consensus to get a draft, then refine that draft until it crosses your score gate.
+`pipe()` runs an unconditional sequence. It converts each step's `value` to a
+string and passes that string to the next step.
 
-## The pattern
-
-Use `pipe()` with `consensus` followed by `refine_loop`. Costs accumulate; budget is shared.
+The example extracts facts as JSON, then writes a short summary from those
+facts:
 
 ```python
 import asyncio
 import os
-from functools import partial
+from typing import Any
+
 from executionkit import (
+    LLMProvider,
+    PatternResult,
     Provider,
     TokenUsage,
-    consensus,
     pipe,
     refine_loop,
+    structured,
 )
+
+
+def validate_facts(value: Any) -> str | None:
+    if not isinstance(value, dict):
+        return "Expected a JSON object."
+    if not isinstance(value.get("facts"), list):
+        return "The 'facts' field must be an array."
+    return None
+
+
+async def extract_facts(
+    provider: LLMProvider,
+    prompt: str,
+    *,
+    max_cost: TokenUsage | None = None,
+) -> PatternResult[Any]:
+    return await structured(
+        provider,
+        "Extract only supported facts from this text. "
+        f"Return {{\"facts\": [string, ...]}}.\n\n{prompt}",
+        validator=validate_facts,
+        max_retries=2,
+        max_cost=max_cost,
+    )
+
+
+async def write_summary(
+    provider: LLMProvider,
+    prompt: str,
+    *,
+    max_cost: TokenUsage | None = None,
+) -> PatternResult[str]:
+    return await refine_loop(
+        provider,
+        "Write one concise paragraph using only the facts in this JSON. "
+        f"Do not add facts.\n\n{prompt}",
+        max_iterations=2,
+        target_score=0.85,
+        max_cost=max_cost,
+    )
+
 
 async def main() -> None:
     async with Provider(
-        base_url="https://api.openai.com/v1",
-        api_key=os.environ["OPENAI_API_KEY"],
-        model="gpt-4o-mini",
+        base_url=os.environ["LLM_BASE_URL"],
+        api_key=os.environ.get("LLM_API_KEY", ""),
+        model=os.environ["LLM_MODEL"],
     ) as provider:
         result = await pipe(
             provider,
-            "Write a one-paragraph executive summary of the Turing test "
-            "for an audience of non-technical board members.",
-            # Step 1: 5 parallel drafts, take the majority winner.
-            partial(consensus, num_samples=5, temperature=0.9),
-            # Step 2: refine the winner until score >= 0.9 or 3 iterations.
-            partial(refine_loop, target_score=0.9, max_iterations=3),
-            # End-to-end ceiling: hard cap at 20 LLM calls / 30K tokens.
-            max_budget=TokenUsage(
-                input_tokens=20_000,
-                output_tokens=10_000,
-                llm_calls=20,
-            ),
+            "The deployment began at 09:00 UTC. It completed at 09:12 UTC. "
+            "No rollback was required.",
+            extract_facts,
+            write_summary,
+            max_budget=TokenUsage(llm_calls=6),
         )
+        print(result.value)
+        print(result.cost)
+        print(result.metadata["step_costs"])
 
-        print(result.value)                                  # final refined paragraph
-        print(result.cost)                                   # cumulative cost across both steps
-        print(result.metadata["step_count"])                 # 2
-        for i, meta in enumerate(result.metadata["step_metadata"]):
-            print(f"step {i}: {dict(meta)}")
 
 asyncio.run(main())
 ```
 
-## What happens, step by step
+## What `pipe()` guarantees
 
-1. **Consensus runs first.** 5 parallel completions at `temperature=0.9`, normalized whitespace, majority vote. The winner becomes the input prompt for step 2. (`agreement_ratio` ends up in `step_metadata[0]` — useful if you want to gate refinement on confidence.)
+- Steps run in the supplied order.
+- The same provider is passed to every step.
+- Shared keyword arguments are filtered against each step's signature.
+- `max_budget` is converted to each step's remaining `max_cost`.
+- The final cost is the sum of all step costs.
+- Metadata includes `step_count`, `step_metadata`, and `step_costs`.
+- An `ExecutionKitError` carries cumulative cost and the completed
+  `step_costs`.
 
-2. **`pipe` computes remaining budget.** After step 1 spends `cost1`, step 2 receives `max_cost = max_budget - cost1`. If consensus burned 5 of the 20 LLM calls, refine_loop sees `max_cost.llm_calls = 15`.
+Token budgets are checked before each call. A successful response can put its
+token total above the configured amount; the next call is then blocked. The
+LLM call count is reserved before dispatch and includes retry attempts.
 
-3. **Refine_loop runs second.** It scores the consensus winner, then asks the model to improve it. Stops at `target_score=0.9`, after 3 iterations, or when budget runs out.
+## When not to use a pipe
 
-4. **Result.** `result.value` is the best refined paragraph. `result.cost` is the sum across both steps. If either step had raised `BudgetExhaustedError`, the exception's `.cost` would include the cumulative spend so far.
+Write a normal async function when a step can be skipped, repeated, routed to a
+different provider, or compensated after failure. Use `Workflow` when named
+steps have dependencies and independent ready steps should run concurrently.
 
-## Why this beats running them separately
-
-- **One budget, not two.** `max_budget` is enforced *across* both steps. If consensus uses more than expected, refine_loop gets less.
-- **Cumulative cost reporting.** You get one `TokenUsage` for the whole flow, not two you have to add up.
-- **Errors carry the full spend.** If refine_loop raises mid-iteration, the exception's `.cost` includes the consensus tokens too.
-- **One async call site.** No glue code threading outputs between calls.
-
-## Variations
-
-### Gate refinement on consensus confidence
-
-`pipe` always runs every step. If you want to skip refinement when consensus already agrees strongly, write a tiny step that short-circuits:
-
-```python
-async def refine_only_if_uncertain(provider, prompt, **kw):
-    # By the time this step runs, `prompt` is the consensus winner string.
-    # Read step_metadata from the *previous* result by skipping pipe and writing
-    # the orchestration ourselves:
-    pass
-
-# Hand-rolled version:
-draft = await consensus(provider, original_prompt, num_samples=5)
-if draft.score is not None and draft.score >= 0.95:
-    final_value = draft.value
-else:
-    refined = await refine_loop(provider, draft.value, target_score=0.9)
-    final_value = refined.value
-```
-
-This keeps cost low when consensus is already confident. Pipe is great for unconditional chains; for branches, write the async glue directly.
-
-### Three-step pipe: classify → consensus → refine
-
-```python
-result = await pipe(
-    provider,
-    user_request,
-    partial(consensus, num_samples=3,                 # 1. cheap classification
-            temperature=0.0),
-    partial(consensus, num_samples=5),                # 2. answer with voting
-    partial(refine_loop, target_score=0.9),           # 3. polish
-    max_budget=TokenUsage(llm_calls=30),
-)
-```
-
-The first step's *output value* (the classification label) becomes the *input prompt* of step 2. That's only useful if step 2 can do something useful with the label as a prompt — usually you'd write step 2 to interpret it. Pipe is at its best when each step can take the previous step's stringified value as a sensible prompt.
-
-## Caveats
-
-- **Pipe threads `value` as the next prompt.** If step 1's value is structured (a number, a JSON blob), it'll be `str()`-ified. For non-string flows, write the orchestration without `pipe`.
-- **`max_budget` is a ceiling, not a quota per step.** It says "across the whole chain, don't exceed this." Individual steps still have their own knobs (`num_samples`, `max_iterations`).
-- **Step kwargs are filtered.** `pipe` introspects each step's signature and drops kwargs the step doesn't accept. This means typos in `**shared_kwargs` are silently dropped — verify with a small test if you're unsure.
-
-## Related
-
-- [Pipe pattern](../patterns/pipe.md) — full reference for the composition primitive.
-- [Cost-aware routing](cost-routing.md) — pick a different provider per tier.
-- [Multi-provider failover](failover.md) — fall through to a backup on rate limits.
+See [Pipe](../patterns/pipe.md) for the full contract and
+[Workflows and approvals](../guides/workflows.md) for dependency-based
+execution.

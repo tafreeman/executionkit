@@ -1,115 +1,62 @@
 ---
 name: release
-description: Cut a new ExecutionKit release — version bump, changelog, tag, GitHub release, docs, PyPI
+description: Prepare and publish an ExecutionKit release through the repository workflows.
 ---
 
-## Step 1 — Confirm CI is green
+# Release ExecutionKit
 
-Run the local validation gate first. All four steps must pass.
+Do not publish from a dirty tree or while required CI checks are failing.
 
-```
-/validate
-```
+## 1. Prepare the release
 
-Also confirm that the remote CI is green (GitHub Actions) before proceeding.
+1. Run the full local validation skill.
+2. Confirm required checks are green on the target commit.
+3. Choose the semantic version:
+   - major for an incompatible public API change;
+   - minor for a backward-compatible feature;
+   - patch for a backward-compatible fix.
+4. Change `__version__` in `executionkit/__init__.py`.
+5. Move the relevant `Unreleased` entries in `CHANGELOG.md` into
+   `## [x.y.z] - YYYY-MM-DD`.
+6. Leave an empty `Unreleased` section for later changes.
+7. Re-run the full local validation skill.
+8. Build the wheel and source distribution with `python -m build`.
+9. Inspect the archive contents and confirm both report version `x.y.z`.
 
-## Step 2 — Decide the new version
+## 2. Commit and tag
 
-Semver rules:
-- **major** (`x+1.0.0`) — breaking API change
-- **minor** (`x.y+1.0`) — new backward-compatible feature
-- **patch** (`x.y.z+1`) — bug fix or internal change only
+Commit only the intended release changes:
 
-Current version is in `executionkit/__init__.py` as `__version__`.
-
-## Step 3 — Bump `__version__`
-
-Edit `executionkit/__init__.py`:
-
-```python
-__version__ = "x.y.z"   # replace with new version
-```
-
-Hatchling reads the version from this file via `[tool.hatch.version] path = "executionkit/__init__.py"` — no `pyproject.toml` edit needed.
-
-## Step 4 — Update CHANGELOG.md
-
-Add a new section at the top of the file (above the previous release, below any `## [Unreleased]` block):
-
-```markdown
-## [x.y.z] — YYYY-MM-DD
-
-### Added
-- ...
-
-### Fixed
-- ...
-
-### Changed
-- ...
+```text
+chore(release): x.y.z
 ```
 
-Keep the `## [Unreleased]` section below it (reset it to empty after moving its items into the new section).
-
-## Step 5 — Validate again
-
-```
-/validate
-```
-
-Catches import errors introduced by the version bump before the commit is tagged.
-
-## Step 6 — Commit
-
-```
-git add executionkit/__init__.py CHANGELOG.md
-git commit -m "chore(release): x.y.z"
-```
-
-## Step 7 — Tag
-
-```
-git tag vx.y.z
-```
-
-## Step 8 — Push branch and tag
-
-```
-git push && git push --tags
-```
-
-## Step 9 — Create GitHub release
-
-Extract the changelog notes for the new version and pass them directly:
+Create the annotated release tag:
 
 ```bash
-gh release create vx.y.z \
-  --title "vx.y.z" \
-  --notes-file <(sed -n '/## \[x\.y\.z\]/,/## \[/p' CHANGELOG.md | head -n -1)
+git tag -a vx.y.z -m "ExecutionKit x.y.z"
 ```
 
-Alternative if process substitution is unavailable (e.g. plain PowerShell):
+Push the release commit and that exact tag after review.
 
-```bash
-gh release create vx.y.z --generate-notes
-# Then edit the release body in the browser to paste the CHANGELOG section
-```
+## 3. Automated publication
 
-## Step 10 — Deploy docs
+Pushing `v*` starts `.github/workflows/publish.yml`. The workflow:
 
-```
-mkdocs gh-deploy --force
-```
+1. re-runs release verification;
+2. builds the distributions and an SBOM;
+3. publishes through PyPI trusted publishing.
 
-This pushes the rendered MkDocs site to the `gh-pages` branch.
+Do not add a PyPI API token. If publication fails, fix the workflow or trusted
+publisher configuration and manually dispatch the existing tag ref. Do not
+move or recreate a published tag.
 
-## Step 11 — Build and publish to PyPI
+Documentation is deployed by `.github/workflows/docs.yml` after successful CI
+on `main`; do not push directly to `gh-pages`.
 
-Requires `PYPI_TOKEN` set in the environment (`export PYPI_TOKEN=pypi-...`).
+## 4. Create the GitHub release
 
-```
-python -m build
-python -m twine upload dist/* -u __token__ -p "$PYPI_TOKEN"
-```
-
-Do NOT commit or log `PYPI_TOKEN`. Rotate it immediately if it is exposed.
+After PyPI publication succeeds, create a GitHub release for `vx.y.z` using the
+matching changelog section. Include behavior changes and migration steps
+directly. Confirm the GitHub release, PyPI files, and documentation all point
+to the same commit and version.

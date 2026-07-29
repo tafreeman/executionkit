@@ -1,124 +1,200 @@
-# Quick Start
+# Quick start
 
-Five lines from install to a working consensus call.
+This guide runs a three-sample consensus call and then shows the return value,
+other patterns, and synchronous wrappers.
 
 ## 1. Install
 
 ```bash
-pip install git+https://github.com/tafreeman/executionkit.git
-export OPENAI_API_KEY=sk-...
+python -m pip install executionkit
 ```
 
-## 2. Your first pattern
+Set credentials and a model for your endpoint. For example:
+
+=== "macOS or Linux"
+
+    ```bash
+    export OPENAI_API_KEY="<your-key>"
+    export OPENAI_MODEL="<your-model>"
+    ```
+
+=== "PowerShell"
+
+    ```powershell
+    $env:OPENAI_API_KEY = "<your-key>"
+    $env:OPENAI_MODEL = "<your-model>"
+    ```
+
+## 2. Run a pattern
+
+Save this as `quickstart.py`:
 
 ```python
 import asyncio
 import os
+
 from executionkit import Provider, consensus
+
 
 async def main() -> None:
     async with Provider(
         base_url="https://api.openai.com/v1",
         api_key=os.environ["OPENAI_API_KEY"],
-        model="gpt-4o-mini",
+        model=os.environ["OPENAI_MODEL"],
     ) as provider:
         result = await consensus(
             provider,
-            "What is the capital of France? Answer in one word.",
+            "Return only the ISO country code for France.",
             num_samples=3,
         )
-        print(result.value)                          # Paris
-        print(result.metadata["agreement_ratio"])    # 1.0
-        print(result.cost)                           # TokenUsage(input_tokens=..., output_tokens=..., llm_calls=3)
+
+        print(result.value)
+        print(result.score)
+        print(result.cost)
+        print(dict(result.metadata))
+
 
 asyncio.run(main())
 ```
 
-When `httpx` is installed, `Provider` creates an `httpx.AsyncClient` at construction time; the async context manager closes it cleanly. With the default stdlib backend, there is no persistent client. You can also call `await provider.aclose()` directly.
+Run it:
 
-## 3. Pick a different pattern
+```bash
+python quickstart.py
+```
 
-=== "Iterative refinement"
+The exact token counts depend on the endpoint. A typical result has this shape:
 
-    ```python
-    from executionkit import refine_loop
+```text
+FR
+1.0
+TokenUsage(input_tokens=..., output_tokens=..., llm_calls=3)
+{'agreement_ratio': 1.0, 'unique_responses': 1, 'tie_count': 1}
+```
 
-    result = await refine_loop(
-        provider,
-        "Write a one-paragraph summary of the Turing test.",
-        target_score=0.85,
-        max_iterations=4,
-    )
-    print(result.value)                          # Best response found
-    print(result.score)                          # 0.91
-    print(result.metadata["iterations"])         # 2
-    ```
+`llm_calls` counts dispatched attempts. A retry increases the count.
 
-=== "ReAct tool loop"
+When the `httpx` extra is installed, the async context manager closes its
+connection pool. With the standard-library transport there is no persistent
+client, but using the same context-manager form keeps application code
+consistent.
 
-    ```python
-    from executionkit import Tool, react_loop
+## 3. Use a local endpoint
 
-    async def get_weather(city: str) -> str:
-        return f"Weather in {city}: 18°C, light rain."
+For a local Ollama server, change only the provider construction:
 
-    weather = Tool(
-        name="get_weather",
-        description="Look up current weather for a city.",
-        parameters={
-            "type": "object",
-            "properties": {"city": {"type": "string"}},
-            "required": ["city"],
-            "additionalProperties": False,
-        },
-        execute=get_weather,
-    )
+```python
+provider = Provider(
+    base_url="http://localhost:11434/v1",
+    model="<installed-ollama-model>",
+)
+```
 
-    result = await react_loop(provider, "What's the weather in Paris?", tools=[weather])
-    print(result.value)
-    print(result.metadata["tool_calls_made"])    # 1
-    ```
+No API key is needed for a default local Ollama installation. See
+[Provider setup](providers.md) for other endpoints and their limits.
 
-=== "Compose patterns"
+## 4. Choose another pattern
 
-    ```python
-    from functools import partial
-    from executionkit import pipe, consensus, refine_loop
+### Iterative refinement
 
-    result = await pipe(
-        provider,
-        "Explain gradient descent in simple terms.",
-        partial(consensus, num_samples=3),
-        partial(refine_loop, target_score=0.9),
-    )
-    print(result.value)
-    print(result.cost)                           # Cumulative across both steps
-    ```
+```python
+from executionkit import refine_loop
 
-## 4. Track cost across calls
+result = await refine_loop(
+    provider,
+    "Explain gradient descent to a new software engineer.",
+    target_score=0.85,
+    max_iterations=3,
+)
+```
+
+The default evaluator makes an additional model call for each generated
+answer. Use a caller-supplied evaluator when you need a predictable scoring
+rule.
+
+### Tool loop
+
+```python
+from executionkit import Tool, react_loop
+
+
+async def get_status(service: str) -> str:
+    return f"{service}: operational"
+
+
+status_tool = Tool(
+    name="get_status",
+    description="Return the status of a named service.",
+    parameters={
+        "type": "object",
+        "properties": {"service": {"type": "string"}},
+        "required": ["service"],
+        "additionalProperties": False,
+    },
+    execute=get_status,
+    timeout=5.0,
+)
+
+result = await react_loop(
+    provider,
+    "Check the status of the billing service.",
+    tools=[status_tool],
+)
+```
+
+Only register tools you trust. `react_loop()` validates and bounds the
+model-to-tool call, but the tool body runs with the current process's
+permissions.
+
+### Structured output
+
+```python
+from executionkit import structured
+
+
+def validate(value: object) -> str | None:
+    if not isinstance(value, dict):
+        return "Expected a JSON object."
+    if not isinstance(value.get("priority"), int):
+        return "'priority' must be an integer."
+    return None
+
+
+result = await structured(
+    provider,
+    "Return JSON with an integer 'priority' for this ticket: payment failed.",
+    validator=validate,
+)
+```
+
+## 5. Track several calls
+
+`Kit` stores cumulative usage and can also hold a conversation transcript:
 
 ```python
 from executionkit import Kit
 
 kit = Kit(provider)
-await kit.consensus("Classify: ...", num_samples=3)
-await kit.refine("Summarise: ...")
-print(kit.usage)            # TokenUsage(input_tokens=..., output_tokens=..., llm_calls=...)
+await kit.consensus("Return only 'yes' or 'no': is 7 prime?", num_samples=3)
+await kit.refine("Explain why 7 is prime.", max_iterations=2)
+print(kit.usage)
 ```
 
-## 5. Sync wrappers (outside async)
+## 6. Call from synchronous code
 
 ```python
 from executionkit import consensus_sync
 
-result = consensus_sync(provider, "What is 2 + 2?")
+result = consensus_sync(provider, "Return only the result of 2 + 2.")
 print(result.value)
 ```
 
-The sync wrappers raise `RuntimeError` when called inside a running event loop (e.g. Jupyter) — use `await` directly there.
+Sync wrappers call `asyncio.run()`. They raise `RuntimeError` inside an already
+running event loop, including async web handlers and most notebook kernels. Use
+`await` in those environments.
 
-## What next
+## Next
 
-- [Provider Setup](providers.md) — configure OpenAI, Ollama, Groq, Together, GitHub Models, and Azure via a gateway.
-- [Patterns Overview](../patterns/index.md) — pick the right pattern for your problem.
-- [Recipes](../recipes/composition.md) — failover, cost-aware routing, pattern chaining.
+- [Patterns overview](../patterns/index.md)
+- [Execution controls](../guides/execution-controls.md)
+- [API index](../api/index.md)

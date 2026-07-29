@@ -15,7 +15,7 @@ tags:
 | You can write or pick an evaluator that scores quality on `[0.0, 1.0]`. | Latency matters more than quality. |
 | Quality matters more than cost (writing, code review, summaries). | Each iteration is unlikely to actually improve the answer (e.g. multiple-choice). |
 | You can bound iterations (e.g. `max_iterations=4`). | The task is purely factual — use [Consensus](consensus.md) instead. |
-| You want a quality gate (`target_score`) on output. | The default LLM-as-judge evaluator is unsafe for adversarial input — write a custom evaluator. |
+| You want a score threshold on output. | The score would be used as an authorization or other security decision. |
 
 ## Call flow
 
@@ -49,9 +49,9 @@ from executionkit import Provider, refine_loop
 
 async def main() -> None:
     async with Provider(
-        base_url="https://api.openai.com/v1",
-        api_key=os.environ["OPENAI_API_KEY"],
-        model="gpt-4o-mini",
+        base_url=os.environ["LLM_BASE_URL"],
+        api_key=os.environ.get("LLM_API_KEY", ""),
+        model=os.environ["LLM_MODEL"],
     ) as provider:
         result = await refine_loop(
             provider,
@@ -73,7 +73,9 @@ asyncio.run(main())
 
 ## Custom evaluator
 
-For production, supply your own evaluator. The default uses an LLM-as-judge prompt with XML-delimiter sandboxing — fine for development, but you should write a deterministic or domain-specific scorer when input may contain adversarial content.
+Supply a caller-owned evaluator when the task has a deterministic or
+domain-specific rule. The default evaluator asks the same provider to score
+the answer, so it adds cost and inherits that model's judgment limits.
 
 ```python
 async def length_evaluator(text: str, _: object) -> float:
@@ -93,7 +95,7 @@ result = await refine_loop(
 )
 ```
 
-## Configuration knobs
+## Parameters
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
@@ -107,6 +109,8 @@ result = await refine_loop(
 | `max_tokens` | `4096` | Per-completion token cap. |
 | `max_cost` | `None` | Optional `TokenUsage` budget across all calls. |
 | `retry` | `DEFAULT_RETRY` | Per-call retry config. |
+| `trace` | `None` | Optional callback for `llm_call_*` events. |
+| `on_checkpoint` | `None` | Sync or async callback after each scored candidate. |
 
 ## Metadata keys
 
@@ -121,7 +125,12 @@ result = await refine_loop(
 - **Up to `2 × (1 + max_iterations)` LLM calls** when using the default evaluator (one generation + one evaluation per round). A custom evaluator that doesn't call the LLM cuts this in half.
 - **Sequential.** Each iteration depends on the previous response — no parallelism.
 - **Best-result tracking.** The returned `value` is always the highest-scoring response seen, even if a later iteration regressed.
-- **`max_cost` is checked before every call** and raises `BudgetExhaustedError` immediately on overrun.
+- **`max_cost` is checked before every call.** A successful response can take
+  a token total above the limit; the next call is then blocked.
+
+The checkpoint callback receives the iteration number and a plain dictionary
+with the current text, score, and recorded cost. Callback exceptions are
+logged and ignored so they do not stop the loop.
 
 ## Errors
 
@@ -133,7 +142,11 @@ result = await refine_loop(
 
 ## Security note
 
-The default evaluator wraps the text being scored in `<response_to_rate>` XML delimiters and instructs the LLM to ignore any instructions inside them. This mitigates **prompt injection attacks** where adversarial content in a generated response would otherwise override the scoring instruction. Text is also truncated to `max_eval_chars` (default 32 768) before being sent to the evaluator. **Even with these defenses, LLM-as-judge is not safe against motivated attackers** — write a custom evaluator for production workloads with untrusted input.
+The default evaluator wraps the text being scored in
+`<response_to_rate>` delimiters, removes embedded closing delimiters, and
+truncates the text to `max_eval_chars`. These measures reduce prompt-injection
+risk; they do not turn a model score into a security decision. Use
+deterministic application rules for permissions and other high-impact gates.
 
 ## Source
 

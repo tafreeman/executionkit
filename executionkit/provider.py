@@ -179,7 +179,7 @@ class ToolCallingProvider(LLMProvider, Protocol):
     """Extension of ``LLMProvider`` for providers that support tool calling.
 
     The built-in :class:`Provider` satisfies this protocol via its
-    ``supports_tools`` attribute.  Pass to :func:`react_loop` to unlock
+    ``supports_tools`` attribute. Pass it to :func:`react_loop` for
     tool-calling patterns.
     """
 
@@ -232,10 +232,10 @@ def _provider_supports_tools(provider: object) -> bool:
 
 @dataclass(frozen=True, slots=True)
 class Provider:
-    """Universal LLM provider. Posts JSON, parses JSON. No SDK needed.
+    """HTTP client for OpenAI-compatible chat-completions endpoints.
 
-    Works with any OpenAI-compatible endpoint: OpenAI, Azure, Ollama,
-    Together, Groq, GitHub Models, etc.
+    The client sends and parses JSON without a provider SDK. Endpoint and model
+    compatibility remain the caller's responsibility.
     """
 
     base_url: str
@@ -246,8 +246,7 @@ class Provider:
     timeout: float = 120.0
     # supports_tools is Literal[True] for this concrete HTTP client because
     # it always speaks the OpenAI tool-calling wire format.
-    # WARNING (F-04): If you build a *wrapper* around Provider, do NOT copy
-    # this attribute verbatim — delegate instead:
+    # A wrapper around Provider should delegate this attribute:
     #   @property
     #   def supports_tools(self) -> bool: return self._inner.supports_tools
     # For @runtime_checkable protocols, isinstance(wrapper, ToolCallingProvider)

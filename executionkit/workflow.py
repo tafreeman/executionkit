@@ -1,4 +1,4 @@
-"""Lightweight dependency workflow execution."""
+"""Dependency-ordered workflow execution."""
 
 from __future__ import annotations
 
@@ -188,15 +188,8 @@ class Workflow:
         Parameters
         ----------
         initial_context:
-            Key/value pairs injected into the step context before execution.
-            A key that collides with one of this workflow's step names raises
-            :exc:`ValueError` — ``outputs`` membership used to double as both
-            "seeded by initial_context" and "already executed", so a step
-            whose name matched an ``initial_context`` key was silently
-            skipped and the caller's seed was returned as its "output"
-            without the step ever running. Completion is now tracked
-            separately (see ``resume_from`` below), so this collision is
-            rejected up front instead of masking a skipped step.
+            Key/value pairs added to the step context before execution. Keys
+            must not match workflow step names.
         trace:
             Optional async or sync callback receiving
             :class:`~executionkit.observability.TraceEvent` objects.
@@ -207,11 +200,10 @@ class Workflow:
             completed steps.  The caller is responsible for persisting the
             checkpoint; this library imposes no storage requirement.
         resume_from:
-            A previously saved :class:`WorkflowCheckpoint`.  Steps whose
-            names already appear in ``resume_from.outputs`` are treated as
-            already executed and are skipped; accumulated outputs and token
-            budget are restored verbatim. When ``None`` (default), the
-            workflow starts from the beginning.
+            A previously saved :class:`WorkflowCheckpoint`. Steps whose names
+            appear in ``resume_from.outputs`` are skipped. Accumulated outputs
+            and token usage are restored. When ``None``, execution starts from
+            the beginning.
 
         Raises
         ------

@@ -1,73 +1,100 @@
-"""Doc-fact check: docs must not undercount the shipped package.
+"""Check documentation surfaces that can be derived from the repository.
 
-The 2026-07-06 portfolio audit found map_reduce, the MCP server, and the
-Message Batches transport shipped and ADR-backed but missing from five doc
-surfaces at once (README patterns table, mkdocs nav, patterns index,
-architecture module map, CONTRIBUTING key-modules). This script derives the
-shipped surface from ``executionkit/`` at run time and fails loud when a doc
-surface disagrees, so the undercount class cannot recur silently.
+The check is intentionally limited to facts that code can compare reliably:
+public exports, shipped modules, tracked documentation pages, pattern pages,
+navigation entries, and root-file includes. It does not score writing style or
+attempt to infer semantic correctness.
 
-Checks (all derived, nothing hand-maintained except SLUGS):
-  1. every pattern module has a docs page, an mkdocs nav entry, a README
-     patterns-table row, and a patterns-index table row;
-  2. every docs/patterns/*.md page is reachable from the mkdocs nav;
-  3. the patterns-index "N pattern utilities" claim equals the
-     derived pattern count;
-  4. every module in ``executionkit/`` is named in the architecture module
-     map (basename granularity — a missing new module fails the check);
-  5. docs/index.md (the landing page) does not undercount the pattern count
-     either — the hero line, the "N reasoning patterns you can combine" heading,
-     and the "Reasoning patterns" stat-strip tile must all equal the derived
-     pattern count (2026-07-08 audit: this page said "five" while the
-     package shipped six).
-
-Stdlib only (ADR-004 discipline applies to tooling too). Run from the repo
-root: ``python scripts/check_doc_facts.py``. Portfolio convention:
-``docs/conventions/doc-fact-check.md`` at the workspace root.
+Run from any directory with ``python scripts/check_doc_facts.py``.
 """
 
 from __future__ import annotations
 
+import ast
 import re
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-# The one hand-maintained mapping: pattern module -> docs slug. A new pattern
-# module without an entry here fails check 1 with a clear message.
-SLUGS = {
+# Pattern implementations do not all share a file name with their public page.
+# Adding a pattern module without a mapping fails with an actionable message.
+PATTERN_SLUGS = {
     "consensus": "consensus",
     "map_reduce": "map-reduce",
+    "pipe": "pipe",
     "react_loop": "react-loop",
     "refine_loop": "iterative-refinement",
     "structured": "structured",
-    "pipe": "pipe",  # lives in compose.py, documented as a pattern
 }
 
-NUMBER_WORDS = {
-    "one": 1,
-    "two": 2,
-    "three": 3,
-    "four": 4,
-    "five": 5,
-    "six": 6,
-    "seven": 7,
-    "eight": 8,
-    "nine": 9,
-    "ten": 10,
-    "eleven": 11,
-    "twelve": 12,
+ROOT_INCLUDES = {
+    "docs/changelog.md": '--8<-- "CHANGELOG.md"',
+    "docs/contributing.md": '--8<-- "CONTRIBUTING.md"',
+    "docs/license.md": '--8<-- "LICENSE"',
+    "docs/security.md": '--8<-- "SECURITY.md"',
 }
 
 failures: list[str] = []
 
 
-def read(rel_path: str) -> str:
-    return (REPO_ROOT / rel_path).read_text(encoding="utf-8").replace("\r\n", "\n")
+def read(relative_path: str) -> str:
+    """Read a repository file with normalized newlines."""
+    return (REPO_ROOT / relative_path).read_text(encoding="utf-8").replace("\r\n", "\n")
 
 
-def derive_pattern_modules() -> set[str]:
+def git_paths(*arguments: str) -> set[str]:
+    """Return repository-relative paths from one ``git ls-files`` query."""
+    git_executable = shutil.which("git")
+    if git_executable is None:
+        raise RuntimeError("git is required to run the documentation check")
+    completed = subprocess.run(  # noqa: S603 - executable is resolved, arguments are internal
+        [git_executable, "ls-files", *arguments],
+        cwd=REPO_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return {
+        line.strip().replace("\\", "/")
+        for line in completed.stdout.splitlines()
+        if line.strip()
+    }
+
+
+def maintained_doc_pages() -> set[str]:
+    """Return tracked and new, non-ignored Markdown pages below ``docs``."""
+    tracked = git_paths("--", "docs")
+    new = git_paths("--others", "--exclude-standard", "--", "docs")
+    return {
+        path.removeprefix("docs/")
+        for path in tracked | new
+        if path.startswith("docs/") and path.endswith(".md")
+    }
+
+
+def maintained_markdown() -> set[str]:
+    """Return all tracked and new, non-ignored Markdown files."""
+    tracked = git_paths("--", "*.md")
+    new = git_paths("--others", "--exclude-standard", "--", "*.md")
+    return {path for path in tracked | new if path.endswith(".md")}
+
+
+def nav_pages() -> set[str]:
+    """Return Markdown page paths found in the MkDocs navigation."""
+    return set(
+        re.findall(
+            r":\s*([A-Za-z0-9_./-]+\.md)\s*$",
+            read("mkdocs.yml"),
+            flags=re.MULTILINE,
+        )
+    )
+
+
+def pattern_modules() -> set[str]:
+    """Derive public pattern implementations from the package."""
     modules = {
         path.stem
         for path in (REPO_ROOT / "executionkit" / "patterns").glob("*.py")
@@ -77,170 +104,128 @@ def derive_pattern_modules() -> set[str]:
     return modules
 
 
-def mkdocs_nav_pattern_pages() -> set[str]:
-    """Pages listed under the 'Patterns:' nav section of mkdocs.yml.
-
-    Assumes mkdocs.yml keeps its current 2-space top-level nav indentation;
-    a reformat of the nav block would need the two regexes below updated.
-    """
-    lines = read("mkdocs.yml").split("\n")
-    pages: set[str] = set()
-    in_patterns = False
-    for line in lines:
-        if re.match(r"^  - Patterns:", line):
-            in_patterns = True
-            continue
-        if in_patterns:
-            if re.match(r"^  - \S", line):
-                break
-            entry = re.search(r":\s*(patterns/\S+\.md)\s*$", line)
-            if entry:
-                pages.add(entry.group(1))
-    return pages
+def public_exports() -> tuple[str, ...]:
+    """Read the literal package ``__all__`` without importing the package."""
+    module = ast.parse(read("executionkit/__init__.py"))
+    for statement in module.body:
+        if isinstance(statement, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == "__all__"
+            for target in statement.targets
+        ):
+            value = ast.literal_eval(statement.value)
+            if isinstance(value, list) and all(isinstance(item, str) for item in value):
+                return tuple(value)
+            break
+    raise RuntimeError("executionkit/__init__.py has no literal string __all__ list")
 
 
-def check_patterns_documented(patterns: set[str], nav_pages: set[str]) -> None:
+def shipped_modules() -> set[str]:
+    """Return tracked and new, non-ignored Python modules in the package."""
+    tracked = git_paths("--", "executionkit")
+    new = git_paths("--others", "--exclude-standard", "--", "executionkit")
+    return {
+        path
+        for path in tracked | new
+        if path.startswith("executionkit/") and path.endswith(".py")
+    }
+
+
+def check_nav() -> None:
+    maintained = maintained_doc_pages()
+    navigation = nav_pages()
+
+    for page in sorted(maintained - navigation):
+        failures.append(f"docs/{page} is maintained but missing from the MkDocs nav")
+
+    for page in sorted(navigation - maintained):
+        failures.append(f"MkDocs nav references missing or ignored docs/{page}")
+
+
+def check_patterns() -> None:
+    modules = pattern_modules()
+    navigation = nav_pages()
     readme = read("README.md")
+    landing = read("docs/index.md")
     index = read("docs/patterns/index.md")
-    for module in sorted(patterns):
-        slug = SLUGS.get(module)
-        if slug is None:
-            failures.append(
-                f"executionkit/patterns/{module}.py has no slug entry in "
-                "scripts/check_doc_facts.py SLUGS — add the module's docs mapping"
-            )
-            continue
-        if not (REPO_ROOT / "docs" / "patterns" / f"{slug}.md").exists():
-            failures.append(
-                f"pattern '{module}': docs/patterns/{slug}.md does not exist"
-            )
-        if f"patterns/{slug}.md" not in nav_pages:
-            failures.append(
-                f"pattern '{module}': patterns/{slug}.md missing from mkdocs nav"
-            )
+
+    unknown = modules - PATTERN_SLUGS.keys()
+    for module in sorted(unknown):
+        failures.append(
+            f"pattern module {module!r} has no PATTERN_SLUGS entry in "
+            "scripts/check_doc_facts.py"
+        )
+
+    stale = PATTERN_SLUGS.keys() - modules
+    for module in sorted(stale):
+        failures.append(
+            f"PATTERN_SLUGS contains {module!r}, but that implementation is absent"
+        )
+
+    for module in sorted(modules & PATTERN_SLUGS.keys()):
+        slug = PATTERN_SLUGS[module]
+        page = f"patterns/{slug}.md"
+        if not (REPO_ROOT / "docs" / page).is_file():
+            failures.append(f"pattern {module!r} is missing docs/{page}")
+        if page not in navigation:
+            failures.append(f"pattern {module!r} is missing {page} from MkDocs nav")
         if f"patterns/{slug}/" not in readme:
             failures.append(
-                f"pattern '{module}': no row links patterns/{slug}/ in the README table"
+                f"pattern {module!r} has no public README link to patterns/{slug}/"
+            )
+        if f"(patterns/{slug}.md)" not in landing:
+            failures.append(
+                f"pattern {module!r} has no link in docs/index.md to {page}"
             )
         if f"({slug}.md)" not in index:
-            failures.append(
-                f"pattern '{module}': no row links {slug}.md in docs/patterns/index.md"
-            )
+            failures.append(f"pattern {module!r} has no link in docs/patterns/index.md")
 
 
-def check_nav_completeness(nav_pages: set[str]) -> None:
-    for page in sorted((REPO_ROOT / "docs" / "patterns").glob("*.md")):
-        if page.stem == "index":
-            continue
-        rel = f"patterns/{page.name}"
-        if rel not in nav_pages:
-            failures.append(f"docs/{rel} exists but is unreachable from the mkdocs nav")
+def check_api_index() -> None:
+    api_index = read("docs/api/index.md")
+    for name in public_exports():
+        if f"`{name}`" not in api_index:
+            failures.append(f"public export {name!r} is missing from docs/api/index.md")
 
 
-def check_index_count_claim(patterns: set[str]) -> None:
-    index = read("docs/patterns/index.md")
-    claim = re.search(r"\*\*(\w+) pattern utilities\*\*", index)
-    if claim is None:
-        failures.append(
-            "docs/patterns/index.md: the 'N pattern utilities' claim could not be found"
-        )
-        return
-    claimed = NUMBER_WORDS.get(claim.group(1).lower())
-    if claimed != len(patterns):
-        failures.append(
-            f"docs/patterns/index.md says '{claim.group(1)}' pattern "
-            f"utilities; the package ships {len(patterns)}"
-        )
-
-
-def check_landing_page_count_claims(patterns: set[str]) -> None:
-    """docs/index.md must not undercount patterns either.
-
-    Same failure class as :func:`check_index_count_claim`, one page over: the
-    2026-07-08 audit found the landing page's hero line, section heading, and
-    stat-strip tile all still said "five" after map_reduce shipped as the
-    sixth pattern. All three claims are checked independently since they are
-    three separate hand-written strings, not one shared template.
-    """
-    index = read("docs/index.md")
-
-    hero = re.search(r"`Provider`, (\w+) reasoning patterns\.", index)
-    if hero is None:
-        failures.append(
-            "docs/index.md: the '`Provider`, {word} reasoning patterns.' "
-            "hero claim could not be found"
-        )
-    else:
-        claimed = NUMBER_WORDS.get(hero.group(1).lower())
-        if claimed != len(patterns):
-            failures.append(
-                f"docs/index.md hero line says '{hero.group(1)}' reasoning "
-                f"patterns; the package ships {len(patterns)}"
-            )
-
-    heading = re.search(
-        r"^## (\w+) reasoning patterns you can combine$", index, re.MULTILINE
-    )
-    if heading is None:
-        failures.append(
-            "docs/index.md: the '## {Word} reasoning patterns you can "
-            "combine' heading could not be found"
-        )
-    else:
-        claimed = NUMBER_WORDS.get(heading.group(1).lower())
-        if claimed != len(patterns):
-            failures.append(
-                f"docs/index.md heading says '{heading.group(1)}' reasoning "
-                f"patterns; the package ships {len(patterns)}"
-            )
-
-    stat = re.search(
-        r'<div class="stat-value">(\d+)</div>\s*'
-        r'<div class="stat-label">Reasoning patterns</div>',
-        index,
-    )
-    if stat is None:
-        failures.append(
-            "docs/index.md: the 'Reasoning patterns' stat-strip tile could not be found"
-        )
-    elif int(stat.group(1)) != len(patterns):
-        failures.append(
-            f"docs/index.md stat strip says {stat.group(1)} reasoning "
-            f"patterns; the package ships {len(patterns)}"
-        )
-
-
-def check_module_map_completeness() -> None:
-    """Every shipped module must be named in the architecture module map.
-
-    The map is a rendered tree, so a module's full relative path never appears
-    as one contiguous string. Instead require BOTH tokens independently: the
-    file's basename, and (for subpackage files) the ``<subpackage>/`` segment.
-    This closes the basename-collision hole where one ``__init__.py`` mention
-    satisfied all four packages, letting a brand-new subpackage slip through.
-    Residual (accepted): the two tokens are not checked for adjacency, so a
-    same-named file added to a second *already-documented* subpackage would
-    still pass; parsing the tree layout is not worth it for this check.
-    """
+def check_architecture_modules() -> None:
     architecture = read("docs/architecture.md")
-    for path in sorted((REPO_ROOT / "executionkit").rglob("*.py")):
-        in_subpackage = path.parent.name != "executionkit"
-        named = path.name in architecture and (
-            not in_subpackage or f"{path.parent.name}/" in architecture
-        )
-        if not named:
-            rel = path.relative_to(REPO_ROOT).as_posix()
-            failures.append(f"{rel} is not named in the architecture.md module map")
+    for path in sorted(shipped_modules()):
+        if f"`{path}`" not in architecture:
+            failures.append(f"{path} is missing from the architecture module map")
+
+
+def check_root_includes() -> None:
+    for path, include in ROOT_INCLUDES.items():
+        if include not in read(path):
+            failures.append(f"{path} must include its root source with {include!r}")
+
+
+def check_python_examples() -> None:
+    """Compile Python fences, allowing the top-level ``await`` used in guides."""
+    fence = re.compile(r"^```python\s*\n(.*?)^```\s*$", flags=re.MULTILINE | re.DOTALL)
+    for path in sorted(maintained_markdown()):
+        for index, match in enumerate(fence.finditer(read(path)), start=1):
+            try:
+                compile(
+                    match.group(1),
+                    f"{path}:python-block-{index}",
+                    "exec",
+                    flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
+                )
+            except SyntaxError as error:
+                failures.append(
+                    f"{path} Python block {index} has invalid syntax: "
+                    f"{error.msg} at line {error.lineno}"
+                )
 
 
 def main() -> int:
-    patterns = derive_pattern_modules()
-    nav_pages = mkdocs_nav_pattern_pages()
-    check_patterns_documented(patterns, nav_pages)
-    check_nav_completeness(nav_pages)
-    check_index_count_claim(patterns)
-    check_landing_page_count_claims(patterns)
-    check_module_map_completeness()
+    check_nav()
+    check_patterns()
+    check_api_index()
+    check_architecture_modules()
+    check_root_includes()
+    check_python_examples()
 
     if failures:
         print(f"Doc-fact check failed ({len(failures)} issue(s)):", file=sys.stderr)
@@ -249,9 +234,11 @@ def main() -> int:
         return 1
 
     print(
-        f"Doc-fact check passed: {len(patterns)} patterns documented across "
-        "README, mkdocs nav, patterns index, landing page, and architecture "
-        "module map."
+        "Doc-fact check passed: "
+        f"{len(maintained_doc_pages())} pages, "
+        f"{len(pattern_modules())} patterns, "
+        f"{len(public_exports())} public exports, and "
+        f"{len(shipped_modules())} package modules are documented."
     )
     return 0
 

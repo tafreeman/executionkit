@@ -1,4 +1,4 @@
-"""Composable LLM reasoning patterns.
+"""LLM call patterns that can be used independently or in a sequence.
 
 Re-exports the core pattern functions for convenient access:
 :func:`consensus`, :func:`map_reduce`, :func:`refine_loop`,

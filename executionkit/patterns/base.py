@@ -161,12 +161,6 @@ async def checked_complete(
     does **NOT** hold under ``threading``.  See :mod:`executionkit.cost` for
     the full concurrency contract.
 
-    A CI test (``test_no_await_between_check_and_reserve`` in
-    ``tests/patterns/test_patterns_common.py``) uses AST inspection to assert that no
-    ``await`` is inserted between the two operations.  If that test fails
-    after a refactor, the budget safety guarantee must be re-evaluated before
-    merging.
-
     Args:
         provider: LLM provider to call.
         messages: Chat messages to send.
@@ -412,16 +406,7 @@ class _TrackedProvider:
 
     @property
     def supports_tools(self) -> bool:
-        """Delegate capability flag to the wrapped provider.
-
-        A wrapper must not unconditionally claim tool support — it should
-        reflect what the inner provider actually supports.
-        Ref F-04: https://github.com/BerriAI/litellm/issues/11370 (real-world
-        failure from hardcoding capability instead of delegating).
-        NOTE (F-01 verified): CostTracker._calls is never accessed directly
-        here. reserve_call() and record_without_call() are the accounting API
-        used by checked_complete().
-        """
+        """Report the wrapped provider's tool support."""
         return getattr(self._provider, "supports_tools", False)
 
     async def complete(
