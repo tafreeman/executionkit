@@ -15,7 +15,7 @@ tags:
 | You can write or pick an evaluator that scores quality on `[0.0, 1.0]`. | Latency matters more than quality. |
 | Quality matters more than cost (writing, code review, summaries). | Each iteration is unlikely to actually improve the answer (e.g. multiple-choice). |
 | You can bound iterations (e.g. `max_iterations=4`). | The task is purely factual — use [Consensus](consensus.md) instead. |
-| You want a score threshold on output. | The score would be used as an authorization or other security decision. |
+| You want a quality gate (`target_score`) on output. | The score would be used as an authorization or other security decision. |
 
 ## Call flow
 
@@ -143,10 +143,15 @@ logged and ignored so they do not stop the loop.
 ## Security note
 
 The default evaluator wraps the text being scored in
-`<response_to_rate>` delimiters, removes embedded closing delimiters, and
-truncates the text to `max_eval_chars`. These measures reduce prompt-injection
-risk; they do not turn a model score into a security decision. Use
-deterministic application rules for permissions and other high-impact gates.
+`<response_to_rate>` delimiters, instructs the model to ignore any instructions
+inside them, removes embedded closing delimiters, and truncates the text to
+`max_eval_chars`. These measures reduce prompt-injection risk; they do not turn
+a model score into a security decision. Use deterministic application rules for
+permissions and other high-impact gates.
+
+They are defense-in-depth, not a guarantee — an LLM-as-judge is not safe against
+a motivated attacker. Supply your own `evaluator` for production workloads whose
+input may be adversarial.
 
 ## Source
 
