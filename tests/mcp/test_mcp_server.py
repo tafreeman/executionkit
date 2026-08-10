@@ -21,6 +21,7 @@ from executionkit.mcp._constants import (
     METHOD_NOT_FOUND,
     PARSE_ERROR,
     PROTOCOL_VERSION,
+    SUPPORTED_PROTOCOL_VERSIONS,
 )
 from executionkit.mcp.server import MCPServer, handle_message
 from executionkit.mcp.tools import _memoize_provider, provider_from_env
@@ -102,6 +103,58 @@ class TestHandshake:
         # An unrecognised client version yields the server's own preferred one.
         response = await consensus_server.handle_message(
             _initialize_request("1999-01-01")
+        )
+        assert response["result"]["protocolVersion"] == PROTOCOL_VERSION
+
+    @pytest.mark.parametrize(
+        "revision", ["2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25"]
+    )
+    async def test_every_advertised_revision_is_echoed(
+        self, consensus_server: MCPServer, revision: str
+    ) -> None:
+        """Each revision in the accepted set really is accepted.
+
+        Guards the pairing between ``SUPPORTED_PROTOCOL_VERSIONS`` and the
+        negotiation branch: a revision listed there but not echoed would be an
+        advertised-yet-unusable version.
+        """
+        response = await consensus_server.handle_message(_initialize_request(revision))
+        assert response["result"]["protocolVersion"] == revision
+
+    async def test_preferred_version_is_newest_handshake_revision(self) -> None:
+        """The preferred revision is the newest one in the accepted set.
+
+        MCP says a server answering an unsupported proposal SHOULD reply with
+        the latest version it supports, so "preferred" and "newest accepted"
+        must not drift apart.
+        """
+        assert max(SUPPORTED_PROTOCOL_VERSIONS) == PROTOCOL_VERSION
+        assert PROTOCOL_VERSION == "2025-11-25"
+
+    async def test_handshake_free_revisions_are_not_advertised(self) -> None:
+        """``2026-07-28`` and later must never enter the accepted set.
+
+        That revision removed the ``initialize`` handshake, moved the protocol
+        version into per-request ``_meta``, and made ``server/discover`` and
+        ``UnsupportedProtocolVersionError`` mandatory for servers. None of that
+        is implemented here, so accepting the string would be a false capability
+        claim to every peer that negotiates with this server. This test fails
+        the moment someone bumps the constant without building that surface.
+        """
+        assert "2026-07-28" not in SUPPORTED_PROTOCOL_VERSIONS
+        assert all(revision < "2026-01-01" for revision in SUPPORTED_PROTOCOL_VERSIONS)
+
+    async def test_handshake_free_proposal_gets_a_legacy_revision_back(
+        self, consensus_server: MCPServer
+    ) -> None:
+        """A client proposing 2026-07-28 is answered with what we do speak.
+
+        The proposal arrived as an ``initialize`` frame, which the handshake-free
+        era does not define, so the honest reply is the newest handshake-based
+        revision. The client then decides whether it can live with that.
+        """
+        response = await consensus_server.handle_message(
+            _initialize_request("2026-07-28")
         )
         assert response["result"]["protocolVersion"] == PROTOCOL_VERSION
 
@@ -509,6 +562,43 @@ class TestPreInitializeGating:
         )
         assert response is not None
         assert "result" in response
+
+    async def test_server_discover_probe_errors_so_modern_clients_fall_back(
+        self,
+    ) -> None:
+        """A handshake-free client's opening probe must fail, and fail loudly.
+
+        MCP tells a ``2026-07-28`` client to probe with ``server/discover`` and
+        read any unrecognized error as "this is a handshake-era server, fall
+        back to ``initialize``". Answering the probe with a JSON-RPC error is
+        therefore the correct behavior, not a gap — but it only works if the
+        server actually answers instead of hanging or staying silent.
+        """
+        server = MCPServer(provider_factory=lambda: None)
+        response = await server.handle_message(
+            {"jsonrpc": "2.0", "id": 1, "method": "server/discover"}
+        )
+        assert response is not None
+        assert "error" in response
+        # Never -32022: that code means UnsupportedProtocolVersionError, which
+        # would tell the probing client this is a *modern* server and stop it
+        # from falling back to the handshake this server actually needs.
+        assert response["error"]["code"] != -32022
+
+    async def test_era_ambiguous_call_before_initialize_is_refused(self) -> None:
+        """``tools/call`` must not be served under handshake semantics by accident.
+
+        The spec warns that some handshake-era servers happily process an
+        era-ambiguous method sent by a modern client that never called
+        ``initialize``, producing a confusing partial success instead of a clean
+        failure. The pre-initialize gate makes that impossible here.
+        """
+        server = MCPServer(provider_factory=lambda: None)
+        response = await server.handle_message(
+            _tools_call_request("consensus", {"prompt": "hi"}, request_id=3)
+        )
+        assert response is not None
+        assert response["error"]["code"] == INVALID_REQUEST
 
 
 class TestJsonRpcVersionValidation:

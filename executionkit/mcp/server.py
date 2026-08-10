@@ -6,7 +6,10 @@ The protocol surface is deliberately small and correct:
   stdin and written to stdout, UTF-8. One JSON object per line.
 * **Handshake** — ``initialize`` (negotiate ``protocolVersion``; advertise only
   the ``tools`` capability) followed by the ``notifications/initialized``
-  notification.
+  notification. This is the *handshake-based* ("legacy") MCP era, up to and
+  including revision ``2025-11-25``; the handshake-free ``2026-07-28`` era is
+  not implemented — see
+  :data:`~executionkit.mcp._constants.SUPPORTED_PROTOCOL_VERSIONS`.
 * **Tools** — ``tools/list`` returns JSON-Schema tool definitions; ``tools/call``
   executes a tool and returns an MCP ``content`` result. Tool-level failures are
   returned as ``isError: True`` results (not JSON-RPC errors); malformed frames
@@ -77,7 +80,16 @@ def _negotiate_protocol_version(requested: Any) -> str:
     """Return the protocol version to report back to the client.
 
     Echo the client's requested version when we support it; otherwise respond
-    with our own preferred version, per MCP version negotiation.
+    with our own preferred (newest supported) version, per the MCP
+    version-negotiation rule. A client that cannot speak the version it gets
+    back is expected to disconnect — the spec puts that decision on the client,
+    so refusing the handshake here would only remove its chance to make it.
+
+    A client proposing a handshake-free revision (``2026-07-28`` or later) lands
+    in the fallback branch and is answered with the newest legacy revision this
+    server actually implements. That is the honest answer: this server speaks
+    the ``initialize`` era, and a request that reached this function arrived as
+    an ``initialize`` frame, which the modern era does not define.
     """
     if isinstance(requested, str) and requested in SUPPORTED_PROTOCOL_VERSIONS:
         return requested
