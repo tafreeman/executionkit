@@ -56,8 +56,30 @@ The server supports the `tools` capability over stdio. It does not advertise:
 - HTTP, SSE, or Streamable HTTP transport; or
 - caller-defined tool registration.
 
-It recognizes MCP protocol versions `2024-11-05`, `2025-03-26`, and
-`2025-06-18`, preferring `2025-06-18`.
+### Protocol revisions
+
+It recognizes MCP protocol revisions `2024-11-05`, `2025-03-26`, `2025-06-18`,
+and `2025-11-25`, preferring `2025-11-25`. A client that proposes one of those
+gets it echoed back; any other proposal is answered with `2025-11-25`.
+
+These are the handshake-based revisions — the ones built on `initialize` plus
+`notifications/initialized`. `2025-11-25` is the newest of them, and everything
+it added that could reach a tools-only stdio server is optional or gated behind
+a client capability this server never requests, so it is implemented rather
+than merely claimed.
+
+The server does **not** implement revision `2026-07-28` or later. That revision
+removed the handshake and the session: each request carries its own version in
+`_meta`, servers must implement a `server/discover` RPC, and an unsupported
+version must be rejected with `UnsupportedProtocolVersionError` (`-32022`).
+None of that is implemented here, so `2026-07-28` is deliberately absent from
+the accepted set — advertising it would be a false capability claim.
+
+A `2026-07-28` client still interoperates safely. The spec has such clients
+probe with `server/discover` and treat any unrecognized error as proof of a
+handshake-era server; this server answers that probe with a JSON-RPC error and
+refuses `tools/call` until `initialize` has succeeded, which is exactly the
+deterministic signal the probe expects before it falls back to `initialize`.
 
 JSON-RPC parse, request, method, and parameter errors use the standard error
 codes. Tool execution failures use MCP tool results with `isError: true`.
