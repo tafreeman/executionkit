@@ -34,6 +34,12 @@ dependencies = []
 [project.optional-dependencies]
 httpx = ["httpx>=0.27"]
 jsonschema = ["jsonschema>=4.20"]
+# ADR-016. The Agent SDK transport (executionkit/claude_sdk.py) is the only path
+# that authenticates with a Claude subscription sign-in rather than an API key.
+# It stays an extra because the core library is dependency-free by design and
+# because the SDK additionally requires the Claude Code CLI on PATH -- a
+# machine-level prerequisite pip cannot express.
+claude = ["claude-agent-sdk>=0.2,<1"]
 otel = ["opentelemetry-api>=1.20"]
 docs = [
     "mkdocs>=1.6",
@@ -123,6 +129,13 @@ exclude = ["tests/"]
 # it, so treat it as a missing-OK import. When installed, its real (py.typed)
 # types are still used — this only suppresses the unresolved-import error.
 module = ["opentelemetry.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# claude-agent-sdk is an optional extra ([claude]); CI's minimal install omits
+# it, so treat it as a missing-OK import. When installed, its real (py.typed)
+# types are used -- this only suppresses the unresolved-import error.
+module = ["claude_agent_sdk.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

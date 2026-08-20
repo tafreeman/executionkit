@@ -145,6 +145,50 @@ jobs:
       - name: OTel span tests
         run: pytest tests/test_observability.py --no-cov -p no:cacheprovider -rs -q
 
+  claude-sdk:
+    name: "Claude Agent SDK transport ([claude] extra)"
+    # executionkit/claude_sdk.py is the one transport that authenticates with a
+    # Claude subscription sign-in instead of an API key, and it needs
+    # claude-agent-sdk to do it. That package pulls `mcp`, which pulls
+    # `opentelemetry-api` -- so putting it in the `dev` extra would put OTel
+    # into the locked dev set and quietly destroy the property the `test` job
+    # exists to prove (that the zero-dep no-op path works). It therefore stays
+    # out of `dev`, tests/test_claude_sdk.py skips without it, and this job
+    # gives that file the one environment where it actually runs.
+    #
+    # Same trigger and `if:` guard as `test`/`security`/`observability`, so it
+    # is required by default on every push to main and every pull request.
+    #
+    # No CLI, sign-in, or network is needed: the tests monkeypatch
+    # `executionkit.claude_sdk.query` and replay the SDK's own dataclasses.
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.action != 'labeled'
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      # Two installs: the hashed lock for pytest/pytest-asyncio, then the
+      # `[claude]` extra exactly as a user gets it. The second is unhashed,
+      # matching how `observability` installs its extra.
+      - name: Install dependencies (lock + [claude] extra)
+        run: |
+          pip install --require-hashes -r requirements.lock
+          pip install -e ".[claude]"
+
+      # Without the SDK every test in the file skipif-skips and this job would
+      # go green having verified nothing -- the exact failure mode it exists
+      # to prevent.
+      - name: Guard against a silent skip (SDK must be importable)
+        run: python -c "import claude_agent_sdk"
+
+      # --no-cov: single-file run, cannot meet the suite-wide coverage gate.
+      - name: Claude Agent SDK transport tests
+        run: pytest tests/test_claude_sdk.py --no-cov -p no:cacheprovider -rs -q
+
   live-eval-pr:
     name: "Live eval (pytest -m live, label-gated)"
     # Opt-in real-model evidence for LIVE_CORPUS (tests/test_eval_live_cases.py)

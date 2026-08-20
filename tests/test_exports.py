@@ -7,6 +7,7 @@ def test_public_api_surface() -> None:
     """Smoke-test that all documented public names are importable."""
     expected = [
         "BudgetExhaustedError",
+        "ClaudeAgentProvider",
         "ConsensusFailedError",
         "ConvergenceDetector",
         "CostTracker",

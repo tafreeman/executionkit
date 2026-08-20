@@ -14,6 +14,7 @@ from executionkit.approval import (
     ApprovalTimeoutError,
 )
 from executionkit.batches import AnthropicBatchClient, consensus_batch, map_batch
+from executionkit.claude_sdk import ClaudeAgentProvider
 from executionkit.compose import PatternStep, pipe
 from executionkit.cost import CostTracker, estimate_cost
 from executionkit.engine.convergence import ConvergenceDetector
@@ -88,6 +89,7 @@ __all__ = [
     "ApprovalTimeoutError",
     "BudgetExhaustedError",
     "CheckpointCallback",
+    "ClaudeAgentProvider",
     "ConsensusFailedError",
     "ConvergenceDetector",
     "ConversationScript",
