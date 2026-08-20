@@ -28,6 +28,27 @@ rather than a transport error.
 Credentials are resolved entirely by the CLI. ExecutionKit never reads, stores,
 or forwards them.
 
+### If your process already has an API key
+
+The SDK spawns the CLI with `{**os.environ, **options.env}`, so a process that
+has `ANTHROPIC_API_KEY` set — which any process using `AnthropicBatchClient`
+does — would hand the child that key, and the CLI would authenticate with it.
+That is a silent credential-class switch: the call bills the API account
+instead of the subscription, and fails outright when the key is invalid or
+unfunded.
+
+`ClaudeAgentProvider` therefore blanks `ANTHROPIC_API_KEY` and
+`ANTHROPIC_AUTH_TOKEN` in the CLI subprocess. They are blanked rather than
+removed because `options.env` merges *over* `os.environ` and can only override
+a key, never unset it; the CLI treats an empty value as absent.
+
+To deliberately bill an API key instead, say so explicitly — the constructor's
+`env` is applied over the scrub:
+
+```python
+provider = ClaudeAgentProvider(env={"ANTHROPIC_API_KEY": "sk-ant-..."})
+```
+
 ## Use
 
 ```python
@@ -83,6 +104,7 @@ Constructor arguments map onto the SDK's own knobs:
 | `max_budget_usd` | Hard per-call spend ceiling |
 | `max_turns` | Turn ceiling; `1` keeps the harness to a single completion |
 | `cwd` | Working directory handed to the CLI |
+| `env` | Extra CLI-subprocess environment, applied over the API-key scrub |
 | `extra_options` | Escape hatch merged into `ClaudeAgentOptions` |
 
 Every call is issued with an empty tool set and an empty allow-list, so a

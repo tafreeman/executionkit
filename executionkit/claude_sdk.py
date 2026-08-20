@@ -36,6 +36,18 @@ absent one:
   does *not* set ``supports_tools``, so ``react_loop`` rejects it up front with
   its usual message rather than failing halfway through a loop.
 
+**API-key environment variables are scrubbed from the CLI subprocess.** The SDK
+spawns the CLI with ``{**os.environ, **options.env}``, so a process that has
+``ANTHROPIC_API_KEY`` set -- which any process using
+:class:`~executionkit.batches.AnthropicBatchClient` does -- would hand the child
+that key, and the CLI authenticates with it. The effect is a silent
+credential-class switch: the call bills the API account rather than the
+subscription, and fails outright when the key is invalid or unfunded. Verified
+directly against the CLI: an invalid inherited key returns
+``401 API key is invalid``, and blanking the variable restores the subscription
+path. Blanked rather than removed because ``options.env`` merges *over*
+``os.environ`` and so can only override, never unset.
+
 What it does map: ``effort`` and ``thinking`` are the harness's own quality
 knobs and are exposed as constructor arguments; token usage and the
 harness-reported ``total_cost_usd`` flow into
@@ -106,6 +118,27 @@ _PERMANENT_ERRORS: Final[frozenset[str]] = frozenset(
 )
 
 _ROLE_LABELS: Final[dict[str, str]] = {"user": "Human", "assistant": "Assistant"}
+
+#: Credential variables blanked in the CLI subprocess so it cannot fall back to
+#: API-key auth. Empty rather than absent: ``ClaudeAgentOptions.env`` is merged
+#: over ``os.environ`` and can only override a key, never remove it.
+_API_KEY_ENV_VARS: Final[tuple[str, ...]] = (
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
+)
+
+
+def subscription_env(overrides: dict[str, str] | None = None) -> dict[str, str]:
+    """Build the child-process env that pins the CLI to subscription auth.
+
+    Caller *overrides* apply last, so deliberately choosing API-key billing in a
+    process that has a key stays possible -- it just has to be said, rather than
+    happening by accident because a variable was in the environment.
+    """
+    env = dict.fromkeys(_API_KEY_ENV_VARS, "")
+    if overrides:
+        env.update(overrides)
+    return env
 
 
 def _retry_after_from(resets_at: int | None) -> float:
@@ -203,6 +236,8 @@ class ClaudeAgentProvider:
         cwd: Working directory handed to the CLI.
         max_turns: Turn ceiling. ``1`` keeps the harness to a single completion,
             which is what every non-agentic pattern wants.
+        env: Extra environment for the CLI subprocess, applied over the API-key
+            scrub. Use it to deliberately restore API-key authentication.
     """
 
     model: str = DEFAULT_MODEL
@@ -212,6 +247,7 @@ class ClaudeAgentProvider:
     max_budget_usd: float | None = None
     cwd: str | None = None
     max_turns: int = 1
+    env: dict[str, str] = field(default_factory=dict)
     extra_options: dict[str, Any] = field(default_factory=dict, repr=False)
 
     def __post_init__(self) -> None:
@@ -239,6 +275,9 @@ class ClaudeAgentProvider:
             "max_turns": self.max_turns,
             "permission_mode": "default",
             "include_partial_messages": include_partial_messages,
+            # Without this the CLI inherits ANTHROPIC_API_KEY from the parent
+            # process and bills the API account instead of the subscription.
+            "env": subscription_env(self.env),
             **self.extra_options,
         }
         if merged_system:

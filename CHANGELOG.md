@@ -23,8 +23,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
   schemas raise `PermanentError`. Because the class does not set
   `supports_tools`, `react_loop()` rejects it up front rather than failing
   mid-loop — and `consensus()` over this transport is weaker evidence than over
-  `Provider`, since its sample diversity normally comes from temperature. See
-  ADR-016.
+  `Provider`, since its sample diversity normally comes from temperature.
+  The CLI subprocess has `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN` blanked:
+  the SDK spawns it with `{**os.environ, **options.env}`, so a process holding
+  a key (any process using `AnthropicBatchClient`) would otherwise hand the
+  child that key and silently bill the API account instead of the subscription,
+  failing outright when the key is unfunded. Pass `env=` to restore API-key
+  auth deliberately. See ADR-016.
 
 ### Changed
 

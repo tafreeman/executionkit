@@ -24,7 +24,12 @@ from typing import TYPE_CHECKING, Any
 import pytest
 
 from executionkit import ClaudeAgentProvider
-from executionkit.claude_sdk import _retry_after_from, _split_messages, _text_delta
+from executionkit.claude_sdk import (
+    _retry_after_from,
+    _split_messages,
+    _text_delta,
+    subscription_env,
+)
 from executionkit.errors import PermanentError, ProviderError, RateLimitError
 from executionkit.provider import (
     LLMProvider,
@@ -133,6 +138,58 @@ def patch_query(monkeypatch: pytest.MonkeyPatch, *messages: Any) -> Any:
 
 
 USER: Sequence[dict[str, Any]] = [{"role": "user", "content": "hi"}]
+
+
+# ---------------------------------------------------------------------------
+# Credential scrub
+# ---------------------------------------------------------------------------
+
+
+def test_subscription_env_blanks_both_credential_vars() -> None:
+    """Blank, not absent: ClaudeAgentOptions.env merges over os.environ.
+
+    The SDK spawns the CLI with ``{**os.environ, **options.env}``, so an entry
+    can override a value but never remove the key. Empty is what the CLI
+    treats as absent.
+    """
+    assert subscription_env() == {"ANTHROPIC_API_KEY": "", "ANTHROPIC_AUTH_TOKEN": ""}
+
+
+def test_subscription_env_lets_an_explicit_override_win() -> None:
+    env = subscription_env({"ANTHROPIC_API_KEY": "explicit"})
+    assert env["ANTHROPIC_API_KEY"] == "explicit"
+    assert env["ANTHROPIC_AUTH_TOKEN"] == ""
+
+
+async def test_cli_subprocess_cannot_inherit_an_api_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Any process using AnthropicBatchClient has ANTHROPIC_API_KEY set.
+
+    Without the scrub the CLI child inherits it and authenticates with the API
+    key -- a silent credential-class switch that bills the wrong account and
+    401s outright when the key is unfunded.
+    """
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-should-never-reach-the-cli")
+    fake = patch_query(monkeypatch, assistant("ok"), result())
+    await ClaudeAgentProvider().complete(USER)
+    assert fake.calls[0]["options"].env["ANTHROPIC_API_KEY"] == ""
+
+
+async def test_explicit_env_override_reaches_the_harness(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = patch_query(monkeypatch, assistant("ok"), result())
+    await ClaudeAgentProvider(env={"ANTHROPIC_API_KEY": "deliberate"}).complete(USER)
+    assert fake.calls[0]["options"].env["ANTHROPIC_API_KEY"] == "deliberate"
+
+
+async def test_streaming_scrubs_too(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-should-never-reach-the-cli")
+    fake = patch_query(monkeypatch, delta("x"), result())
+    async for _ in ClaudeAgentProvider().stream(USER):
+        pass
+    assert fake.calls[0]["options"].env["ANTHROPIC_API_KEY"] == ""
 
 
 # ---------------------------------------------------------------------------

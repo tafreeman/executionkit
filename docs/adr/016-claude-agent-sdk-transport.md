@@ -43,6 +43,18 @@ returning tool calls for the caller to run, which inverts `react_loop`'s
 contract, so the class does not set `supports_tools` and the existing
 capability check rejects it before a loop starts.
 
+Scrub the API-key environment variables from the CLI subprocess. The SDK spawns
+the CLI with `{**os.environ, **options.env}`, so a process holding
+`ANTHROPIC_API_KEY` — which any process using `AnthropicBatchClient` does —
+would hand the child that key and the CLI would authenticate with it. That is a
+silent credential-class switch: the call bills the API account rather than the
+subscription, and fails outright when the key is invalid or unfunded, which is
+the exact opposite of what a transport named for subscription auth should do.
+Blanked rather than removed, because `options.env` merges over `os.environ` and
+so can only override, never unset; the CLI treats an empty value as absent.
+Caller-supplied `env` applies last, so deliberate API-key billing stays
+available to anyone who asks for it explicitly.
+
 Keep `claude-agent-sdk` out of the `dev` extra. It depends on `mcp`, which
 depends on `opentelemetry-api`; locking it into `dev` would put OpenTelemetry
 into the `test` job and silently destroy the property that job exists to prove.
@@ -62,6 +74,10 @@ OpenTelemetry work established.
   because its sample diversity normally comes from temperature. This is
   documented at the call site rather than hidden.
 - `react_loop()` is unavailable over this transport.
+- A process that holds both a subscription and an API key gets the subscription
+  from this transport unless it says otherwise. That is the intended default —
+  the class is named for it — but it does mean the credential class is a
+  property of the transport rather than of ambient environment.
 - Subscription rate-limit windows are a new failure mode; rejected windows map
   to `RateLimitError` with a `retry_after` derived from the reported reset.
 
