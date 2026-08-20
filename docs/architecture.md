@@ -48,6 +48,7 @@ The public and top-level coordination modules are:
 | `executionkit/evals.py` | Deterministic eval cases, conversation scripts, and live-provider opt-in. |
 | `executionkit/observability.py` | Trace callbacks and optional OpenTelemetry spans. |
 | `executionkit/batches.py` | Anthropic Message Batches client and batch helpers. |
+| `executionkit/claude_sdk.py` | Claude Agent SDK transport; authenticates with a Claude subscription rather than an API key. |
 
 Pattern modules are:
 

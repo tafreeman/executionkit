@@ -21,6 +21,7 @@ alternative not chosen.
 | [ADR-013](013-claude-in-ci-eval.md) | Keep model-judged corpus review advisory. | Accepted | 2026-07-02 |
 | [ADR-014](014-message-batches.md) | Keep Anthropic batches separate from live patterns. | Accepted | 2026-07-03 |
 | [ADR-015](015-react-loop-tool-sandbox.md) | Enforce a bounded tool-execution contract. | Accepted | 2026-07-03 |
+| [ADR-016](016-claude-agent-sdk-transport.md) | Reach a Claude subscription through the Agent SDK, in an extra. | Accepted | 2026-08-19 |
 
 New records use the next number and the same four-section structure. Do not
 rewrite an old decision to hide a replacement. Mark it superseded and link to

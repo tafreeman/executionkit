@@ -51,6 +51,7 @@ only when a guide explicitly identifies an advanced extension point.
 | `LLMResponse` | Parsed provider response. | [Providers](adapters.md) |
 | `ToolCall` | Parsed model-requested tool call. | [Providers](adapters.md) |
 | `MockProvider` | Scripted provider for tests. | [Providers](adapters.md) |
+| `ClaudeAgentProvider` | Claude Agent SDK transport authenticated by a Claude subscription sign-in. | [Providers](adapters.md) |
 
 ## Session and execution controls
 

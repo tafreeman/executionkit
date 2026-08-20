@@ -135,6 +135,7 @@ nav:
   - Integrations:
       - MCP server: integrations/mcp.md
       - Anthropic Message Batches: integrations/message-batches.md
+      - Claude Agent SDK (subscription): integrations/claude-agent-sdk.md
   - API Reference:
       - Overview: api/index.md
       - Patterns: api/core.md
@@ -163,6 +164,7 @@ nav:
           - Claude-in-CI Eval: adr/013-claude-in-ci-eval.md
           - Message Batches: adr/014-message-batches.md
           - React Loop Tool Sandbox: adr/015-react-loop-tool-sandbox.md
+          - Claude Agent SDK Transport: adr/016-claude-agent-sdk-transport.md
       - Changelog: changelog.md
       - Contributing: contributing.md
       - License: license.md

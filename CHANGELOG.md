@@ -6,6 +6,26 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `ClaudeAgentProvider` (`executionkit/claude_sdk.py`, `[claude]` extra) — a third
+  transport that reaches Claude through `claude-agent-sdk` and a **Claude
+  subscription sign-in** rather than an API key, making the patterns usable to
+  operators who pay for a subscription instead of API credits. Satisfies
+  `LLMProvider` and `StreamingProvider`, so it drops into `consensus()`,
+  `refine_loop()`, `map_reduce()`, `structured()`, `pipe()`, and `Kit`
+  unchanged. The base install stays dependency-free (ADR-004 is not superseded);
+  the extra additionally requires the Claude Code CLI on `PATH`, which pip
+  cannot express, and a missing CLI surfaces as `PermanentError` with that
+  instruction. Three deliberate gaps, surfaced rather than emulated: the Agent
+  SDK has no sampling temperature and no output-token ceiling, so `temperature`
+  and `max_tokens` **warn** (use `effort` and `max_budget_usd`), and OpenAI tool
+  schemas raise `PermanentError`. Because the class does not set
+  `supports_tools`, `react_loop()` rejects it up front rather than failing
+  mid-loop — and `consensus()` over this transport is weaker evidence than over
+  `Provider`, since its sample diversity normally comes from temperature. See
+  ADR-016.
+
 ### Changed
 
 - Rewrite the maintained documentation around the current v0.3 API, including
