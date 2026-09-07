@@ -13,6 +13,16 @@ in-process workflows. It provides:
 The base package supports Python 3.11 through 3.13 and has no required
 third-party runtime dependencies.
 
+!!! note "Release status"
+    `pip install executionkit` currently installs **0.3.0** (2026-07-08). This
+    site is built from the default branch and also documents work merged since
+    that release — see the `[Unreleased]` section of
+    [CHANGELOG.md](https://github.com/tafreeman/executionkit/blob/main/CHANGELOG.md#unreleased)
+    for exactly what that is and how to migrate. The [configuration
+    reference](api/configuration.md#retryconfig) and
+    [Claude Agent SDK integration](integrations/claude-agent-sdk.md) call out
+    the specific unreleased behavior.
+
 ## Install and run
 
 ```bash
@@ -43,6 +53,14 @@ async def main() -> None:
 
 
 asyncio.run(main())
+```
+
+Expected output (token counts depend on the endpoint; the shape does not):
+
+```text
+FR
+1.0
+TokenUsage(input_tokens=..., output_tokens=..., llm_calls=3)
 ```
 
 Read [Installation](getting-started/installation.md) for optional extras and

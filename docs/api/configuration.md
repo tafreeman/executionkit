@@ -44,6 +44,28 @@ RetryConfig(
 most four attempts. Backoff uses full jitter between zero and the capped
 exponential delay.
 
+!!! warning "Unreleased behavior — verify your installed version"
+    The paragraph above describes the default branch, not the version on PyPI.
+    **0.3.0** (the current `pip install executionkit`) instead treats
+    `max_retries` as the *total* attempt count, so `RetryConfig(max_retries=3)`
+    makes at most 3 attempts, not 4. The change makes `RetryConfig` agree with
+    `structured()`'s own `max_retries`, which has always run `1 + max_retries`
+    attempts.
+
+    **Migrating from 0.3.0:** to keep an existing call's attempt count exactly
+    the same after upgrading, decrement `max_retries` by one
+    (`max_retries=N` → `max_retries=N-1`). `max_retries=0` is unchanged either
+    version — always a single attempt, no retries. A negative `max_retries`
+    now raises `ValueError` instead of silently making zero attempts and
+    surfacing `RuntimeError("unreachable")`. One budget-interaction edge case:
+    if a pattern's `max_cost` sets an `llm_calls` ceiling equal to the *old*
+    attempt count, a persistently failing call now ends in
+    `BudgetExhaustedError` (a `PatternError`) instead of the provider's own
+    `ProviderError` one attempt earlier — widen an `except ProviderError` that
+    relied on that ceiling. See the `[Unreleased]` section of
+    [CHANGELOG.md](https://github.com/tafreeman/executionkit/blob/main/CHANGELOG.md#unreleased)
+    for the authoritative entry.
+
 `rate_limit_strategy` acquires one token before every provider attempt. After a
 `RateLimitError`, it applies the error's `retry_after` value before the next
 attempt.

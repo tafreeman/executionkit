@@ -1,5 +1,11 @@
 # Claude Agent SDK (subscription sign-in)
 
+!!! warning "Unreleased"
+    `ClaudeAgentProvider` and the `claude` extra are on the default branch but
+    not yet part of any published release — **0.3.0** on PyPI does not include
+    them. See the `[Unreleased]` section of
+    [CHANGELOG.md](https://github.com/tafreeman/executionkit/blob/main/CHANGELOG.md#unreleased).
+
 `ClaudeAgentProvider` runs ExecutionKit's provider-agnostic patterns against
 Claude using a **Claude subscription sign-in** instead of an API key. It is the
 only transport in the library that does not need `ANTHROPIC_API_KEY` or an
