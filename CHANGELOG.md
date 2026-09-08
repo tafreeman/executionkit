@@ -33,6 +33,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- MCP server: advance `PROTOCOL_VERSION` from `2025-06-18` to `2025-11-25`,
+  the newest revision that still uses the `initialize`/`notifications/initialized`
+  handshake this server implements, and add `2025-06-18` to
+  `SUPPORTED_PROTOCOL_VERSIONS` so peers already negotiating that version keep
+  working. Deliberately stops short of `2026-07-28`, which removes the
+  handshake entirely in favor of per-request `_meta` versioning and a
+  `server/discover` RPC — advertising that revision from inside an
+  `initialize` frame would claim a wire contract this server does not speak.
+  A `2026-07-28` client still degrades correctly against this server.
 - Rewrite the maintained documentation around the current v0.3 API, including
   complete API navigation, execution and evaluation guides, provider examples,
   integration boundaries, recipes, architecture, and concise decision records.
@@ -44,8 +53,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 ### Fixed
 
 - `Workflow.run()` now raises `ValueError` when an `initial_context` key collides with a step name, instead of silently returning the caller's seed as that step's output without ever running it. Step completion is now tracked in a set independent from `outputs` membership, which previously doubled as both "seeded by initial_context" and "already executed" **(behavior change)**
+- `react_loop()` now raises `ValueError` naming every collision, before the first provider call, when two or more `Tool` objects share a name. The registry was previously a last-write-wins dict comprehension, so tool calls (resolved by name alone) could only ever reach the last-registered handler — the earlier tool's schema was still sent to the model, but the tool itself was silently unreachable. Callers whose tool names were already unique see no behavior change **(behavior change)**
+- Anthropic Message Batches results with a duplicate `custom_id` now raise `ProviderError` naming the id, instead of silently keeping the last-seen entry and dropping the rest. Unreachable with a conformant Batches file, but a contract violation should fail loudly rather than silently drop a sample
 - Add streaming test coverage for the httpx SSE transport (`Provider._stream_httpx`) via `httpx.MockTransport` — a successful end-to-end stream plus 429/5xx and transport-error paths — closing a CI blind spot on the provider's default active transport (httpx is always installed as a `dev` extra, so this was previously untested, "green" code)
 - Correct the `map_reduce()` docstring: `reduce_calls` is always `1` (the reduce call always runs, even for empty `inputs`; the prior "0 when empty" clause contradicted the implementation), and `total_calls` now documents the retry caveat — `map_count + 1` only when no attempt was retried, matching the `llm_calls` accounting already documented in the README
+- CI now actually installs and exercises the `jsonschema` and `otel` extras. A stale lock file meant the four Tier-B JSON-Schema tool-argument validation tests had been import-skipping in every required job since `jsonschema` entered the `dev` extra (2026-06-16 lock vs. 2026-06-18 extra change), and no workflow at any trigger installed `otel` at all, so the four OTel span-attribute tests skipped everywhere and the README's OTel claims rested on undated local testing. `scripts/check_lock_parity.py` now fails CI on the same drift instead of letting it disarm tests silently, and a dedicated observability job asserts the SDK imports before running pytest. No runtime behavior changed; this restores test coverage on two already-shipped features that had gone dark
 
 ## [0.3.0] - 2026-07-08
 
