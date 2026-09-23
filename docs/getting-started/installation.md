@@ -42,7 +42,7 @@ python -c "import executionkit; print(executionkit.__version__)"
 | `httpx` | `python -m pip install "executionkit[httpx]"` | An async HTTP client with connection pooling. `Provider` uses it automatically when installed. |
 | `jsonschema` | `python -m pip install "executionkit[jsonschema]"` | Full JSON Schema validation for `react_loop()` tool arguments. |
 | `otel` | `python -m pip install "executionkit[otel]"` | The OpenTelemetry API used by the package's span helpers. |
-| `claude` *(unreleased)* | `python -m pip install "executionkit[claude]"` | `ClaudeAgentProvider`, a transport authenticated by a Claude subscription sign-in instead of an API key. Not part of the 0.3.0 release on PyPI — see [the integration guide](../integrations/claude-agent-sdk.md). |
+| `claude` | `python -m pip install "executionkit[claude]"` | `ClaudeAgentProvider`, a transport authenticated by a Claude subscription sign-in instead of an API key. Shipped in 0.4.0 — see [the integration guide](../integrations/claude-agent-sdk.md). |
 | `docs` | `python -m pip install "executionkit[docs]"` | MkDocs, the Material theme, Mermaid, and mkdocstrings. |
 | `dev` | `python -m pip install "executionkit[dev]"` | Test, lint, type-check, coverage, build, and Bandit tools. |
 

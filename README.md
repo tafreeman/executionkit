@@ -27,13 +27,11 @@ third-party runtime dependencies.
 
 ## Release status
 
-`python -m pip install executionkit` currently installs **0.3.0** (released
-2026-07-08). This README — and the rest of the documentation on the default
-branch — also describes work merged since that release: a new provider and
-two behavior changes to existing contracts that are not part of any published
-release yet. Each is marked **(unreleased)** inline below. The complete list,
-with migration notes for the behavior changes, is the `[Unreleased]` section
-of [CHANGELOG.md](CHANGELOG.md#unreleased).
+`python -m pip install executionkit` currently installs **0.4.0** (released
+2026-09-23), which includes the Claude Agent SDK transport and the two
+`RetryConfig`/`react_loop()` behavior changes described below. The full,
+commit-traceable list is the `[0.4.0]` section of
+[CHANGELOG.md](CHANGELOG.md#040---2026-09-23).
 
 ## Install
 
@@ -47,7 +45,7 @@ Optional extras add only the feature you request:
 python -m pip install "executionkit[httpx]"       # pooled HTTP connections
 python -m pip install "executionkit[jsonschema]"  # full tool-argument validation
 python -m pip install "executionkit[otel]"        # OpenTelemetry API integration
-python -m pip install "executionkit[claude]"      # Claude Agent SDK transport (unreleased)
+python -m pip install "executionkit[claude]"      # Claude Agent SDK transport
 ```
 
 ## First call
@@ -139,16 +137,16 @@ different depending on which version you run:
 
 | You have | `max_retries` means | A failing call with `max_retries=3` makes |
 |---|---|---|
-| **0.3.0** (`pip install executionkit` today) | The total number of attempts, retries included | 3 attempts |
-| **Unreleased** (default branch) | Retries *after* the initial call | 4 attempts (1 + 3) |
+| **0.3.0 and earlier** | The total number of attempts, retries included | 3 attempts |
+| **0.4.0** (`pip install executionkit` today) | Retries *after* the initial call | 4 attempts (1 + 3) |
 
-The unreleased behavior also makes `RetryConfig` agree with `structured()`'s
+The 0.4.0 behavior also makes `RetryConfig` agree with `structured()`'s
 own `max_retries`, which has always run `1 + max_retries` attempts, and it
 rejects a negative `max_retries` with `ValueError` instead of silently making
 zero attempts. To keep 0.3.0's call count exactly when you upgrade, decrement
 existing `max_retries` values by one (`max_retries=N` → `max_retries=N-1`);
 `max_retries=0` is unchanged either way — always a single attempt, no
-retries. See the `[Unreleased]` section of [CHANGELOG.md](CHANGELOG.md#unreleased)
+retries. See the `[0.4.0]` section of [CHANGELOG.md](CHANGELOG.md#040---2026-09-23)
 for the full migration note, including a `max_cost` budget edge case.
 
 ## Provider contract
@@ -178,8 +176,8 @@ lists the exact contract and current endpoint examples.
 loop applies these controls before and around each tool call:
 
 - tool names must be unique — enforced with a `ValueError` before the first
-  provider call **(unreleased; on 0.3.0 a duplicate name silently shadows the
-  earlier tool instead of raising)**;
+  provider call **(0.4.0+; on 0.3.0 and earlier a duplicate name silently
+  shadows the earlier tool instead of raising)**;
 - arguments are checked against a dependency-free JSON Schema subset;
 - schemas outside that subset fail closed unless the `jsonschema` extra is
   installed;

@@ -62,11 +62,11 @@ It recognizes MCP protocol revisions `2024-11-05`, `2025-03-26`, `2025-06-18`,
 and `2025-11-25`, preferring `2025-11-25`. A client that proposes one of those
 gets it echoed back; any other proposal is answered with `2025-11-25`.
 
-!!! note "Unreleased: 2025-06-18 and 2025-11-25"
-    **0.3.0** on PyPI recognizes only `2024-11-05` and `2025-03-26`, and prefers
-    `2025-06-18`. `2025-06-18` recognition and the `2025-11-25` preference are
-    default-branch-only, not yet in a published release — see
-    [CHANGELOG.md](https://github.com/tafreeman/executionkit/blob/main/CHANGELOG.md#unreleased).
+!!! note "New in 0.4.0: 2025-06-18 and 2025-11-25"
+    **0.3.0 and earlier** on PyPI recognize only `2024-11-05` and `2025-03-26`.
+    `2025-06-18` recognition and the `2025-11-25` preference shipped in
+    **0.4.0** — see the `[0.4.0]` section of
+    [CHANGELOG.md](https://github.com/tafreeman/executionkit/blob/main/CHANGELOG.md#040---2026-09-23).
 
 These are the handshake-based revisions — the ones built on `initialize` plus
 `notifications/initialized`. `2025-11-25` is the newest of them, and everything
