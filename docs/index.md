@@ -14,14 +14,13 @@ The base package supports Python 3.11 through 3.13 and has no required
 third-party runtime dependencies.
 
 !!! note "Release status"
-    `pip install executionkit` currently installs **0.3.0** (2026-07-08). This
-    site is built from the default branch and also documents work merged since
-    that release — see the `[Unreleased]` section of
-    [CHANGELOG.md](https://github.com/tafreeman/executionkit/blob/main/CHANGELOG.md#unreleased)
-    for exactly what that is and how to migrate. The [configuration
-    reference](api/configuration.md#retryconfig) and
+    `pip install executionkit` currently installs **0.4.0** (2026-09-23). See
+    the `[0.4.0]` section of
+    [CHANGELOG.md](https://github.com/tafreeman/executionkit/blob/main/CHANGELOG.md#040---2026-09-23)
+    for the full list of what changed since 0.3.0 and how to migrate. The
+    [configuration reference](api/configuration.md#retryconfig) and
     [Claude Agent SDK integration](integrations/claude-agent-sdk.md) call out
-    the specific unreleased behavior.
+    the specific behavior changes.
 
 ## Install and run
 
