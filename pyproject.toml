@@ -49,6 +49,10 @@ docs = [
     "mkdocs-material[imaging]>=9.5",
 ]
 dev = [
+    # anyio floor is a transitive-dependency pin, not a direct need: httpx (below)
+    # resolves anyio on its own, and 4.13.0 carries two known CVEs
+    # (CVE-2026-63374, CVE-2026-64847) that pip-audit's CI step fails on.
+    "anyio>=4.14.2",
     "bandit[toml]>=1.8",
     "build>=1.2",
     "httpx>=0.27",
