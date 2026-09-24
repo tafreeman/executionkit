@@ -383,8 +383,24 @@ def _note_truncation(
 class _TrackedProvider:
     """Wraps an ``LLMProvider`` to auto-apply budget, retry, and truncation tracking.
 
-    Used by patterns (e.g. ``refine_loop``) that need to call the provider
-    multiple times while sharing a single ``CostTracker`` and metadata dict.
+    Every ``complete`` call goes through ``checked_complete`` with one shared
+    ``CostTracker`` and metadata dict, so several calls share a budget and a
+    truncation count.
+
+    No ExecutionKit pattern uses this class; it exists for an external consumer.
+    agentic-runtime-platform (ARP) imports it from this module path in
+    ``agentic_v2/engine/ek_step_delegation.py`` to run a step's completion turn
+    through EK's budget, retry and truncation handling. Despite the private name,
+    treat these as a compatibility surface:
+
+    - the import path ``executionkit.patterns.base._TrackedProvider``;
+    - the constructor: ``provider``, ``tracker`` and ``metadata`` positional, in
+      that order, then keyword-only ``budget``, ``retry`` and ``context``;
+    - the async ``complete(messages, *, max_tokens=..., tools=..., ...)``.
+
+    Change any of them only in a new minor version, with a CHANGELOG entry: ARP
+    caps ``executionkit`` below the next minor, so a patch release must not break
+    it. ``tests/test_arp_consumer_contract.py`` fails if any of them changes.
     """
 
     def __init__(
