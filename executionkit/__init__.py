@@ -62,6 +62,7 @@ from executionkit.provider import (
     ToolCallingProvider,
 )
 from executionkit.routing import Router, RouteRule
+from executionkit.telemetry import CallRecord, TraceCollector
 from executionkit.types import (
     CheckpointCallback,
     Evaluator,
@@ -88,6 +89,7 @@ __all__ = [
     "ApprovalRequest",
     "ApprovalTimeoutError",
     "BudgetExhaustedError",
+    "CallRecord",
     "CheckpointCallback",
     "ClaudeAgentProvider",
     "ConsensusFailedError",
@@ -128,6 +130,7 @@ __all__ = [
     "ToolCall",
     "ToolCallingProvider",
     "TraceCallback",
+    "TraceCollector",
     "TraceEvent",
     "Turn",
     "VotingStrategy",
