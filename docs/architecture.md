@@ -46,7 +46,8 @@ The public and top-level coordination modules are:
 | `executionkit/workflow.py` | Dependency-ordered steps, checkpoints, and resume. |
 | `executionkit/approval.py` | Approval requests, decisions, and timeout policy. |
 | `executionkit/evals.py` | Deterministic eval cases, conversation scripts, and live-provider opt-in. |
-| `executionkit/observability.py` | Trace callbacks and optional OpenTelemetry spans. |
+| `executionkit/observability.py` | Trace callbacks, payload schema, and optional OpenTelemetry spans. |
+| `executionkit/telemetry.py` | Per-call telemetry records and portable summaries built from trace events. |
 | `executionkit/batches.py` | Anthropic Message Batches client and batch helpers. |
 | `executionkit/claude_sdk.py` | Claude Agent SDK transport; authenticates with a Claude subscription rather than an API key. |
 

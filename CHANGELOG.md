@@ -32,6 +32,22 @@ Versioning follows [Semantic Versioning](https://semver.org/).
   child that key and silently bill the API account instead of the subscription,
   failing outright when the key is unfunded. Pass `env=` to restore API-key
   auth deliberately. See ADR-016.
+- Instrument the checked-call trace events with schema-v2 payloads and add a
+  telemetry collector (`executionkit/telemetry.py`). `llm_call_start` /
+  `llm_call_end` / `llm_call_error` now carry `schema_version`, a `call_id`
+  correlating every physical attempt of one logical call, per-attempt
+  `attempt_id`s, ISO-8601 dispatch timestamps and `duration_ms`, the requested
+  *and* provider-served model names, `attempts`/`retry_count`, an explicit
+  `budget_exhausted` flag separating budget refusals from provider failures,
+  and `usage_reported` with `None` (never fabricated `0`) token counts when a
+  provider returns no usage — streaming calls included. The new
+  `TraceCollector` callback joins those events into per-call `CallRecord`s and
+  renders a portable, JSON-safe `summary()`; per-call usage comes from each
+  end event's own token keys, never from the cumulative `cost` tracker
+  snapshot, and cost is computed only from caller-supplied rates over calls
+  whose providers reported usage. Payloads are additive over the original
+  keys, and the budget-check → `reserve_call()` no-await critical section is
+  unchanged.
 
 ### Changed
 

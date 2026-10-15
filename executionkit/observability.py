@@ -6,6 +6,52 @@ If ``opentelemetry-api`` is installed (``pip install executionkit[otel]``),
 :func:`llm_span` wraps LLM calls in a real OpenTelemetry span.  When the
 package is absent, the function returns a no-op context manager and does not
 import OpenTelemetry.
+
+Trace payload schema
+--------------------
+:func:`~executionkit.patterns.base.checked_complete` and
+:func:`~executionkit.patterns.base.checked_stream` emit three event kinds —
+``llm_call_start`` (once per *physical* attempt, including retries),
+``llm_call_end`` (once per *logical* call, after the final attempt succeeds),
+and ``llm_call_error`` (once per logical call that failed or was refused by
+the budget gate).  Payloads are versioned by ``schema_version``; the current
+version is :data:`TRACE_SCHEMA_VERSION`.
+
+Version 2 payloads are additive over the original keys and carry:
+
+* ``schema_version`` (``int``) — payload schema; always
+  :data:`TRACE_SCHEMA_VERSION` on newly emitted events.
+* ``call_id`` (``str``) — correlation id shared by every event of one
+  logical call (all retry attempts join on it).
+* ``attempt_id`` (``str``) — unique id of one physical attempt; present on
+  ``llm_call_start`` and on the terminal ``llm_call_end`` (the attempt that
+  produced the response).
+* ``attempt`` (``int``) — 1-based attempt number (start events).
+* ``attempts`` (``int``) — total physical attempts made (end/error events).
+* ``retry_count`` (``int``) — ``attempts - 1`` (end events).
+* ``requested_model`` (``str | None``) — the ``model=`` kwarg the caller
+  asked for, or ``None`` when the provider default applied.
+* ``served_model`` (``str | None``) — the model the provider reports having
+  used, when the raw payload carries one (end events).
+* ``started_at`` (``str``) — ISO-8601 UTC dispatch timestamp.
+* ``duration_ms`` (``float``) — wall duration of the whole logical call,
+  retries included (end/error events).
+* ``usage_reported`` (``bool``) — whether the provider returned a usage
+  object at all (end events).
+* ``input_tokens`` / ``output_tokens`` (``int | None``) — per-call counts;
+  ``None``, **never** a fabricated ``0``, for the half the provider omitted.
+* ``finish_reason`` (``str``) and ``tool_calls`` (``list[{"name": str}]``) —
+  end events.
+* ``error_type`` (``str``) and ``budget_exhausted`` (``bool``) — error
+  events; ``budget_exhausted`` distinguishes a budget refusal from a
+  provider failure.
+* ``streaming`` (``bool``) — present and ``True`` on stream events.
+* ``cost`` — cumulative :class:`~executionkit.types.TokenUsage` tracker
+  snapshot at emit time.  This is a *running total*, not a per-call cost:
+  never sum these snapshots across events (each one re-counts every earlier
+  call).  Per-call usage comes from the ``input_tokens``/``output_tokens``
+  keys above.
+* ``content`` — the redacted completion text (end events).
 """
 
 from __future__ import annotations
@@ -19,6 +65,15 @@ from types import MappingProxyType
 from typing import Any, TypeAlias
 
 TraceCallback: TypeAlias = Callable[["TraceEvent"], Awaitable[None] | None]
+
+# ---------------------------------------------------------------------------
+# Trace payload schema version.  History:
+#   1 — the original payloads (kind, attempt, cost, content, error_type).
+#   2 — adds correlation ids, timestamps/duration, requested/served model,
+#       retry and budget outcomes, and explicit missing-usage markers.
+# See the module docstring for the full version-2 key list.
+# ---------------------------------------------------------------------------
+TRACE_SCHEMA_VERSION: int = 2
 
 # ---------------------------------------------------------------------------
 # OpenTelemetry availability probe — evaluated once at module load time.

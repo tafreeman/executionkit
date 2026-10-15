@@ -93,6 +93,8 @@ only when a guide explicitly identifies an advanced extension point.
 | `TraceEvent` | Event kind and read-only payload. | [Execution helpers](execution.md) |
 | `TraceCallback` | Sync-or-async event callback type. | [Execution helpers](execution.md) |
 | `emit_trace` | Invoke a trace callback when present. | [Execution helpers](execution.md) |
+| `CallRecord` | One logical LLM call reconstructed from correlated trace events. | [Execution helpers](execution.md) |
+| `TraceCollector` | Trace callback building per-call records and portable run summaries. | [Execution helpers](execution.md) |
 
 ## Evaluation
 
