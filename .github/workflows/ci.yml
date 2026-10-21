@@ -244,3 +244,26 @@ jobs:
             export EXECUTIONKIT_LIVE_EVAL=1
           fi
           pytest -m live --no-cov -p no:cacheprovider -v
+
+  secrets:
+    name: "Secret scan (gitleaks)"
+    runs-on: ubuntu-latest
+    # `labeled` only exists to trigger live-eval-pr; skip it here like the
+    # other required jobs so adding a label does not re-scan.
+    if: github.event_name != 'pull_request' || github.event.action != 'labeled'
+    # Narrower than a workflow-level grant: only this job reads the PR's
+    # commit list, and only on pull_request events.
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # Uses .gitleaks.toml at the repo root, the same config the pre-commit
+      # hook reads.
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e  # v3.0.0
+        env:
+          # Required for pull_request scans.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
