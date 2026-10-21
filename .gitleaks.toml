@@ -1,0 +1,23 @@
+# Read by the pre-commit hook and by the `secrets` job in .github/workflows/ci.yml.
+title = "executionkit gitleaks config"
+
+[extend]
+useDefault = true
+
+# Verified false positives: synthetic strings in redaction tests. Each entry
+# pins the literal fake value AND the file it lives in, so a real secret added
+# to the same file (or the same string elsewhere) is still reported.
+[[allowlists]]
+description = "Fake credentials used as redaction-test fixtures"
+condition = "AND"
+paths = [
+  '''^tests/test_primitives\.py$''',
+  '''^tests/test_provider\.py$''',
+  '''^tests/patterns/test_react_loop\.py$''',
+]
+regexes = [
+  '''sk-ABCD1234efgh5678ijklSECRET''',
+  '''SECRET-KEY-12345''',
+  '''ghp_1234567890abcdef''',
+  '''xox[a-z]-1234567890(-abcdef)?''',
+]
