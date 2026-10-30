@@ -83,6 +83,29 @@ class TestExtractJsonProperties:
         assert isinstance(result, (dict, list))
 
     @PROPERTY_SETTINGS
+    @given(
+        opener=st.sampled_from(["[", '{"a":']),
+        depth=st.integers(min_value=1, max_value=20_000),
+        closed=st.booleans(),
+    )
+    def test_deeply_nested_input_raises_only_value_error(
+        self, opener: str, depth: int, closed: bool
+    ) -> None:
+        """Untrusted nesting beyond the parser's recursion limit is a parse failure.
+
+        ``json.loads`` raises ``RecursionError`` (not a ``ValueError``) past
+        roughly a thousand levels, so an LLM response that is nothing but
+        brackets used to escape ``extract_json`` as the wrong exception type.
+        """
+        closer = "]" if opener == "[" else "1}"
+        text = opener * depth + (closer * depth if closed else "")
+        try:
+            result = extract_json(text)
+        except ValueError:
+            return
+        assert isinstance(result, (dict, list))
+
+    @PROPERTY_SETTINGS
     @given(value=_JSON_CONTAINERS, prefix=_PLAIN_PROSE, suffix=_PLAIN_PROSE)
     def test_round_trips_json_embedded_in_prose(
         self, value: dict[str, Any] | list[Any], prefix: str, suffix: str

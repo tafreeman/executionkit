@@ -6,6 +6,20 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `extract_json` raised `RecursionError` instead of `ValueError` on deeply
+  nested input (a few thousand unclosed or closed `[`/`{` levels, e.g. from a
+  runaway model response). It now raises `ValueError` like every other
+  unparseable input.
+
+### Changed
+
+- Dev-only: `hypothesis` added to the `dev` extra and `requirements.lock`;
+  property tests for JSON extraction and vote tallying
+  (`tests/engine/test_properties.py`). The runtime package remains
+  dependency-free.
+
 ## [0.4.0] - 2026-09-23
 
 ### Added
