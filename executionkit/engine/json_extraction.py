@@ -35,13 +35,15 @@ def extract_json(text: str) -> dict[str, Any] | list[Any]:
     Raises:
         ValueError: If no valid JSON can be extracted.
     """
-    # Strategy 1: Try raw json.loads
+    # Strategy 1: Try raw json.loads. Every json.loads here also catches
+    # RecursionError: deeply nested untrusted text raises it instead of
+    # ValueError, and this function's contract is ValueError-only.
     stripped = text.strip()
     try:
         result = json.loads(stripped)
         if isinstance(result, (dict, list)):
             return result
-    except ValueError:
+    except (ValueError, RecursionError):
         pass
 
     # Strategy 2: Markdown code fences (linear scan, no regex backtracking)
@@ -50,7 +52,7 @@ def extract_json(text: str) -> dict[str, Any] | list[Any]:
             result = json.loads(candidate)
             if isinstance(result, (dict, list)):
                 return result
-        except ValueError:
+        except (ValueError, RecursionError):
             continue
 
     # Strategy 3: Balanced-brace extraction
@@ -171,7 +173,7 @@ def _parse_balanced_candidate(candidate: str) -> dict[str, Any] | list[Any]:
         result = json.loads(candidate)
         if isinstance(result, (dict, list)):
             return result
-    except ValueError:
+    except (ValueError, RecursionError):
         pass
     raise ValueError("Found balanced braces but content is not valid JSON")
 

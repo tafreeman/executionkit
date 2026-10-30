@@ -55,6 +55,9 @@ dev = [
     "anyio>=4.14.2",
     "bandit[toml]>=1.8",
     "build>=1.2",
+    # Dev-only: property tests (tests/engine/test_properties.py). The runtime package
+    # stays dependency-free (ADR-004); nothing under executionkit/ imports it.
+    "hypothesis>=6.100",
     "httpx>=0.27",
     "jsonschema>=4.20",
     "mypy>=1.18",
