@@ -1,0 +1,8 @@
+# Qodo code review: one review when a PR is opened, not on every push.
+# Re-reviewing each push turned every fix into a fresh round of findings.
+# Ask for another pass on demand by commenting `/agentic_review` on the PR.
+# Takes effect once this file is on the default branch.
+[github_app]
+pr_commands = ["/agentic_describe", "/agentic_review"]
+handle_push_trigger = false
+push_commands = []

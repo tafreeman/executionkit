@@ -1,0 +1,8 @@
+# Release notes are generated from squash-merge PR titles (`type(scope): subject`),
+# so feature PRs never edit CHANGELOG.md and never conflict on its top lines.
+# CHANGELOG.md is written once per release from these generated notes.
+changelog:
+  exclude:
+    authors:
+      - dependabot
+      - dependabot[bot]

@@ -120,8 +120,9 @@ Also update:
 - `docs/api/index.md` and `docs/api/core.md`;
 - the MkDocs navigation;
 - `scripts/check_doc_facts.py` `PATTERN_SLUGS`;
-- `docs/architecture.md`; and
-- `CHANGELOG.md`.
+- `docs/architecture.md`.
+
+Do not edit `CHANGELOG.md`; the PR title feeds the generated release notes.
 
 Add or update an ADR if the pattern changes an architecture boundary.
 

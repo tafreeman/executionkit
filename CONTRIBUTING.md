@@ -196,9 +196,13 @@ the suppression as narrow as possible.
 
 ## Release changes
 
-Add user-visible changes to the `Unreleased` section of
-[CHANGELOG.md](https://github.com/tafreeman/executionkit/blob/main/CHANGELOG.md).
-Call out behavior changes, migration steps, and new failure modes directly.
+Do not edit
+[CHANGELOG.md](https://github.com/tafreeman/executionkit/blob/main/CHANGELOG.md)
+in a feature PR: concurrent PRs all conflicted on its `Unreleased` section.
+Give the PR a clear `type(scope): subject` title and call out behavior changes,
+migration steps, and new failure modes in its description. Release notes are
+generated from those titles (`.github/release.yml`), and the changelog is
+written once, when a release is cut.
 
 The release workflow publishes through PyPI trusted publishing. Do not add API
 tokens to the workflow or repository.

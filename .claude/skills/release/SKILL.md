@@ -16,9 +16,11 @@ Do not publish from a dirty tree or while required CI checks are failing.
    - minor for a backward-compatible feature;
    - patch for a backward-compatible fix.
 4. Change `__version__` in `executionkit/__init__.py`.
-5. Move the relevant `Unreleased` entries in `CHANGELOG.md` into
-   `## [x.y.z] - YYYY-MM-DD`.
-6. Leave an empty `Unreleased` section for later changes.
+5. Write `## [x.y.z] - YYYY-MM-DD` in `CHANGELOG.md` from the release notes
+   GitHub generates for the merged PR titles since the last tag
+   (`gh api repos/tafreeman/executionkit/releases/generate-notes -f tag_name=vx.y.z`);
+   feature PRs no longer edit the changelog.
+6. Leave an empty `Unreleased` section.
 7. Re-run the full local validation skill.
 8. Build the wheel and source distribution with `python -m build`.
 9. Inspect the archive contents and confirm both report version `x.y.z`.

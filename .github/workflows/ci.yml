@@ -82,7 +82,23 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.action != 'labeled'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 2
 
+      # An advisory published against an existing dependency is not caused by
+      # an unrelated PR, so on pull requests the audit runs only when the PR
+      # changes the dependency set. Pushes to main always audit, and Dependabot
+      # security alerts cover the time in between. The job still reports, so the
+      # required `Security scan (Bandit)` check is still satisfied.
+      - id: security-scope
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ] \
+             || git diff --name-only HEAD^1 HEAD | grep -qE '^(requirements\.lock|pyproject\.toml)$'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::dependency audit skipped: this PR does not change dependency files"
+          fi
       - name: Set up Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6.3.0
         with:
@@ -94,7 +110,8 @@ jobs:
       - name: Run Bandit SAST scan
         run: bandit -r executionkit/ -c pyproject.toml
 
-      - name: Dependency audit (pip-audit)
+      - if: steps.security-scope.outputs.run == 'true'
+        name: Dependency audit (pip-audit)
         run: pip install pip-audit && pip-audit --requirement requirements.lock
 
   observability:
