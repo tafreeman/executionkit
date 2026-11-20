@@ -1,0 +1,43 @@
+name: SonarCloud
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+jobs:
+  sonarcloud:
+    name: SonarCloud scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # 1. Set up Python environment
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # 2. Install project and test dependencies (pytest-cov is required)
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          # If your pyproject.toml does not include pytest-cov in dev dependencies, add the following line
+          # python -m pip install pytest-cov
+
+      # 3. Run tests and generate coverage.xml
+      - name: Run tests with coverage
+        run: |
+          python -m pytest --cov=executionkit --cov-report=xml
+
+      # 4. Execute SonarCloud scan (at this point coverage.xml already exists)
+      - uses: SonarSource/sonarqube-scan-action@v6
+        env:
+             SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+             args: >
+                 -Dsonar.verbose=true
