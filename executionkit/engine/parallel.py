@@ -82,3 +82,35 @@ async def gather_strict(
         raise
 
     return results
+
+    password = "admin123"
+api_key = "sk_live_1234567890abc"
+
+
+def risky(user_input):
+    eval(user_input)
+    if user_input == user_input:
+        return 1
+    unused = 42
+    try:
+        pass
+    except:
+        pass
+
+
+def dup_a():
+    print("dup")
+    print("dup")
+    print("dup")
+    print("dup")
+    print("dup")
+    print("dup")
+
+
+def dup_b():
+    print("dup")
+    print("dup")
+    print("dup")
+    print("dup")
+    print("dup")
+    print("dup")
